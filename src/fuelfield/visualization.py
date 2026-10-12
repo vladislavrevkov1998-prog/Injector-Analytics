@@ -9,7 +9,31 @@ import numpy as np
 from matplotlib.patches import Circle
 from matplotlib.lines import Line2D
 from matplotlib import patheffects
+from matplotlib.colors import Normalize
+from matplotlib import colormaps
 from .core import polar_epure_coordinates, source_flow_kg_s
+
+
+def color_scale(values, cfg, shared_values=None):
+    """Return display data, norm and transparent colormap without mutating input.
+
+    Existing physical/wall masks are preserved. Clipping hides only the field.
+    """
+    data = np.ma.masked_invalid(np.ma.array(values, copy=True))
+    if cfg.color_scale_mode == 'manual':
+        low, high = cfg.color_vmin, cfg.color_vmax
+        if cfg.color_out_of_range == 'clip':
+            data = np.ma.masked_outside(data, low, high)
+    else:
+        arrays = shared_values if cfg.color_shared_z and shared_values is not None else [data]
+        finite = [np.ma.masked_invalid(a).compressed() for a in arrays]
+        finite = [a for a in finite if a.size]
+        low = min(float(a.min()) for a in finite) if finite else 0.0
+        high = max(float(a.max()) for a in finite) if finite else 1.0
+        if high <= low:
+            high = low + max(1.0, abs(low)*0.01)
+    cmap = colormaps['turbo'].with_extremes(bad=(0, 0, 0, 0))
+    return data, Normalize(low, high, clip=True), cmap
 
 
 def draw_nozzle_markers(ax, cfg, nozzles, *, polar=False, outlines=True, labels=True):
@@ -50,12 +74,13 @@ def draw_polar_nozzle_profiles(ax, cfg, nozzles, z_mm, scale_mm, *, fill=False):
 
 
 def draw_detailed_map(fig, field, plane, cfg, nozzles, *, outlines=True,
-                      labels=True, roses=False, rose_scale_mm=8.0):
+                      labels=True, roses=False, rose_scale_mm=8.0, shared_values=None):
     fig.clear()
     ax=fig.add_subplot(111)
     lim=cfg.r_out_mm
-    im=ax.imshow(field.masked_flux_kg_m2_s,origin='lower',interpolation='bilinear',
-                 extent=[-lim,lim,-lim,lim],cmap='turbo',aspect='equal')
+    data,norm,cmap=color_scale(field.masked_flux_kg_m2_s,cfg,shared_values)
+    im=ax.imshow(data,origin='lower',interpolation='nearest',
+                 extent=[-lim,lim,-lim,lim],cmap=cmap,norm=norm,aspect='equal')
     for radius in (cfg.r_in_mm,cfg.r_out_mm):
         ax.add_patch(Circle((0,0),radius,fill=False,lw=1.,edgecolor='#cbd5e1',zorder=9))
     if roses:

@@ -72,8 +72,21 @@ class Settings:
     density_kg_m3: float = 800.0
     nozzle_diameter_mm: float = 16.0  # drawn nominal outline; user-adjustable
     preview_resolution: int = 480  # Cartesian detail-map resolution
+    # Display preferences only; never used by the physical kernels.
+    color_scale_mode: str = 'auto'
+    color_vmin: float = 0.0
+    color_vmax: float = 1.0
+    color_out_of_range: str = 'saturate'
+    color_shared_z: bool = False
 
     def validate(self):
+        if self.color_scale_mode not in ('auto', 'manual'):
+            raise ValueError('Шкала должна быть Auto или Manual.')
+        if self.color_out_of_range not in ('saturate', 'clip'):
+            raise ValueError('Режим шкалы должен быть Saturate или Clip to range.')
+        if not (np.isfinite(self.color_vmin) and np.isfinite(self.color_vmax)
+                and self.color_vmin < self.color_vmax):
+            raise ValueError('Шкала: нужны конечные min < max.')
         if not (0 < self.r_in_mm < self.r_out_mm):
             raise ValueError('Требуется 0 < Rвнутр < Rнаруж.')
         if len(self.z_mm) != 4 or min(self.z_mm) < 0:
