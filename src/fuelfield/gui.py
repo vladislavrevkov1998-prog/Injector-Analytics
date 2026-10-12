@@ -1,16 +1,18 @@
 """PyQt5 pilot for ring-field model. Launch with python main.py."""
 from __future__ import annotations
 import json, os, sys, traceback
+from copy import deepcopy
 from pathlib import Path
 import numpy as np
-from PyQt5.QtCore import Qt, QThread, QObject, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, QObject, pyqtSignal, QTimer
 from PyQt5.QtGui import QKeySequence, QFont
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QTabWidget, QTableWidget, QTableWidgetItem, QLabel, QPushButton, QComboBox,
     QSpinBox, QDoubleSpinBox, QLineEdit, QFileDialog, QMessageBox, QSplitter,
     QGroupBox, QScrollArea, QPlainTextEdit, QHeaderView, QAbstractItemView,
-    QStatusBar, QProgressBar, QMenu, QAction, QInputDialog, QCheckBox
+    QStatusBar, QProgressBar, QMenu, QAction, QInputDialog, QCheckBox,
+    QUndoStack, QUndoCommand, QStackedWidget
 )
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -21,7 +23,7 @@ from .core import (
     source_flow_kg_s, evaluate_continuous_field, polar_epure_coordinates
 )
 from .data_io import import_sector_file, write_sector_csv, write_result_csv
-from .visualization import draw_nozzle_markers, draw_detailed_map, draw_polar_nozzles_map
+from .visualization import draw_nozzle_markers, draw_detailed_map, draw_polar_nozzles_map, color_scale
 
 FIELDS = [
     ('id','ID'),('enabled','Установлена'),('row','Ряд'),
@@ -57,6 +59,37 @@ def _integer(value, lo, hi):
 
 class PasteTable(QTableWidget):
     """Tab-separated copy/paste (Excel compatible)."""
+    batchFinished=pyqtSignal()
+
+    def __init__(self,*args):
+        super().__init__(*args)
+        self.in_batch=False
+        self.batch_invalid=False
+
+    def paste_text(self,raw):
+        start=self.currentIndex()
+        if not start.isValid() or not raw:return
+        lines=raw.rstrip('\r\n').splitlines()
+        cells=[line.split('\t') for line in lines]
+        if len(cells)==1 and len(cells[0])==1:
+            targets=[(i.row(),i.column(),cells[0][0]) for i in self.selectedIndexes()]
+        else:
+            targets=[(start.row()+dr,start.column()+dc,txt)
+                     for dr,line in enumerate(cells) for dc,txt in enumerate(line)]
+        self.in_batch=True
+        self.batch_invalid=False
+        self.setUpdatesEnabled(False)
+        try:
+            for row,col,txt in targets:
+                if row>=self.rowCount() or col>=self.columnCount():continue
+                item=self.item(row,col)
+                if item is not None and item.flags() & Qt.ItemIsEditable:
+                    item.setText(txt.strip())
+        finally:
+            self.in_batch=False
+            self.setUpdatesEnabled(True)
+            self.batchFinished.emit()
+
     def keyPressEvent(self, ev):
         if ev.matches(QKeySequence.Copy):
             sel=self.selectedIndexes()
@@ -73,18 +106,25 @@ class PasteTable(QTableWidget):
             QApplication.clipboard().setText('\n'.join(lines))
             return
         if ev.matches(QKeySequence.Paste):
-            raw=QApplication.clipboard().text().strip('\n')
-            start=self.currentIndex()
-            if not start.isValid():return
-            for dr,line in enumerate(raw.splitlines()):
-                for dc,txt in enumerate(line.split('\t')):
-                    row=start.row()+dr;col=start.column()+dc
-                    if row>=self.rowCount() or col>=self.columnCount():continue
-                    item=self.item(row,col)
-                    if item is not None and item.flags() & Qt.ItemIsEditable:
-                        item.setText(txt.strip())
+            self.paste_text(QApplication.clipboard().text())
             return
         super().keyPressEvent(ev)
+
+
+class ProjectEdit(QUndoCommand):
+    """One validated project edit, including a whole paste or group operation."""
+    def __init__(self,window,before,after,label):
+        super().__init__(label)
+        self.window=window
+        self.before=deepcopy(before);self.after=deepcopy(after)
+        self.first=True
+
+    def redo(self):
+        if self.first:self.first=False
+        else:self.window._restore_edit(self.after)
+
+    def undo(self):
+        self.window._restore_edit(self.before)
 
 
 class CalcWorker(QObject):
@@ -110,7 +150,7 @@ class CalcWorker(QObject):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Fuel Field Pilot v0.1.2 — поле топлива фронтового устройства')
+        self.setWindowTitle('Fuel Field Pilot — разработка v0.1.3')
         self.resize(1480,930)
         self.cfg=Settings()
         self.nozzles=default_nozzles(self.cfg)
@@ -119,6 +159,14 @@ class MainWindow(QMainWindow):
         self.sector_id=None
         self.project_file=None
         self.thread=None
+        self._restoring=True
+        self._render_cache={}
+        self._revision=0
+        self.undo_stack=QUndoStack(self)
+        self.undo_stack.setUndoLimit(100)
+        self.preview_timer=QTimer(self)
+        self.preview_timer.setSingleShot(True)
+        self.preview_timer.timeout.connect(self._draw_single_preview)
         self.model_widgets={}
         self.geom_widgets={}
         self.tabs=QTabWidget()
@@ -131,6 +179,10 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage('Начальные размеры и расход — демонстрационные/пустые. Задайте реальные значения перед расчётом.')
         self._fill_nozzles()
         self._fill_controls()
+        self._restoring=False
+        self._edit_state=project_to_json(self.cfg,self.nozzles)
+        self._connect_edits()
+        self._queue_preview()
 
     def _build_menu(self):
         menu=self.menuBar().addMenu('Проект')
@@ -144,6 +196,12 @@ class MainWindow(QMainWindow):
             act.setShortcut(shortcut);act.triggered.connect(slot);menu.addAction(act)
         menu=self.menuBar().addMenu('Расчёт')
         a=QAction('Рассчитать 4 сечения',self);a.setShortcut('F5');a.triggered.connect(self.run_calc);menu.addAction(a)
+        edit=self.menuBar().addMenu('Правка')
+        undo=self.undo_stack.createUndoAction(self,'Отменить')
+        undo.setShortcut('Ctrl+Z');edit.addAction(undo)
+        redo=self.undo_stack.createRedoAction(self,'Повторить')
+        redo.setShortcuts([QKeySequence('Ctrl+Y'),QKeySequence('Ctrl+Shift+Z')])
+        edit.addAction(redo)
 
     def _build_geometry_tab(self):
         page=QWidget();layout=QVBoxLayout(page)
@@ -235,6 +293,9 @@ class MainWindow(QMainWindow):
                      'Ctrl+C / Ctrl+V копируют/вставляют данные из Excel. В верхней таблице колонка «Расход из» принимает manual или sectors.\n\n'
                      'Если используете «sectors», расход = сумма мл × плотность / время опыта. Этот подход НЕ учитывает капли вне бокса.')
         notes.setWordWrap(True);row.addWidget(notes);p.addLayout(row)
+        self.figpreview=Figure(figsize=(7,3),tight_layout=True)
+        self.previewcanvas=FigureCanvas(self.figpreview)
+        row.addWidget(self.previewcanvas,2)
         splitter.addWidget(box);splitter.setStretchFactor(0,3);splitter.setStretchFactor(1,2)
         layout.addWidget(splitter)
         self.tabs.addTab(page,'02 · 140 форсунок и 36 секторов')
@@ -288,6 +349,18 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
   Суперпозиция линейная: взаимодействия капель/потоков соседних форсунок не учитываются.
   Пользовательская сетка 6×140 НЕ является интеграционной: она определяет разрешение выходных карт.''')
         lay.addWidget(description)
+        formulas=Figure(figsize=(10,3),tight_layout=True)
+        ax=formulas.add_subplot(111);ax.axis('off')
+        equations=[
+            r'$R_c(z)=R_{c0}+z\tan(\alpha/2),\quad R_{\min,\max}=R_c\mp h/2$',
+            r'$A_k=36V_k/\sum_{l=1}^{36}V_l,\quad \dot m_{\mathrm{sectors}}=10^{-6}\rho_l\sum_k V_k/T$',
+            r'$q(x,y,z)=\sum_j\dot m_j G_j A_j/C_j\quad [\mathrm{kg}/(\mathrm{m}^2\,\mathrm{s})]$',
+            r'$\sum_j\dot m_j=\sum_{m,n}q_{mn}S_{mn}+\dot m_{\mathrm{inner}}+\dot m_{\mathrm{outer}}$',
+        ]
+        for i,text in enumerate(equations):ax.text(.02,.92-i*.24,text,fontsize=13,va='top')
+        lay.addWidget(FigureCanvas(formulas))
+        lay.addWidget(QLabel('R, h, z — мм; V — мл; T — с; ρₗ — кг/м³; ṁ — кг/с; '
+                            'G, A — профили; C — нормировка; S — площадь ячейки [м²].'))
         self.tabs.addTab(page,'03 · Математические модели')
 
     def _build_results_tab(self):
@@ -311,32 +384,47 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.draw_rose_over_field.setChecked(False)
         self.rose_scale=_dbl(8.0,0.1,100,1,1)
         for w in (self.draw_outlines,self.draw_labels,self.draw_rose_over_field):
-            view.addWidget(w);w.stateChanged.connect(self._plot_result)
+            view.addWidget(w);w.stateChanged.connect(self._view_changed)
         view.addWidget(QLabel('Масштаб полярных эпюр, мм:'))
-        view.addWidget(self.rose_scale);self.rose_scale.valueChanged.connect(self._plot_result)
+        view.addWidget(self.rose_scale);self.rose_scale.valueChanged.connect(self._view_changed)
         view.addStretch();lay.addLayout(view)
+        scales=QHBoxLayout()
+        self.scale_mode=QComboBox();self.scale_mode.addItem('Auto','auto');self.scale_mode.addItem('Manual','manual')
+        self.scale_min=_dbl(0,decimals=8);self.scale_max=_dbl(1,decimals=8)
+        self.scale_range=QComboBox();self.scale_range.addItem('Saturate','saturate');self.scale_range.addItem('Clip to range','clip')
+        self.scale_shared=QCheckBox('Общая шкала четырёх z')
+        for w in (QLabel('Цветовая шкала:'),self.scale_mode,QLabel('min'),self.scale_min,
+                  QLabel('max'),self.scale_max,self.scale_range,self.scale_shared):scales.addWidget(w)
+        scales.addStretch();lay.addLayout(scales)
         self.balance_label=QLabel('Результатов пока нет. Задайте исходные данные и нажмите «Рассчитать».')
         self.balance_label.setWordWrap(True);lay.addWidget(self.balance_label)
         note=QLabel('Важно: 6×140 — контрольные ячейки для количественного анализа; подробная карта — непрерывное отображение отдельных ядер. '
                     'Полярная эпюра показывает угловую ИНТЕНСИВНОСТЬ, не физический контур факела. Контур форсунки — отдельная окружность.')
         note.setWordWrap(True);note.setStyleSheet('color:#525f71;');lay.addWidget(note)
-        plots=QTabWidget()
+        plots=QTabWidget();self.plots=plots
+        self.plot_stacks=[]
         self.figmap=Figure(figsize=(6,6),tight_layout=True)
         self.mapcanvas=FigureCanvas(self.figmap)
-        plots.addTab(self.mapcanvas,'Матрица (консервативная)')
+        stack=QStackedWidget();stack.addWidget(self.mapcanvas);self.plot_stacks.append(stack)
+        plots.addTab(stack,'Матрица (консервативная)')
         self.figsmooth=Figure(figsize=(7,7),tight_layout=True)
         self.smoothcanvas=FigureCanvas(self.figsmooth)
-        plots.addTab(self.smoothcanvas,'Подробное суммарное поле')
+        stack=QStackedWidget();stack.addWidget(self.smoothcanvas);self.plot_stacks.append(stack)
+        plots.addTab(stack,'Подробное суммарное поле')
         self.figroses=Figure(figsize=(7,7),tight_layout=True)
         self.rosescanvas=FigureCanvas(self.figroses)
-        plots.addTab(self.rosescanvas,'140 полярных эпюр на общей схеме')
+        stack=QStackedWidget();stack.addWidget(self.rosescanvas);self.plot_stacks.append(stack)
+        plots.addTab(stack,'140 полярных эпюр на общей схеме')
         self.figcurves=Figure(figsize=(10,7),tight_layout=True)
         self.curvecanvas=FigureCanvas(self.figcurves)
-        plots.addTab(self.curvecanvas,'Окружные эпюры радиальных уровней')
+        stack=QStackedWidget();stack.addWidget(self.curvecanvas);self.plot_stacks.append(stack)
+        plots.addTab(stack,'Окружные эпюры радиальных уровней')
+        plots.currentChanged.connect(self._plot_result)
         lay.addWidget(plots)
         self.tabs.addTab(page,'04 · Поля и эпюры')
 
     def _fill_controls(self):
+        restoring=self._restoring;self._restoring=True
         for key,w in self.geom_widgets.items():
             value=getattr(self.cfg,key)
             if isinstance(w,QLineEdit):
@@ -349,6 +437,11 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             else:w.setValue(val)
         self.duration_spin.setValue(self.cfg.duration_s)
         self.density_spin.setValue(self.cfg.density_kg_m3)
+        self.scale_mode.setCurrentIndex(self.scale_mode.findData(self.cfg.color_scale_mode))
+        self.scale_min.setValue(self.cfg.color_vmin);self.scale_max.setValue(self.cfg.color_vmax)
+        self.scale_range.setCurrentIndex(self.scale_range.findData(self.cfg.color_out_of_range))
+        self.scale_shared.setChecked(self.cfg.color_shared_z)
+        self._restoring=restoring
 
     def _read_controls(self):
         cfg=Settings(**{k:getattr(self.cfg,k) for k in vars(self.cfg)})
@@ -359,12 +452,23 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                     setattr(cfg,key,None)
                 else:
                     values=[float(x.strip()) for x in text.split(';') if x.strip()]
+                    original=getattr(self.cfg,key)
+                    if original is not None and values==[float(f'{x:g}') for x in original]:
+                        values=list(original)
                     setattr(cfg,key,values)
-            else:setattr(cfg,key,w.value())
+            else:
+                value=w.value();original=getattr(self.cfg,key)
+                if isinstance(w,QDoubleSpinBox) and value==round(original,w.decimals()):value=original
+                setattr(cfg,key,value)
         for key,w in self.model_widgets.items():
             setattr(cfg,key,w.currentData() if isinstance(w,QComboBox) else w.value())
-        cfg.duration_s=self.duration_spin.value()
-        cfg.density_kg_m3=self.density_spin.value()
+        for key,w in (('duration_s',self.duration_spin),('density_kg_m3',self.density_spin),
+                      ('color_vmin',self.scale_min),('color_vmax',self.scale_max)):
+            original=getattr(self.cfg,key);value=w.value()
+            setattr(cfg,key,original if value==round(original,w.decimals()) else value)
+        cfg.color_scale_mode=self.scale_mode.currentData()
+        cfg.color_out_of_range=self.scale_range.currentData()
+        cfg.color_shared_z=self.scale_shared.isChecked()
         cfg.validate()
         return cfg
 
@@ -401,8 +505,11 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                 else:
                     val=item.text().strip()
                     if key in NUMERICS:
-                        try:raw[key]=_number(val)
+                        # Preserve original JSON precision in untouched cells.
+                        original=getattr(n,key)
+                        try:raw[key]=original if val==f'{original:.9g}' else _number(val)
                         except ValueError:raise ValueError(f'Строка {i+1}, столбец «{FIELDS[col][1]}»: неверное число «{val}».')
+                        if not np.isfinite(raw[key]):raise ValueError(f'Строка {i+1}: число должно быть конечным.')
                     elif key=='flow_mode':
                         raw[key]=val.lower()
                         if raw[key] not in ('manual','sectors'):
@@ -418,6 +525,109 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
     def _sync_nozzles(self):
         self.nozzles=self._read_nozzles()
 
+    def _connect_edits(self):
+        for table in (self.nozzle_table,self.sector_table):
+            table.itemChanged.connect(self._record_edit)
+            table.batchFinished.connect(lambda:self._record_edit(label='Вставка ячеек'))
+        widgets=list(self.geom_widgets.values())+list(self.model_widgets.values())+[
+            self.duration_spin,self.density_spin,self.scale_mode,self.scale_min,
+            self.scale_max,self.scale_range,self.scale_shared]
+        for w in widgets:
+            if isinstance(w,QComboBox):w.currentIndexChanged.connect(self._record_edit)
+            elif isinstance(w,QCheckBox):w.toggled.connect(self._record_edit)
+            else:w.editingFinished.connect(self._record_edit)
+
+    def _record_edit(self,*args,label='Изменение проекта'):
+        if self._restoring or self.nozzle_table.in_batch or self.sector_table.in_batch:return
+        if self.sector_table.batch_invalid:
+            self.sector_table.batch_invalid=False
+            self._restore_edit(self._edit_state)
+            self.statusBar().showMessage('Вставка отменена: объёмы должны быть конечными неотрицательными числами.',12000)
+            return
+        try:
+            cfg=self._read_controls();nozzles=self._read_nozzles()
+            state=project_to_json(cfg,nozzles)
+        except (ValueError,TypeError) as exc:
+            self._restore_edit(self._edit_state)
+            self.statusBar().showMessage(str(exc),12000)
+            return
+        if state==self._edit_state:return
+        before=self._edit_state
+        physical_before=deepcopy(before);physical_after=deepcopy(state)
+        for data in (physical_before,physical_after):
+            for key in list(data['settings']):
+                if key.startswith('color_'):del data['settings'][key]
+        self.cfg=cfg;self.nozzles=nozzles
+        self._edit_state=deepcopy(state)
+        self.undo_stack.push(ProjectEdit(self,before,state,label))
+        if physical_before!=physical_after:self._invalidate_results()
+        else:self._invalidate_render();self._plot_result()
+        self._queue_preview()
+
+    def _restore_edit(self,state):
+        # Undo preserves results for display-only changes, but invalidates physics edits.
+        previous=deepcopy(self._edit_state)
+        physical=lambda data: {**data,'settings':{k:v for k,v in data['settings'].items()
+                                                 if not k.startswith('color_')}}
+        self._restoring=True
+        try:
+            self.cfg,self.nozzles=project_from_json(deepcopy(state))
+            self._fill_controls();self._fill_nozzles()
+            self._edit_state=deepcopy(state)
+        finally:self._restoring=False
+        if physical(previous)!=physical(state):self._invalidate_results()
+        else:self._invalidate_render();self._plot_result()
+        self._queue_preview()
+
+    def _invalidate_render(self):
+        self._render_cache.clear()
+        for stack in self.plot_stacks:
+            # Keep one empty canvas so a stale field never remains visible.
+            while stack.count()>1:
+                widget=stack.widget(stack.count()-1)
+                stack.removeWidget(widget);widget.deleteLater()
+            if stack.count():
+                canvas=stack.widget(0);canvas.figure.clear();canvas.draw_idle()
+
+    def _invalidate_results(self):
+        self._revision+=1
+        self.results=[];self.smooth_fields=[]
+        self._invalidate_render()
+        self.plane_select.clear()
+        self.balance_label.setText('Исходные данные изменены. Нужен новый расчёт (F5).')
+
+    def _queue_preview(self):
+        if hasattr(self,'previewcanvas'):self.preview_timer.start(0)
+
+    def _draw_single_preview(self):
+        if self.sector_id is None:return
+        try:
+            cfg=self._read_controls()
+            n=next(n for n in self.nozzles if n.id==self.sector_id)
+            # Only one source is evaluated, at z=0, without a 140-source calculation.
+            field=evaluate_continuous_field([n],cfg,0,resolution=240)
+            x,y=polar_epure_coordinates(n,0,cfg,8,n_angles=144)
+            theta=np.deg2rad(n.theta_deg)
+            x0=n.radius_mm*np.cos(theta);y0=n.radius_mm*np.sin(theta)
+            self.figpreview.clear()
+            ax=self.figpreview.add_subplot(121,projection='polar')
+            ax.plot(np.arctan2(y-y0,x-x0),np.hypot(x-x0,y-y0))
+            ax.set_title(f'№{n.id}: относительная эпюра, z=0',fontsize=9)
+            ax=self.figpreview.add_subplot(122)
+            data,norm,cmap=color_scale(field.masked_flux_kg_m2_s,cfg)
+            lim=cfg.r_out_mm
+            im=ax.imshow(data,origin='lower',extent=[-lim,lim,-lim,lim],cmap=cmap,norm=norm)
+            from .core import geometry_at, _kernel_outer_limit
+            rc,h=geometry_at(n,0,cfg)
+            span=max(_kernel_outer_limit(rc,h,cfg.radial_model)*1.2,1)
+            ax.set(xlim=(x0-span,x0+span),ylim=(y0-span,y0+span),aspect='equal')
+            ax.set_title('Поле одной форсунки, z=0',fontsize=9)
+            ax.set_xlabel('X, мм');ax.set_ylabel('Y, мм')
+            self.figpreview.colorbar(im,ax=ax,shrink=.8,label='кг/(м²·с)')
+            self.previewcanvas.draw_idle()
+        except (ValueError,TypeError) as exc:
+            self.statusBar().showMessage(f'Превью: {exc}',5000)
+
     def _sector_selection(self):
         idx=self.nozzle_table.currentIndex()
         if idx.isValid() and idx.row()<len(self.nozzles):
@@ -432,6 +642,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             self.sector_table.setItem(k,1,QTableWidgetItem(f'{val:.10g}'))
         self.sector_table.blockSignals(False)
         self._update_sector_label()
+        self._queue_preview()
 
     def _update_sector_label(self):
         n=next(n for n in self.nozzles if n.id==self.sector_id)
@@ -445,15 +656,18 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             value=_number(item.text())
             if value < 0 or not np.isfinite(value):raise ValueError('Неотрицательное число обязательно')
         except ValueError:
+            if self.sector_table.in_batch:self.sector_table.batch_invalid=True
             self.sector_table.blockSignals(True)
             item.setText(f'{n.sector_ml[item.row()]:.10g}')
             self.sector_table.blockSignals(False)
             self.statusBar().showMessage('Объём сектора: введите неотрицательное число (мл). Предыдущее значение восстановлено.',12000)
             return
+        if value==n.sector_ml[item.row()]:return
         n.sector_ml[item.row()]=value
         n.sector_source='ручное редактирование'
         self._update_sector_label()
         self.nozzle_table.item(n.id-1,INTCOL['sector_source']).setText(n.sector_source)
+        self._queue_preview()
 
     def _selected_ids(self):
         return sorted(set(ind.row()+1 for ind in self.nozzle_table.selectedIndexes()))
@@ -467,6 +681,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             self._sync_nozzles()
             apply_default_positions(self.nozzles,cfg)
             self._fill_nozzles()
+            self._record_edit(label='Позиции двух рядов')
             self.statusBar().showMessage('Позиции форсунок перерасставлены. Флаги включения, расходы и секторные эпюры сохранены.',12000)
         except Exception as exc:self._error(exc)
 
@@ -485,6 +700,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                     count+=1
                 else:unknown.append(nid)
             self._fill_nozzles()
+            self._record_edit(label='Импорт секторов')
             QMessageBox.information(self,'Импорт секторных объёмов',
                 f'Загружены эпюры {count} форсунок, лист/источник: {sheet}. '
                 f'Расходы в режиме manual НЕ изменены. '
@@ -513,6 +729,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                 n.sector_ml=src.sector_ml.copy()
                 n.sector_source=f'копия №{source}'
             self._fill_nozzles()
+            self._record_edit(label='Копирование эпюры')
             self.statusBar().showMessage(f'Секторная эпюра №{source} назначена {len(ids)} позициям.',12000)
         except Exception as exc:self._error(exc)
 
@@ -531,6 +748,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                 n.flow_mode='sectors'
                 changed+=1
             self._fill_nozzles()
+            self._record_edit(label='Расход из объёмов')
             self.statusBar().showMessage(f'Для {changed} форсунок задан расчёт расхода из суммы объёмов.',12000)
         except Exception as exc:self._error(exc)
 
@@ -545,6 +763,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             for n in self.nozzles:
                 n.flow_kg_h=10.0;n.flow_mode='manual'
             self._fill_nozzles()
+            self._record_edit(label='Демонстрационный расход')
             self.statusBar().showMessage('ДЕМО расход назначен всем форсункам: 10 кг/ч. Это НЕ экспериментальные данные.',12000)
         except Exception as exc:self._error(exc)
 
@@ -559,6 +778,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
 
     def run_calc(self):
         if self.thread is not None:return
+        self._record_edit()
         try:
             cfg,nozzles=self._prepare()
             # Avoid live table mutations during calculation; immutable state snapshot.
@@ -566,8 +786,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             self.cfg=cfg;self.nozzles=nozzles
         except Exception as exc:
             self._error(exc);return
-        self.results=[]
-        self.smooth_fields=[]
+        self._invalidate_results()
+        self._calc_revision=self._revision
         self.progress.setValue(0)
         self.calc_btn.setEnabled(False)
         self.thread=QThread(self)
@@ -589,6 +809,10 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.progress.setValue(min(3,self.progress.value()+1))
 
     def _done(self,planes):
+        if hasattr(self,'_calc_revision') and self._calc_revision!=self._revision:
+            self.statusBar().showMessage('Данные изменены во время расчёта. Повторите F5.',12000)
+            return
+        if hasattr(self,'_invalidate_render'):self._invalidate_render()
         self.results=[v[0] for v in planes]
         self.smooth_fields=[v[1] for v in planes]
         self.progress.setValue(4)
@@ -631,10 +855,33 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             f'за наружной {p.outer_kg_s*3600:.5g} кг/ч; '
             f'невязка баланса {100*p.rel_balance_error:.3g}%.'
         )
-        self._draw_map(p)
-        self._draw_smooth(self.smooth_fields[i], p)
-        self._draw_roses(p)
-        self._draw_curves(p)
+        self._render_view(self.plots.currentIndex(),i)
+
+    def _render_view(self,view,i):
+        key=(i,view,self.draw_outlines.isChecked(),self.draw_labels.isChecked(),
+             self.draw_rose_over_field.isChecked(),self.rose_scale.value())
+        fig_name,canvas_name=[('figmap','mapcanvas'),('figsmooth','smoothcanvas'),
+                              ('figroses','rosescanvas'),('figcurves','curvecanvas')][view]
+        stack=self.plot_stacks[view]
+        if key not in self._render_cache:
+            fig=Figure(figsize=(10,7) if view==3 else (7,7),tight_layout=view!=3)
+            canvas=FigureCanvas(fig)
+            setattr(self,fig_name,fig);setattr(self,canvas_name,canvas)
+            p=self.results[i]
+            if view==0:self._draw_map(p)
+            elif view==1:self._draw_smooth(self.smooth_fields[i],p)
+            elif view==2:self._draw_roses(p)
+            else:self._draw_curves(p)
+            stack.addWidget(canvas)
+            self._render_cache[key]=canvas
+        canvas=self._render_cache[key]
+        setattr(self,fig_name,canvas.figure);setattr(self,canvas_name,canvas)
+        stack.setCurrentWidget(canvas)
+        return canvas.figure
+
+    def _view_changed(self,*args):
+        if self._restoring:return
+        self._invalidate_render();self._plot_result()
 
     def _draw_map(self,p):
         self.figmap.clear()
@@ -642,7 +889,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         n=self.cfg.n_angular
         theta_edge=np.deg2rad(self.cfg.grid_start_deg+(np.arange(n+1)-0.5)*360/n)
         th,r=np.meshgrid(theta_edge,p.radial_edges_mm)
-        pc=ax.pcolormesh(th,r,p.flux_kg_m2_s,shading='flat',cmap='turbo')
+        data,norm,cmap=color_scale(p.flux_kg_m2_s,self.cfg,[p.flux_kg_m2_s for p in self.results])
+        pc=ax.pcolormesh(th,r,data,shading='flat',cmap=cmap,norm=norm)
         ax.set_theta_zero_location('E')
         ax.set_theta_direction(1)
         ax.set_ylim(0,self.cfg.r_out_mm)
@@ -661,7 +909,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                           outlines=self.draw_outlines.isChecked(),
                           labels=self.draw_labels.isChecked(),
                           roses=self.draw_rose_over_field.isChecked(),
-                          rose_scale_mm=self.rose_scale.value())
+                          rose_scale_mm=self.rose_scale.value(),
+                          shared_values=[f.masked_flux_kg_m2_s for f in self.smooth_fields])
         self.smoothcanvas.draw_idle()
 
     def _draw_roses(self,p):
@@ -706,10 +955,13 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         if path:
             try:
                 if not path.lower().endswith('.png'):path+='.png'
+                i=max(0,self.plane_select.currentIndex())
+                for view in range(4):self._render_view(view,i)
                 self.figmap.savefig(path,dpi=180,bbox_inches='tight')
                 self.figcurves.savefig(path[:-4]+'_profiles.png',dpi=160,bbox_inches='tight')
                 self.figsmooth.savefig(path[:-4]+'_detailed.png',dpi=180,bbox_inches='tight')
                 self.figroses.savefig(path[:-4]+'_polar_nozzles.png',dpi=180,bbox_inches='tight')
+                self._plot_result()
             except Exception as exc:self._error(exc)
 
     def export_all_png(self):
@@ -720,6 +972,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             current=self.plane_select.currentIndex()
             for i in range(4):
                 self.plane_select.setCurrentIndex(i)
+                for view in range(4):self._render_view(view,i)
                 self.figmap.savefig(os.path.join(folder,f'section_{i+1}_field.png'),dpi=180,bbox_inches='tight')
                 self.figcurves.savefig(os.path.join(folder,f'section_{i+1}_profiles.png'),dpi=160,bbox_inches='tight')
                 self.figsmooth.savefig(os.path.join(folder,f'section_{i+1}_detailed.png'),dpi=180,bbox_inches='tight')
@@ -729,11 +982,14 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         except Exception as exc:self._error(exc)
 
     def new_project(self):
+        if self.thread is not None:self._error('Дождитесь завершения расчёта.');return
         reply=QMessageBox.question(self,'Новый проект','Сбросить все значения и эпюры?',QMessageBox.Yes|QMessageBox.No)
         if reply!=QMessageBox.Yes:return
+        self._restoring=True
         self.cfg=Settings();self.nozzles=default_nozzles(self.cfg);self.sector_id=1
         self.project_file=None;self.results=[];self.smooth_fields=[];self._fill_nozzles();self._fill_controls()
         self.plane_select.clear();self.balance_label.setText('Нет расчётных результатов.')
+        self._reset_history()
 
     def save_project(self,save_as=False):
         try:
@@ -751,16 +1007,28 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         except Exception as exc:self._error(exc)
 
     def open_project(self):
+        if self.thread is not None:self._error('Дождитесь завершения расчёта.');return
         path,_=QFileDialog.getOpenFileName(self,'Открыть проект','','JSON (*.json)')
         if not path:return
         try:
             with open(path,'r',encoding='utf-8') as f:data=json.load(f)
-            self.cfg,self.nozzles=project_from_json(data)
+            cfg,nozzles=project_from_json(data)
+            self._restoring=True
+            self.cfg,self.nozzles=cfg,nozzles
             self.project_file=path;self.results=[];self.smooth_fields=[];self.sector_id=1
             self._fill_controls();self._fill_nozzles()
             self.plane_select.clear();self.balance_label.setText('Загружены исходные данные. Нужен новый расчёт.')
             self.statusBar().showMessage(f'Загружено: {path}',12000)
+            self._reset_history()
         except Exception as exc:self._error(exc)
+
+    def _reset_history(self):
+        self.undo_stack.clear()
+        self._edit_state=project_to_json(self.cfg,self.nozzles)
+        self._restoring=False
+        self._revision+=1
+        self._invalidate_render()
+        self._queue_preview()
 
 
 def main():

@@ -7,7 +7,7 @@ import sys, argparse, json
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parent/'src'))
 from fuelfield.core import project_from_json,calculate_plane,evaluate_continuous_field
-from fuelfield.visualization import draw_nozzle_markers, draw_detailed_map, draw_polar_nozzles_map
+from fuelfield.visualization import draw_nozzle_markers, draw_detailed_map, draw_polar_nozzles_map, color_scale
 from fuelfield.data_io import write_result_csv
 
 
@@ -22,23 +22,24 @@ def main():
     p=Path(args.project)
     cfg,nozzles=project_from_json(json.loads(p.read_text(encoding='utf-8')))
     out=Path(args.out);out.mkdir(parents=True,exist_ok=True)
-    planes=[]
-    for i,z in enumerate(cfg.z_mm):
-        plane=calculate_plane(nozzles,cfg,z);planes.append(plane)
+    planes=[calculate_plane(nozzles,cfg,z) for z in cfg.z_mm]
+    fields=[evaluate_continuous_field(nozzles,cfg,z) for z in cfg.z_mm]
+    for i,(z,plane,smooth) in enumerate(zip(cfg.z_mm,planes,fields)):
         fig=plt.figure(figsize=(7,7))
         ax=fig.add_subplot(111,projection='polar')
         theta_edge=np.deg2rad(cfg.grid_start_deg+(np.arange(cfg.n_angular+1)-.5)*360/cfg.n_angular)
         th,r=np.meshgrid(theta_edge,plane.radial_edges_mm)
-        m=ax.pcolormesh(th,r,plane.flux_kg_m2_s,shading='flat',cmap='turbo')
+        data,norm,cmap=color_scale(plane.flux_kg_m2_s,cfg,[p.flux_kg_m2_s for p in planes])
+        m=ax.pcolormesh(th,r,data,shading='flat',cmap=cmap,norm=norm)
         ax.set_theta_zero_location('E');ax.set_theta_direction(1)
         ax.set_ylim(0,cfg.r_out_mm)
         ax.set_title(f'Section {i+1}, z={z:g} mm')
         draw_nozzle_markers(ax,cfg,nozzles,polar=True)
         fig.colorbar(m,ax=ax,shrink=.8,label='kg/(m² s)')
         fig.savefig(out/f'section_{i+1}_field.png',dpi=160,bbox_inches='tight');plt.close(fig)
-        smooth=evaluate_continuous_field(nozzles,cfg,z)
         fig=plt.figure(figsize=(8,8),layout='constrained')
-        draw_detailed_map(fig,smooth,plane,cfg,nozzles)
+        draw_detailed_map(fig,smooth,plane,cfg,nozzles,
+                          shared_values=[f.masked_flux_kg_m2_s for f in fields])
         fig.savefig(out/f'section_{i+1}_detailed.png',dpi=160,bbox_inches='tight');plt.close(fig)
         fig=plt.figure(figsize=(8,8),layout='constrained')
         draw_polar_nozzles_map(fig,plane,cfg,nozzles)
