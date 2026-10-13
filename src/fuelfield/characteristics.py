@@ -1,7 +1,7 @@
-"""Experimental flow-curve primitives for v0.2 preparation.
+"""Experimental flow-curve primitives for v0.2.
 
-Pressure: kgf/cm². Canonical flow: kg/h. No theoretical atomizer model and no
-implicit activation in the v0.1.x physical kernels or project format.
+Pressure: kgf/cm². Canonical flow: kg/h. Dityakin's hydraulic model is defined
+separately in dityakin.py; measured points remain untouched.
 """
 from __future__ import annotations
 from bisect import bisect_left
