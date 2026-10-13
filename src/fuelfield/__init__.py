@@ -1,2 +1,2 @@
 """Fuel field pilot: 140-nozzle annular front-end superposition."""
-__version__ = '0.1.3.dev0'
+__version__ = '0.2.0rc1'

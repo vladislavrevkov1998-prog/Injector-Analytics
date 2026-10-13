@@ -7,6 +7,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 import numpy as np
+from .v02 import (GEOMETRY_KEYS, default_presets, validate_catalog, effective_nozzle,
+                  flow_status, validate_nozzles)
 
 GEOMETRY_MODELS = {
     'constant': 'Конус: постоянная толщина кольца',
@@ -51,6 +53,16 @@ class Nozzle:
     decay_length_mm: float = 70.0
     diffusion_deg_sqrt_mm: float = 1.0
     rotation_deg_per_mm: float = 0.0
+    atomizer_type_id: str = ''
+    flow_pressure_kgf_cm2: float = 30.0
+    sector_pressure_kgf_cm2: float = 2.5
+    capture_efficiency: Optional[float] = None
+    nozzle_kind: str = 'uncooled'
+    geometry_overrides: list[str] = field(default_factory=lambda:list(GEOMETRY_KEYS))
+
+    @property
+    def r_nozzle_mm(self):
+        return self.rc0_mm+self.h0_mm/2
 
 @dataclass
 class Settings:
@@ -78,8 +90,25 @@ class Settings:
     color_vmax: float = 1.0
     color_out_of_range: str = 'saturate'
     color_shared_z: bool = False
+    atomizer_types: list[dict] = field(default_factory=list)
+    nozzle_presets: dict = field(default_factory=default_presets)
+    target_pressure_kgf_cm2: float = 30.0
+    pressure_mode: str = 'legacy'  # legacy preserves imported v0.1 sector flow
+    allow_extrapolation: bool = False
+    placement_mode: str = 'manual'
+    display_flow_unit: str = 'kg/h'
 
     def validate(self):
+        validate_catalog(self.atomizer_types,self.nozzle_presets)
+        if not isinstance(self.allow_extrapolation,bool):raise ValueError('Разрешение экстраполяции должно быть логическим значением.')
+        if not all(np.isfinite(v) for v in (self.r_in_mm,self.r_out_mm,self.row_inner_mm,
+                    self.row_outer_mm,self.duration_s,self.density_kg_m3,self.grid_start_deg)):
+            raise ValueError('Размеры, время и плотность должны быть конечными.')
+        if not np.isfinite(self.target_pressure_kgf_cm2) or self.target_pressure_kgf_cm2<=0:
+            raise ValueError('Целевой перепад давления должен быть положительным.')
+        if self.pressure_mode not in ('legacy','calibrated') or self.placement_mode not in ('manual','auto_follow'):
+            raise ValueError('Неизвестный режим пересчёта или расстановки.')
+        if self.display_flow_unit not in ('kg/h','l/min'):raise ValueError('Неизвестные единицы расхода.')
         if self.color_scale_mode not in ('auto', 'manual'):
             raise ValueError('Шкала должна быть Auto или Manual.')
         if self.color_out_of_range not in ('saturate', 'clip'):
@@ -89,7 +118,7 @@ class Settings:
             raise ValueError('Шкала: нужны конечные min < max.')
         if not (0 < self.r_in_mm < self.r_out_mm):
             raise ValueError('Требуется 0 < Rвнутр < Rнаруж.')
-        if len(self.z_mm) != 4 or min(self.z_mm) < 0:
+        if len(self.z_mm) != 4 or not all(np.isfinite(z) for z in self.z_mm) or min(self.z_mm) < 0:
             raise ValueError('Нужны 4 неотрицательных расстояния z [мм].')
         if not 1 <= self.n_radial <= 40 or not 8 <= self.n_angular <= 1440:
             raise ValueError('Число уровней 1..40, окружных ячеек 8..1440.')
@@ -150,13 +179,11 @@ def apply_default_positions(nozzles: list[Nozzle], settings: Settings):
 
 
 def source_flow_kg_s(n: Nozzle, cfg: Settings) -> float:
-    if n.flow_mode == 'sectors':
-        # 1 ml = 1e-6 m3; density [kg/m3]; time [s]
-        return sum(n.sector_ml) * 1e-6 * cfg.density_kg_m3 / cfg.duration_s
-    return n.flow_kg_h / 3600.0
+    return flow_status(n,cfg).kg_s
 
 
 def geometry_at(n: Nozzle, z_mm: float, cfg: Settings):
+    n=effective_nozzle(n,cfg)
     if n.h0_mm <= 0 or n.rc0_mm < 0:
         raise ValueError(f'Форсунка {n.id}: Rc0 >=0 и h0 >0 обязательны.')
     z = float(z_mm)
@@ -184,6 +211,7 @@ def geometry_at(n: Nozzle, z_mm: float, cfg: Settings):
 
 
 def angular_profile(n: Nozzle, z_mm: float, cfg: Settings):
+    n=effective_nozzle(n,cfg)
     a = np.asarray(n.sector_ml, dtype=float)
     if len(a) != 36 or not np.isfinite(a).all() or np.min(a) < 0:
         raise ValueError(f'Форсунка {n.id}: нужны 36 неотрицательных измеренных объёмов.')
@@ -282,6 +310,7 @@ def calculate_plane(nozzles: list[Nozzle], cfg: Settings, z_mm: float) -> PlaneR
     mass = np.zeros((nrad,nang))
     inner = outer = injected = 0.0
     for n in nozzles:
+        n=effective_nozzle(n,cfg)
         if not n.enabled: continue
         flow = source_flow_kg_s(n,cfg)
         if flow <= 0: continue
@@ -308,18 +337,28 @@ def calculate_plane(nozzles: list[Nozzle], cfg: Settings, z_mm: float) -> PlaneR
 
 
 def project_to_json(settings: Settings, nozzles: list[Nozzle]):
-    return {'format':'fuel-field-pilot-v1','settings':asdict(settings),
-            'nozzles':[asdict(n) for n in nozzles]}
+    return {'format':'fuel-field-pilot-v1','version':'0.2','settings':asdict(settings),
+            'nozzles':[{**asdict(n),'r_nozzle_mm':n.r_nozzle_mm} for n in nozzles]}
 
 
 def project_from_json(data):
     if data.get('format') != 'fuel-field-pilot-v1':
         raise ValueError('Неподдерживаемый формат проекта')
     cfg = Settings(**data['settings'])
-    nozzles = [Nozzle(**n) for n in data['nozzles']]
+    nozzles=[]
+    for item in data['nozzles']:
+        raw=dict(item)
+        radius=raw.pop('r_nozzle_mm',None)
+        if radius is not None:
+            derived=radius-raw.get('h0_mm',4.)/2
+            if 'rc0_mm' in raw and not np.isclose(derived,raw['rc0_mm'],rtol=1e-12,atol=1e-12):
+                raise ValueError('Несогласованные R_сопла и legacy Rc0.')
+            raw.setdefault('rc0_mm',derived)
+        nozzles.append(Nozzle(**raw))
     cfg.validate()
-    if len(nozzles) != 140 or len(set(n.id for n in nozzles)) != 140:
+    if len(nozzles) != 140 or set(n.id for n in nozzles)!=set(range(1,141)):
         raise ValueError('В v0.1 проект должен содержать 140 уникальных форсунок')
+    validate_nozzles(nozzles,cfg)
     return cfg,nozzles
 
 
@@ -373,6 +412,7 @@ def evaluate_continuous_field(nozzles: list[Nozzle], cfg: Settings,
     # Do not construct a full dim×dim intermediate for every nozzle. A bounded
     # window is sufficient because outside 6 sigma the Gaussian is negligible.
     for n in nozzles:
+        n=effective_nozzle(n,cfg)
         if not n.enabled:
             continue
         m_dot = source_flow_kg_s(n,cfg)
@@ -428,6 +468,7 @@ def polar_epure_coordinates(n: Nozzle, z_mm: float, cfg: Settings,
     A plot glyph: radial distance is NOT the real boundary of the spray.
     The baseline is dimensionless a(phi); optional amplitude includes flow.
     """
+    n=effective_nozzle(n,cfg)
     phi = np.linspace(0,2*np.pi,n_angles+1)
     amp36 = angular_profile(n,z_mm,cfg)
     phase = (phi%(2*np.pi))*36/(2*np.pi)
