@@ -153,3 +153,57 @@ def write_result_csv(path: str, planes):
                                   f'{p.cell_area_m2[i,j]:.12g}',
                                   f'{p.cell_mass_kg_s[i,j]:.12g}',
                                   f'{p.flux_kg_m2_s[i,j]:.12g}'])
+
+
+def import_characteristic_file(path, unit='kg/h', density_kg_m3=800., sheet=None):
+    """Read two-column measured pressure/flow pairs atomically (CSV or XLSX).
+
+    Pressure is kgf/cm². Flow unit is chosen explicitly by the caller; invalid
+    data rows are rejected with their row number, never silently skipped.
+    """
+    from .characteristics import ExperimentalCharacteristic, flow_to_kg_h
+    path=Path(path)
+    if path.suffix.lower()=='.xlsx':
+        try:sheets=list(_xlsx_sheets(path))
+        except (zipfile.BadZipFile,ET.ParseError,KeyError,IndexError,TypeError) as exc:
+            raise ValueError('Не удалось прочитать таблицы XLSX: '+str(exc)) from exc
+        if not sheets:raise ValueError('XLSX не содержит таблиц.')
+        if sheet is None:
+            if len(sheets)!=1:raise ValueError('Выберите лист XLSX явно.')
+            name,rows=sheets[0]
+        else:
+            selected=next((x for x in sheets if x[0]==sheet),None)
+            if selected is None:raise ValueError('Лист XLSX не найден.')
+            name,rows=selected
+    elif path.suffix.lower()=='.csv':
+        raw=path.read_text(encoding='utf-8-sig')
+        try:sep=csv.Sniffer().sniff(raw[:4096],delimiters=',;\t').delimiter
+        except csv.Error:sep=';' if ';' in raw else ','
+        rows=list(csv.reader(io.StringIO(raw),delimiter=sep));name='CSV'
+    else:raise ValueError('Поддерживаются CSV и XLSX.')
+    pairs=[]
+    header_seen=False
+    for index,row in enumerate(rows,1):
+        if not row or all(v is None or not str(v).strip() for v in row):continue
+        if len(row)<2:raise ValueError(f'Строка {index}: нужны давление и расход.')
+        pressure=_num(row[0]);flow=_num(row[1])
+        if not pairs and not header_seen and pressure is None and flow is None:
+            p_label=str(row[0]).strip().lower();q_label=str(row[1]).strip().lower()
+            if p_label.startswith(('Δp'.lower(),'dp','pressure','давление','перепад')) and q_label.startswith(('q','flow','расход')):
+                if re.search(r'(^|[(_ \[,])(kpa|mpa|pa|кпа|мпа|па)([)\] ,]|$)',p_label):
+                    raise ValueError('Импорт ожидает давление в кгс/см²; предварительно переведите Па/кПа/МПа.')
+                declared='kg/h' if any(x in q_label for x in ('kg/h','kg_h','кг/ч')) else 'l/min' if any(x in q_label for x in ('l/min','l_min','л/мин')) else None
+                if declared is not None and declared!=unit:
+                    raise ValueError('Единицы расхода в заголовке не совпадают с выбранными единицами ввода.')
+                header_seen=True;continue
+        if pressure is None or flow is None:raise ValueError(f'Строка {index}: неверное давление или расход.')
+        try:pairs.append((pressure,flow_to_kg_h(flow,unit,density_kg_m3)))
+        except ValueError as exc:raise ValueError(f'Строка {index}: {exc}') from exc
+    return ExperimentalCharacteristic(pairs),name
+
+
+def write_characteristic_csv(path,curve):
+    with open(path,'w',encoding='utf-8-sig',newline='') as f:
+        writer=csv.writer(f,delimiter=';')
+        writer.writerow(['pressure_kgf_cm2','flow_kg_h'])
+        writer.writerows(curve.points)
