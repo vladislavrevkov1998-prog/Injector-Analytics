@@ -10,3 +10,11 @@ load the demo using its `project_from_json`, call `calculate_plane` for each z,
 and store `mass_0`…`mass_3` plus `balance_0`…`balance_3` containing
 [injected, inside, inner, outer] kg/s with `numpy.savez_compressed`.
 Do not regenerate to make a changed physical model pass the compatibility test.
+# Эталоны Дитякина
+
+`dityakin_reference.json` создан независимым генератором
+`dityakin_reference.py` по уравнениям монографии 1977 г. Генератор не импортирует
+приложение: используется RK4 для уравнений момента/работы и Decimal для поиска
+максимума расхода. Это численная проверка, не измерения реального распылителя.
+Источник, геометрия, все коэффициенты и ограничения описаны в
+`docs/DITYAKIN_METHOD.md`. Перегенерация: `python tests/fixtures/dityakin_reference.py`.

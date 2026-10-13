@@ -160,7 +160,7 @@ class CalcWorker(QObject):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Fuel Field Pilot — v0.2.0rc1')
+        self.setWindowTitle('Fuel Field Pilot — v0.2.0')
         self.resize(1480,930)
         self.cfg=Settings(pressure_mode='calibrated')
         self.nozzles=default_nozzles(self.cfg)

@@ -2,7 +2,7 @@
 from copy import deepcopy
 from dataclasses import dataclass, replace
 import math
-from .characteristics import ExperimentalCharacteristic
+from .dityakin import characteristic_for_type
 
 GEOMETRY_DEFAULTS = dict(alpha_deg=45., r_nozzle_mm=12., h0_mm=4., k_linear=.08,
     k_quadratic=.0004, power=.7, z_ref_mm=50., inner_angle_deg=10., outer_angle_deg=30.,
@@ -19,14 +19,22 @@ def default_presets():
 def validate_catalog(catalog, presets):
     ids=set()
     for item in catalog:
+        if not isinstance(item,dict):
+            raise ValueError('Тип распылителя должен быть объектом с ID и параметрами.')
         if not isinstance(item.get('id'),str) or not item['id'].strip() or item['id'] in ids:
             raise ValueError('Типы распылителей: нужны уникальные непустые строковые ID.')
         ids.add(item['id'])
         if not isinstance(item.get('name'),str) or not item['name'].strip():
             raise ValueError('Укажите имя типа распылителя.')
-        if item.get('kind') not in ('experimental','manual'):
-            raise ValueError('Расчётная методика Дитякина пока не верифицирована.')
-        ExperimentalCharacteristic(item.get('points',[]))
+        if item.get('kind') not in ('experimental','manual','theoretical'):
+            raise ValueError('Неизвестный вид расходной характеристики.')
+        characteristic_for_type(item,800.)
+        if item['kind']=='theoretical':
+            interval=item.get('plot_pressure_kgf_cm2',[2.5,30.])
+            if (not isinstance(interval,(list,tuple)) or len(interval)!=2 or
+                    not all(math.isfinite(float(p)) for p in interval) or
+                    not 0<float(interval[0])<float(interval[1])):
+                raise ValueError('Дитякин: нужен конечный положительный диапазон давления для графика.')
     if set(presets)!=set(NOZZLE_KINDS):
         raise ValueError('Нужны шаблоны охлаждаемой и неохлаждаемой форсунок.')
     for params in presets.values():
@@ -66,7 +74,7 @@ def curve_for(n,cfg):
     item=next((a for a in cfg.atomizer_types if a['id']==n.atomizer_type_id),None)
     if item is None:
         raise ValueError(f'Форсунка {n.id}: назначьте тип с расходной характеристикой.')
-    return ExperimentalCharacteristic(item['points'])
+    return characteristic_for_type(item,cfg.density_kg_m3)
 
 
 def flow_status(n,cfg):
@@ -74,10 +82,11 @@ def flow_status(n,cfg):
         raise ValueError(f'Форсунка {n.id}: неизвестный источник расхода.')
     notices=[]
     if n.flow_mode=='curve':
-        estimate=curve_for(n,cfg).evaluate(cfg.target_pressure_kgf_cm2,
-                                         allow_extrapolation=cfg.allow_extrapolation)
+        curve=curve_for(n,cfg)
+        estimate=curve.evaluate(cfg.target_pressure_kgf_cm2,allow_extrapolation=cfg.allow_extrapolation)
         if estimate.extrapolated:notices.append('Экстраполяция характеристики')
-        return FlowStatus(estimate.flow_kg_h/3600,cfg.target_pressure_kgf_cm2,'характеристика',True,tuple(notices))
+        source='Дитякин (расчёт)' if hasattr(curve,'hydraulics') else 'экспериментальная характеристика'
+        return FlowStatus(estimate.flow_kg_h/3600,cfg.target_pressure_kgf_cm2,source,True,tuple(notices))
     reference=n.flow_pressure_kgf_cm2 if n.flow_mode=='manual' else n.sector_pressure_kgf_cm2
     if not math.isfinite(reference) or reference<=0:
         raise ValueError(f'Форсунка {n.id}: перепад измерения должен быть положительным.')
@@ -106,7 +115,8 @@ def flow_status(n,cfg):
         end=curve.evaluate(target,allow_extrapolation=cfg.allow_extrapolation)
         if start.flow_kg_h<=0:raise ValueError(f'Форсунка {n.id}: Q при опорном давлении должна быть >0.')
         base*=end.flow_kg_h/start.flow_kg_h
-        estimated=True;source+=' → пересчёт по характеристике'
+        estimated=True;source+=(' → пересчёт по Дитякину' if hasattr(curve,'hydraulics')
+                                else ' → пересчёт по характеристике')
         if start.extrapolated or end.extrapolated:notices.append('Экстраполяция характеристики')
     else:target=reference
     return FlowStatus(base,target,source,estimated,tuple(notices))

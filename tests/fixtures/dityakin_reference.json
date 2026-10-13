@@ -1,0 +1,62 @@
+{
+  "provenance": "Independent RK4 integration and Decimal maximum-flow search; see dityakin_reference.py",
+  "parameters": {
+    "outlet_diameter_mm": 1.0,
+    "inlet_diameter_mm": 0.5,
+    "inlet_count": 3,
+    "swirl_arm_mm": 2.5,
+    "chamber_height_mm": 0.5,
+    "inlet_length_mm": 1.0,
+    "outlet_length_mm": 0.75,
+    "cone_angle_deg": 105.0,
+    "kinematic_viscosity_mm2_s": 1.7
+  },
+  "density_kg_m3": 800.0,
+  "states": [
+    {
+      "mass_kg_s": 0.002,
+      "pressure_pa": 129898.66109194072,
+      "re_inlet": 1248.274063465846,
+      "re_equivalent": 2162.0740996933023,
+      "friction": 0.07758578818358906,
+      "a_active": 7.898894154818326,
+      "a_equivalent": 3.320405628284198,
+      "phi": 0.4018661918142152,
+      "loss_inlet": 1.866522360225078,
+      "loss_chamber": 4.724181882558518,
+      "loss_outlet": 0.8359317594907383,
+      "mu": 0.17663541605716754,
+      "film_mm": 0.11330444527193462
+    },
+    {
+      "mass_kg_s": 0.004,
+      "pressure_pa": 616173.8740933057,
+      "re_inlet": 2496.548126931692,
+      "re_equivalent": 4324.148199386605,
+      "friction": 0.05990121418169592,
+      "a_active": 7.898894154818326,
+      "a_equivalent": 3.825880623789581,
+      "phi": 0.37607676023174896,
+      "loss_inlet": 1.6301468812214734,
+      "loss_chamber": 4.89339796224211,
+      "loss_outlet": 0.9545106418021896,
+      "mu": 0.16220284917291988,
+      "film_mm": 0.10505594074342278
+    },
+    {
+      "mass_kg_s": 0.006,
+      "pressure_pa": 1519032.6170523767,
+      "re_inlet": 3744.8221903975377,
+      "re_equivalent": 6486.222299079906,
+      "friction": 0.05176578118758176,
+      "a_active": 7.898894154818326,
+      "a_equivalent": 4.113990317465187,
+      "phi": 0.36321455315872253,
+      "loss_inlet": 1.5331137984320398,
+      "loss_chamber": 4.929962914660271,
+      "loss_outlet": 1.0233101592930127,
+      "mu": 0.15495936500923752,
+      "film_mm": 0.10100581243541984
+    }
+  ]
+}
