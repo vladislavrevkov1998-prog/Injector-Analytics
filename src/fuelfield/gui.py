@@ -38,6 +38,7 @@ FIELDS = [
 ]
 INTCOL = {key:i for i,(key,_) in enumerate(FIELDS)}
 NUMERICS = {f for f,_ in FIELDS} - {'id','enabled','row','flow_mode','sector_source'}
+SINGLE_NOZZLE_PREVIEW_RESOLUTION = 400  # 2.78× the former 240² display cells
 
 
 def _number(txt: str):
@@ -605,8 +606,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             cfg=self._read_controls()
             n=next(n for n in self.nozzles if n.id==self.sector_id)
             # Only one source is evaluated, at z=0, without a 140-source calculation.
-            field=evaluate_continuous_field([n],cfg,0,resolution=240)
-            x,y=polar_epure_coordinates(n,0,cfg,8,n_angles=144)
+            field=evaluate_continuous_field([n],cfg,0,resolution=SINGLE_NOZZLE_PREVIEW_RESOLUTION)
+            x,y=polar_epure_coordinates(n,0,cfg,8,n_angles=288)
             theta=np.deg2rad(n.theta_deg)
             x0=n.radius_mm*np.cos(theta);y0=n.radius_mm*np.sin(theta)
             self.figpreview.clear()
@@ -616,7 +617,10 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             ax=self.figpreview.add_subplot(122)
             data,norm,cmap=color_scale(field.masked_flux_kg_m2_s,cfg)
             lim=cfg.r_out_mm
-            im=ax.imshow(data,origin='lower',extent=[-lim,lim,-lim,lim],cmap=cmap,norm=norm)
+            # Interpolation is display-only. Strict clipping must not blend hidden pixels.
+            interpolation='nearest' if cfg.color_scale_mode=='manual' and cfg.color_out_of_range=='clip' else 'bilinear'
+            im=ax.imshow(data,origin='lower',extent=[-lim,lim,-lim,lim],cmap=cmap,norm=norm,
+                         interpolation=interpolation)
             from .core import geometry_at, _kernel_outer_limit
             rc,h=geometry_at(n,0,cfg)
             span=max(_kernel_outer_limit(rc,h,cfg.radial_model)*1.2,1)

@@ -283,8 +283,24 @@ class TestQtEditing(unittest.TestCase):
             self.assertEqual(len(args[0]),1)
             self.assertEqual(args[0][0].id,71)
             self.assertEqual(args[2],0)
+            self.assertEqual(evaluate.call_args.kwargs['resolution'],400)
         self.w.previewcanvas.draw()
         self.assertEqual(len(self.w.figpreview.axes),3)
+        image=self.w.figpreview.axes[1].images[0]
+        self.assertEqual(image.get_array().shape,(400,400))
+        self.assertEqual(image.get_interpolation(),'bilinear')
+
+    def test_higher_resolution_preview_preserves_strict_clip_and_source_data(self):
+        self.w.nozzle_table.item(0,INTCOL['flow_kg_h']).setText('10')
+        original=deepcopy(self.w._edit_state)
+        self.w.scale_mode.setCurrentIndex(1)
+        self.w.scale_range.setCurrentIndex(1)
+        self.w._draw_single_preview()
+        image=self.w.figpreview.axes[1].images[0]
+        self.assertEqual(image.get_array().shape,(400,400))
+        self.assertEqual(image.get_interpolation(),'nearest')
+        self.assertEqual(self.w._edit_state['nozzles'],original['nozzles'])
+        self.assertEqual(len(self.w.figpreview.axes[0].lines[0].get_xdata()),289)
 
     def test_lazy_render_and_cache_reuse(self):
         self.results()
