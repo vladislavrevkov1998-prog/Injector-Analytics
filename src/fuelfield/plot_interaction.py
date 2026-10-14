@@ -137,6 +137,8 @@ class PlotInteraction:
         self.pressed.add(event.button)
         if {MouseButton.LEFT,MouseButton.RIGHT}.issubset(self.pressed):
             self._cancel_drag();self.clear_points();return
+        if event.button==MouseButton.MIDDLE and (any(k in (event.key or '').lower() for k in ('ctrl','control')) or set(getattr(event,'modifiers',())) & {'ctrl','control'}):
+            self.reset_zoom();return
         if event.button==MouseButton.MIDDLE and event.inaxes in self.axes:
             self._hide_hover();ax=event.inaxes;x,y=self._coordinates(ax,event.x,event.y)
             self.drag=(ax,x,y);self.rectangle=Rectangle((x,y),0,0,facecolor='#b9a1d4',edgecolor='#76509c',alpha=.3,animated=True)
@@ -186,5 +188,5 @@ def attach_interaction(canvas):
     canvas.setFocusPolicy(Qt.ClickFocus)
     controller=PlotInteraction(canvas);canvas.interaction=controller
     canvas.setToolTip('Наведение: прицел и x/y. Двойной ЛКМ: точка на эпюре (до 10). '\
-                      'ЛКМ + ПКМ: удалить точки. Средняя кнопка + выделение: масштаб. R: исходный масштаб.')
+                      'ЛКМ + ПКМ: удалить точки. Средняя кнопка + выделение: масштаб. Ctrl + средняя кнопка или R: исходный масштаб.')
     return controller

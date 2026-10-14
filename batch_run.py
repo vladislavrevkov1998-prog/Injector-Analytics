@@ -12,7 +12,7 @@ from fuelfield.data_io import write_result_csv
 
 
 def main():
-    parser=argparse.ArgumentParser(description='Calculate four mass-conservative fuel fields.')
+    parser=argparse.ArgumentParser(description='Calculate 1–50 mass-conservative fuel fields.')
     parser.add_argument('project',help='Path to JSON project saved from GUI')
     parser.add_argument('--out',default='results',help='Output folder')
     args=parser.parse_args()

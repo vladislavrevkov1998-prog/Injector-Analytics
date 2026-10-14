@@ -45,7 +45,7 @@ def _col(i):
 
 
 def write_epures_xlsx(path, planes, cfg, metric='flux', interval=180.):
-    if len(planes)!=4:raise ValueError('Экспорт требует четыре рассчитанных сечения')
+    if not 1<=len(planes)<=50:raise ValueError('Экспорт требует 1–50 рассчитанных сечений')
     metadata=json.dumps(project_to_json(cfg,[])['settings'],ensure_ascii=False,separators=(',',':'))
     sheets=[]
     for p in planes:
@@ -77,8 +77,8 @@ def write_epures_xlsx(path, planes, cfg, metric='flux', interval=180.):
     ET.SubElement(types,'Override',PartName='/xl/workbook.xml',ContentType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml')
     wb=ET.Element('workbook',xmlns=NS);ws=ET.SubElement(wb,'sheets')
     rels=ET.Element('Relationships',xmlns=PKG)
-    for i in range(1,5):
-        ET.SubElement(ws,'sheet',name=f'z{i} = {planes[i-1].z_mm:g} мм',sheetId=str(i),attrib={f'{{{REL}}}id':f'rId{i}'})
+    for i in range(1,len(planes)+1):
+        ET.SubElement(ws,'sheet',name=f'z{i} {planes[i-1].z_mm:.9g} мм'[:31],sheetId=str(i),attrib={f'{{{REL}}}id':f'rId{i}'})
         ET.SubElement(rels,'Relationship',Id=f'rId{i}',Type=REL+'/worksheet',Target=f'worksheets/sheet{i}.xml')
         ET.SubElement(types,'Override',PartName=f'/xl/worksheets/sheet{i}.xml',ContentType='application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml')
     rootrels=ET.Element('Relationships',xmlns=PKG)
@@ -86,3 +86,28 @@ def write_epures_xlsx(path, planes, cfg, metric='flux', interval=180.):
     with ZipFile(path,'w',ZIP_DEFLATED) as z:
         for name,root in [('[Content_Types].xml',types),('_rels/.rels',rootrels),('xl/workbook.xml',wb),('xl/_rels/workbook.xml.rels',rels)]:z.writestr(name,ET.tostring(root,encoding='utf-8',xml_declaration=True))
         for i,sheet in enumerate(sheets,1):z.writestr(f'xl/worksheets/sheet{i}.xml',sheet)
+
+
+def write_workbook(path,tables):
+    """Generic OpenXML report with explicit sheet names and cached values."""
+    types=ET.Element('Types',xmlns='http://schemas.openxmlformats.org/package/2006/content-types')
+    for extension,content in [('rels','application/vnd.openxmlformats-package.relationships+xml'),('xml','application/xml')]:ET.SubElement(types,'Default',Extension=extension,ContentType=content)
+    ET.SubElement(types,'Override',PartName='/xl/workbook.xml',ContentType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml')
+    wb=ET.Element('workbook',xmlns=NS);sheets=ET.SubElement(wb,'sheets');rels=ET.Element('Relationships',xmlns=PKG)
+    rootrels=ET.Element('Relationships',xmlns=PKG);ET.SubElement(rootrels,'Relationship',Id='rId1',Type=REL+'/officeDocument',Target='xl/workbook.xml')
+    with ZipFile(path,'w',ZIP_DEFLATED) as z:
+        for index,(name,rows) in enumerate(tables,1):
+            if not name or len(name)>31:raise ValueError('Имя Excel-листа: 1–31 символ')
+            ET.SubElement(sheets,'sheet',name=name,sheetId=str(index),attrib={f'{{{REL}}}id':f'rId{index}'})
+            ET.SubElement(rels,'Relationship',Id=f'rId{index}',Type=REL+'/worksheet',Target=f'worksheets/sheet{index}.xml')
+            ET.SubElement(types,'Override',PartName=f'/xl/worksheets/sheet{index}.xml',ContentType='application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml')
+            root=ET.Element('worksheet',xmlns=NS);data=ET.SubElement(root,'sheetData')
+            for i,row in enumerate(rows,1):
+                node=ET.SubElement(data,'row',r=str(i))
+                for j,value in enumerate(row):
+                    if value is None:continue
+                    cell=ET.SubElement(node,'c',r=f'{_col(j)}{i}')
+                    if isinstance(value,(int,float,np.number)) and np.isfinite(value):ET.SubElement(cell,'v').text=str(int(value) if isinstance(value,(bool,np.bool_)) else value)
+                    else:cell.set('t','inlineStr');ET.SubElement(ET.SubElement(cell,'is'),'t').text=str(value)
+            z.writestr(f'xl/worksheets/sheet{index}.xml',ET.tostring(root,encoding='utf-8',xml_declaration=True))
+        for name,root in [('[Content_Types].xml',types),('_rels/.rels',rootrels),('xl/workbook.xml',wb),('xl/_rels/workbook.xml.rels',rels)]:z.writestr(name,ET.tostring(root,encoding='utf-8',xml_declaration=True))

@@ -135,7 +135,10 @@ class Settings:
             raise ValueError('Шкала: нужны конечные min < max.')
         if not (0 < self.r_in_mm < self.r_out_mm):
             raise ValueError('Требуется 0 < Rвнутр < Rнаруж.')
-        if len(self.z_mm)!=4 or not all(np.isfinite(z) for z in self.z_mm) or min(self.z_mm)<0:raise ValueError('Нужны четыре неотрицательных сечения')
+        if not 1<=len(self.z_mm)<=50 or not all(np.isfinite(z) and z>=0 for z in self.z_mm):
+            raise ValueError('Нужны 1–50 конечных неотрицательных координат z [мм].')
+        if len(self.z_mm)>1 and np.any(np.diff(np.sort(self.z_mm))<=1e-7):
+            raise ValueError('Координаты сечений должны быть уникальны с допуском 10⁻⁷ мм.')
         if not 1 <= self.n_radial <= 40 or not 8 <= self.n_angular <= 1440:
             raise ValueError('Число уровней 1..40, окружных ячеек 8..1440.')
         if self.n_sample_radial < 8 or self.n_sample_angular < 72:

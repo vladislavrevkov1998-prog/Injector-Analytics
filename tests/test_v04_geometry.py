@@ -46,6 +46,18 @@ class TestV04Physics(unittest.TestCase):
  def test_mixed_tips_reach_balance(self):
   cfg,ns=synthetic();ns[0].geometry_overrides=['z_tip_mm'];ns[0].z_tip_mm=30
   p=calculate_plane(ns,cfg,20);self.assertAlmostEqual(p.injected_kg_s,20/3600);self.assertLess(abs(p.rel_balance_error),1e-13)
+ def test_sections_1_4_7_xlsx_roundtrip(self):
+  for count in (1,4,7):
+   cfg,ns=synthetic();cfg.z_mm=list(range(count));cfg.validate()
+   c,n=project_from_json(project_to_json(cfg,ns));self.assertEqual(c.z_mm,cfg.z_mm)
+   planes=[calculate_plane(n,c,z) for z in c.z_mm]
+   with tempfile.TemporaryDirectory() as d:
+    path=Path(d)/'epures.xlsx';write_epures_xlsx(path,planes,c);sheets=list(_xlsx_sheets(path));self.assertEqual(len(sheets),count)
+    self.assertEqual(len(set(name for name,rows in sheets)),count);self.assertTrue(all(len(name)<=31 for name,rows in sheets))
+ def test_invalid_sections(self):
+  for values in ([],[0]*2,[0,1e-8],[-1],[np.nan],[np.inf],list(range(51))):
+   cfg=Settings();cfg.z_mm=values
+   with self.assertRaises(ValueError):cfg.validate()
  def test_unknown_fields_and_snapshot_restoration(self):
   cfg,ns=user();data=project_to_json(cfg,ns);data['custom']={'preserve':'yes'};data['settings']['lab']='A';data['nozzles'][0]['operator_note']='keep'
   cfg,ns=project_from_json(data);c,n=project_from_json(project_to_json(cfg,ns));self.assertEqual(project_to_json(c,n),data)

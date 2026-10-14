@@ -12,6 +12,7 @@ from .core import project_from_json,calculate_plane
 from .analysis import cell_values,matching_index,UNITS
 from .analytics_io import read_chart_tables
 from .plot_interaction import attach_interaction
+from .graph_selection import GraphSelection
 
 class ProjectWorker(QObject):
     completed=pyqtSignal(object)
@@ -49,10 +50,12 @@ class ComparisonPanel(QWidget):
         self.table_controls=QWidget();self.table_controls.setLayout(table_controls);layout.addWidget(self.table_controls);self.table_controls.hide()
         self.notice=QLabel('Загрузите второй проект или таблицу с заголовками и числовыми столбцами.');self.notice.setWordWrap(True);layout.addWidget(self.notice)
         grid_controls=QHBoxLayout();self.plot_count=QSpinBox();self.plot_count.setRange(1,140)
+        self.graph_selection=GraphSelection(self.plot_count);self.graph_selection.changed.connect(self.draw)
         self.plot_columns=QSpinBox();self.plot_columns.setRange(1,6)
         self.plot_count.setToolTip("Для проекта: последовательные радиальные уровни от выбранного R. Для таблицы: последовательные числовые Y-столбцы; X и Y₂ исключаются.")
         for label,widget in (("Графиков:",self.plot_count),("Колонок:",self.plot_columns)):
             grid_controls.addWidget(QLabel(label));grid_controls.addWidget(widget)
+        grid_controls.addWidget(self.graph_selection)
         reset=QPushButton("Исходный масштаб");reset.clicked.connect(lambda:self.interaction.reset_zoom());grid_controls.addWidget(reset);grid_controls.addStretch()
         layout.addLayout(grid_controls)
         self.figure=Figure(figsize=(6,5),tight_layout=True);self.canvas=FigureCanvasQTAgg(self.figure);self.canvas.setMinimumSize(160,120);layout.addWidget(self.canvas,1);self.interaction=attach_interaction(self.canvas)
@@ -136,9 +139,18 @@ class ComparisonPanel(QWidget):
         if self.tables:source=('table',id(self.tables),i,self.x.currentData(),self.y.currentData(),self.y2.currentData())
         elif self.planes:source=('project',id(self.planes[i]),self.cfg.density_kg_m3,self.owner.metric.currentData(),self.owner.volume_interval.value(),self.radius.currentData())
         else:source=('empty',)
-        return source+(self.kind.currentIndex(),self.plot_count.value(),self.plot_columns.value())
+        return source+(self.kind.currentIndex(),self.plot_count.value(),self.plot_columns.value(),tuple(self.graph_selection.selected))
 
     def draw(self,*args):
+        i=max(0,self.plane.currentIndex())
+        if self.tables:
+            _,headers,data=self.tables[i];xc,yc=self.x.currentData(),self.y.currentData();secondary=self.y2.currentData()
+            choices=[yc]+[k for k in data if k not in (xc,yc,secondary)] if yc in data else []
+            self.graph_selection.configure([(k,headers[k]) for k in choices],identity=('table',id(self.tables),i,xc,yc,secondary))
+        elif self.planes:
+            p=self.planes[i];start=max(0,self.radius.currentIndex());radii=p.radial_centers_mm
+            self.graph_selection.configure([(float(r),f'R={r:g} мм') for r in radii],
+                [float(radii[(start+k)%len(radii)]) for k in range(len(radii))],identity=('project',tuple(radii)))
         if self._state_key()==self._chart_key:return
         # One replacement of the axes resets annotations and zoom for changed data.
         self.interaction.clear_artists()
@@ -152,15 +164,15 @@ class ComparisonPanel(QWidget):
             secondary=self.y2.currentData()
             choices=[yc]+[k for k in data if k not in (xc,yc,secondary)]
             maximum=len(choices)
-            for key in choices[:self.plot_count.value()]:
+            for key in self.graph_selection.selected:
                 series.append((data[xc],data[key],headers[xc],headers[key],name+' · '+headers[key]))
             self.notice.setText('Исходные точки без сглаживания; единицы берутся из заголовков таблицы.')
         elif self.planes:
             p=self.planes[i];start=max(0,self.radius.currentIndex());metric=self.owner.metric.currentData()
             values=cell_values(p,metric,self.cfg.density_kg_m3,self.owner.volume_interval.value())
             maximum=len(p.radial_centers_mm);order=np.argsort(p.theta_centers_deg)
-            for offset in range(min(maximum,self.plot_count.value())):
-                k=(start+offset)%maximum
+            for radius in self.graph_selection.selected:
+                k=matching_index(p.radial_centers_mm,radius)
                 series.append((p.theta_centers_deg[order],values[k,order],'Окружной угол, °',UNITS[metric],f'z={p.z_mm:g} мм; R={p.radial_centers_mm[k]:g} мм'))
         else:maximum=1
         self.plot_count.blockSignals(True);self.plot_count.setMaximum(maximum);self.plot_count.blockSignals(False)
@@ -169,6 +181,8 @@ class ComparisonPanel(QWidget):
         for slot,(x,y,xlabel,ylabel,title) in enumerate(series,1):
             ax=self.figure.add_subplot(rows,cols,slot);self._series(ax,x,y,ylabel)
             ax.set_xlabel(textwrap.fill(xlabel,28),fontsize=8);ax.set_ylabel(textwrap.fill(ylabel,18),fontsize=8);ax.set_title(title,fontsize=9);ax.grid(alpha=.25);ax.tick_params(labelsize=7)
+            ax._compare_x='angle_deg' if not self.tables or xlabel in ('angle_deg','theta_deg','theta_center_deg') else None
+            ax._compare_y=UNITS[metric] if not self.tables else ylabel[ylabel.find('[')+1:ylabel.find(']')] if '[' in ylabel and ']' in ylabel else ylabel
             if self.tables and secondary in data:
                 other=ax.twinx();self._series(other,data[xc],data[secondary],headers[secondary],color='#ad4e21')
                 other.set_ylabel(textwrap.fill(headers[secondary],18),fontsize=8);other.tick_params(axis='y',colors='#ad4e21',labelsize=7)
