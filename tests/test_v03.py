@@ -170,7 +170,7 @@ class TestV03Qt(unittest.TestCase):
                 c.kind.setCurrentIndex(kind)
                 self.assertEqual(len(c.figure.axes),2)
                 ax=c.figure.axes[0]
-                if kind==0:self.assertEqual(len(ax.lines),1)
+                if kind==0:self.assertEqual(len([line for line in ax.lines if not line.get_animated()]),1)
                 elif kind==1:self.assertEqual(len(ax.collections),1)
                 else:self.assertEqual(len(ax.patches),2)
     def test_bad_table_does_not_discard_previous_data(self):

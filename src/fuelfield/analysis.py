@@ -25,3 +25,13 @@ def cell_values(plane, metric='flux', density=800., interval=180.):
 def matching_index(values, target):
     matches=np.flatnonzero(np.isclose(values,target,rtol=0,atol=1e-7))
     return int(matches[0]) if len(matches)==1 else None
+
+# Conversion constants assume canonical ṁ [kg/s], ρ [kg/m³], t [s], S [m²].
+EQUATIONS = {
+    'flux':'qᵢⱼ = ṁᵢⱼ / Sᵢⱼ  [кг/(м²·с)]',
+    'kg_h':'Gᵢⱼ = 3600 · ṁᵢⱼ  [кг/ч]',
+    'l_min':'Qᵢⱼ = 60000 · ṁᵢⱼ / ρ  [л/мин]',
+    'volume':'Vᵢⱼ = 10⁶ · ṁᵢⱼ · t / ρ  [мл]',
+    'ring':'Iᵢⱼ = qᵢⱼ / ⟨q⟩ᵢ;  ⟨q⟩ᵢ = Σⱼṁᵢⱼ / ΣⱼSᵢⱼ',
+    'track':'Iᵢⱼ = qᵢⱼ / ⟨q⟩;  ⟨q⟩ = Σᵢⱼṁᵢⱼ / ΣᵢⱼSᵢⱼ',
+}

@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
     QSpinBox, QDoubleSpinBox, QLineEdit, QFileDialog, QMessageBox, QSplitter,
     QGroupBox, QScrollArea, QPlainTextEdit, QHeaderView, QAbstractItemView,
     QStatusBar, QProgressBar, QMenu, QAction, QInputDialog, QCheckBox,
-    QUndoStack, QUndoCommand, QStackedWidget, QStyledItemDelegate, QDialog
+    QUndoStack, QUndoCommand, QStackedWidget, QStyledItemDelegate, QDialog, QToolButton
 )
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -29,7 +29,8 @@ from .v02 import (GEOMETRY_KEYS,NOZZLE_KINDS,effective_nozzle,flow_status,
                   validate_nozzles,follow_row,capture_report)
 from .characteristics import flow_to_kg_h,flow_from_kg_h
 from .editors import CatalogEditor,PresetEditor
-from .analysis import METRICS,UNITS,cell_values,matching_index
+from .analysis import METRICS,UNITS,EQUATIONS,cell_values,matching_index
+from .plot_interaction import attach_interaction
 from .analytics_io import write_epures_xlsx
 from .comparison import ComparisonPanel
 
@@ -200,7 +201,7 @@ class CalcWorker(QObject):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Fuel Field Pilot — v0.3.0')
+        self.setWindowTitle('Fuel Field Pilot — v0.3.1')
         self.resize(1480,930)
         self.cfg=Settings(pressure_mode='calibrated',flow_pressure_kgf_cm2=30.,sector_pressure_kgf_cm2=2.5)
         self.nozzles=default_nozzles(self.cfg)
@@ -497,7 +498,26 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.compare_radius=QComboBox()
         for w in (QLabel('Величина:'),self.metric,QLabel('Интервал объёма, с:'),self.volume_interval,
                   QLabel('R для сравнения:'),self.compare_radius):representations.addWidget(w)
-        lay.addLayout(representations)
+        representations.addStretch();lay.addLayout(representations)
+        self.metric_equation=QLabel(EQUATIONS[self.metric.currentData()])
+        self.metric_equation.setStyleSheet("color:#67458b;font-size:15px;")
+        self.metric_equation.setToolTip("ṁ — расход контрольной ячейки [кг/с]; S — площадь [м²]; ρ — плотность [кг/м³]; t — интервал [с]. Средние взвешены по площади.")
+        representations.insertWidget(2,self.metric_equation)
+        chart_controls=QHBoxLayout()
+        self.plot_count=_integer(6,1,140);self.plot_columns=_integer(2,1,6)
+        self.plot_count.setEnabled(False);self.plot_columns.setEnabled(False)
+        for label,widget in (("Графиков эпюр:",self.plot_count),("Колонок:",self.plot_columns)):
+            chart_controls.addWidget(QLabel(label));chart_controls.addWidget(widget)
+            widget.valueChanged.connect(self._view_changed)
+        self.plot_count.setToolTip("Количество последовательных радиальных уровней, начиная с выбранного R; полный набор начинается с первого уровня.")
+        reset=QPushButton("Исходный масштаб");self.reset_plot_button=reset;reset.setEnabled(False);reset.clicked.connect(self._reset_plot_zoom);chart_controls.addWidget(reset)
+        chart_controls.addStretch()
+        self.split_button=QToolButton();self.split_button.setCheckable(True)
+        self.split_button.setText("◫");self.split_button.setToolTip("Split: показать / скрыть область сравнения")
+        self.split_button.setToolButtonStyle(Qt.ToolButtonTextOnly);self.split_button.setFixedSize(32,28);self.split_button.setStyleSheet("font-size:18px;")
+        self.split_button.setAccessibleName("Разделить рабочую область")
+        self.split_button.toggled.connect(self._toggle_split);chart_controls.addWidget(self.split_button)
+        lay.addLayout(chart_controls)
         self.metric.currentIndexChanged.connect(self._representation_changed)
         self.volume_interval.valueChanged.connect(self._representation_changed)
         plots=QTabWidget();self.plots=plots
@@ -519,9 +539,9 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         stack=QStackedWidget();stack.addWidget(self.curvecanvas);self.plot_stacks.append(stack)
         plots.addTab(stack,'Окружные эпюры радиальных уровней')
         plots.currentChanged.connect(self._plot_result)
-        panels=QSplitter(Qt.Horizontal);panels.addWidget(plots)
+        panels=QSplitter(Qt.Horizontal);self.result_panels=panels;panels.setChildrenCollapsible(False);panels.addWidget(plots)
         self.comparison=ComparisonPanel(self);panels.addWidget(self.comparison)
-        panels.setSizes([850,550]);lay.addWidget(panels)
+        self.comparison.hide();panels.setSizes([1400,0]);lay.addWidget(panels)
         self.compare_radius.currentIndexChanged.connect(self._comparison_radius_changed)
         self.tabs.addTab(page,'04 · Поля и эпюры')
 
@@ -1099,6 +1119,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.calc_btn.setEnabled(True)
 
     def _plot_result(self,*args):
+        for widget in (self.plot_count,self.plot_columns,self.reset_plot_button):widget.setEnabled(self.plots.currentIndex()==3)
         if not self.results:return
         i=max(0,self.plane_select.currentIndex())
         p=self.results[i]
@@ -1111,6 +1132,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             f'за наружной {p.outer_kg_s*3600:.5g} кг/ч; '
             f'невязка баланса {100*p.rel_balance_error:.3g}%.'
         )
+        self.plot_count.blockSignals(True);self.plot_count.setMaximum(len(p.radial_centers_mm));self.plot_count.blockSignals(False)
         previous=self.compare_radius.currentData()
         self.compare_radius.blockSignals(True);self.compare_radius.clear()
         for r in p.radial_centers_mm:self.compare_radius.addItem(f'{r:g} мм',float(r))
@@ -1120,16 +1142,27 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self._render_view(self.plots.currentIndex(),i)
         self.comparison.sync_from_primary()
 
+    def _toggle_split(self,enabled):
+        self.comparison.setVisible(enabled)
+        if enabled:
+            self.result_panels.setSizes([max(1,self.result_panels.width()*3//5),max(1,self.result_panels.width()*2//5)])
+            self.comparison.sync_from_primary()
+
+    def _reset_plot_zoom(self):
+        canvas=self.plot_stacks[self.plots.currentIndex()].currentWidget()
+        if hasattr(canvas,'interaction'):canvas.interaction.reset_zoom()
+
     def _comparison_radius_changed(self,*args):
         self._invalidate_render();self._plot_result()
 
     def _representation_changed(self,*args):
         self.volume_interval.setEnabled(self.metric.currentData()=='volume')
+        self.metric_equation.setText(EQUATIONS[self.metric.currentData()])
         self._invalidate_render();self._plot_result();self.comparison.draw()
 
     def _render_view(self,view,i):
         key=(i,view,self.draw_outlines.isChecked(),self.draw_labels.isChecked(),
-             self.draw_rose_over_field.isChecked(),self.rose_scale.value(),self.metric.currentData(),self.volume_interval.value(),self.compare_radius.currentData())
+             self.draw_rose_over_field.isChecked(),self.rose_scale.value(),self.metric.currentData(),self.volume_interval.value(),self.compare_radius.currentData(),self.plot_count.value(),self.plot_columns.value())
         fig_name,canvas_name=[('figmap','mapcanvas'),('figsmooth','smoothcanvas'),
                               ('figroses','rosescanvas'),('figcurves','curvecanvas')][view]
         stack=self.plot_stacks[view]
@@ -1141,7 +1174,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             if view==0:self._draw_map(p)
             elif view==1:self._draw_smooth(self.smooth_fields[i],p)
             elif view==2:self._draw_roses(p)
-            else:self._draw_curves(p)
+            else:
+                self._draw_curves(p);attach_interaction(canvas)
             stack.addWidget(canvas)
             self._render_cache[key]=canvas
         canvas=self._render_cache[key]
@@ -1194,14 +1228,16 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
 
     def _draw_curves(self,p):
         self.figcurves.clear()
-        n=len(p.radial_centers_mm)
-        cols=2 if n>1 else 1
+        total=len(p.radial_centers_mm);n=min(total,self.plot_count.value())
+        start=0 if n==total else max(0,self.compare_radius.currentIndex())
+        indices=[(start+k)%total for k in range(n)]
+        cols=min(n,self.plot_columns.value())
         rows=int(np.ceil(n/cols))
         angles=p.theta_centers_deg
         order=np.argsort(angles)
         x=angles[order]
-        for k in range(n):
-            ax=self.figcurves.add_subplot(rows,cols,k+1)
+        for slot,k in enumerate(indices):
+            ax=self.figcurves.add_subplot(rows,cols,slot+1)
             y=cell_values(p,self.metric.currentData(),self.cfg.density_kg_m3,self.volume_interval.value())[k][order]
             ax.plot(np.r_[x,x[0]+360],np.r_[y,y[0]],lw=1.2)
             selected=self.compare_radius.currentData() is not None and np.isclose(p.radial_centers_mm[k],self.compare_radius.currentData(),rtol=0,atol=1e-7)
