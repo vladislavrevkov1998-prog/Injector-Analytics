@@ -87,7 +87,7 @@ def flow_status(n,cfg):
         if estimate.extrapolated:notices.append('Экстраполяция характеристики')
         source='Дитякин (расчёт)' if hasattr(curve,'hydraulics') else 'экспериментальная характеристика'
         return FlowStatus(estimate.flow_kg_h/3600,cfg.target_pressure_kgf_cm2,source,True,tuple(notices))
-    reference=n.flow_pressure_kgf_cm2 if n.flow_mode=='manual' else n.sector_pressure_kgf_cm2
+    reference=bench_pressure(n,cfg,'flow' if n.flow_mode=='manual' else 'sector')
     if not math.isfinite(reference) or reference<=0:
         raise ValueError(f'Форсунка {n.id}: перепад измерения должен быть положительным.')
     if n.flow_mode=='manual':
@@ -100,7 +100,11 @@ def flow_status(n,cfg):
         eta=n.capture_efficiency
         if cfg.pressure_mode=='legacy':eta=1.
         elif eta is None:
-            eta=1.;notices.append('Полнота сбора неизвестна: принято η=1')
+            eta=1.
+            try:capture_report(n,cfg)
+            except ValueError:notices.append('Полнота сбора неизвестна: принято η=1')
+            else:notices.append('Полнота сбора сопоставлена с Gт; расход без компенсации недобора (η=1)')
+        else:notices.append(f'Сохранённая поправка η={eta:g}')
         if not math.isfinite(eta) or not 0<eta<=1:
             raise ValueError(f'Форсунка {n.id}: полнота сбора должна быть в (0,1].')
         base=sum(parts)*1e-6*cfg.density_kg_m3/cfg.duration_s/eta
@@ -151,13 +155,50 @@ def validate_nozzles(nozzles,cfg):
 
 
 def follow_row(nozzles,nozzle_id,new_theta):
-    """Translate the selected position and later IDs of its row, including disabled ones."""
+    """Align both full clockwise rows to an anchor, preserving the half-pitch stagger."""
     new_theta=float(new_theta)
     if not math.isfinite(new_theta):raise ValueError('Угол должен быть конечным.')
     source=next(n for n in nozzles if n.id==nozzle_id)
-    delta=new_theta-source.theta_deg
+    index=source.id-1 if source.row=='outer' else source.id-71+.5
+    phase=new_theta+index*360/70
     for n in nozzles:
-        if n.row==source.row and n.id>=source.id:n.theta_deg+=delta
+        index=n.id-1 if n.row=='outer' else n.id-71+.5
+        n.theta_deg=(phase-index*360/70)%360
+
+
+def bench_pressure(n,cfg,kind):
+    key='flow_pressure_kgf_cm2' if kind=='flow' else 'sector_pressure_kgf_cm2'
+    common=getattr(cfg,key)
+    return getattr(n,key) if common is None else common
+
+
+@dataclass(frozen=True)
+class CaptureReport:
+    collected_ml: float
+    expected_ml: float
+    deviation_percent: float
+    missing_ml: float
+    fraction: float
+    collected_at_measurement_kg_h: float
+
+
+def capture_report(n,cfg):
+    """Independent comparison, never a circular replacement of sector flow by Gт."""
+    if n.flow_kg_h<=0:raise ValueError('Для полноты сбора нужен положительный измеренный Gт.')
+    measured_pressure=bench_pressure(n,cfg,'flow');sector_pressure=bench_pressure(n,cfg,'sector')
+    ratio=1.
+    if measured_pressure!=sector_pressure:
+        curve=curve_for(n,cfg)
+        qm=curve.evaluate(measured_pressure,allow_extrapolation=cfg.allow_extrapolation).flow_kg_h
+        qs=curve.evaluate(sector_pressure,allow_extrapolation=cfg.allow_extrapolation).flow_kg_h
+        if qm<=0 or qs<=0:raise ValueError('Для полноты сбора нужна положительная Q при обоих давлениях испытаний.')
+        ratio=qm/qs
+    collected=sum(n.sector_ml)
+    collected_at_measurement=collected*1e-6*cfg.density_kg_m3/cfg.duration_s*3600*ratio
+    expected=n.flow_kg_h/ratio/3600/cfg.density_kg_m3*cfg.duration_s*1e6
+    fraction=collected/expected
+    return CaptureReport(collected,expected,100*(1-fraction),expected-collected,
+                         fraction,collected_at_measurement)
 
 
 def remove_atomizer(catalog,nozzles,type_id):
