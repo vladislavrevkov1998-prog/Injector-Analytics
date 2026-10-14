@@ -1,0 +1,12 @@
+# Виртуальное окружение Python
+.venv/
+git ls-files .venv
+# Кэш Python
+__pycache__/
+*.py[cod]
+
+.vscode/
+
+# Настройки и временные файлы
+.pytest_cache/
+.spyproject/
