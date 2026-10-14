@@ -1,0 +1,118 @@
+{
+  "version": "0.3.1",
+  "python": "3.12.14",
+  "platform": "Linux",
+  "project": "examples/demo_project_user_field.json",
+  "window_px": [
+    1480,
+    930
+  ],
+  "method": "Matplotlib events + Qt processEvents; offscreen Linux; warmup excluded",
+  "primary_six_epures": {
+    "axes": 6,
+    "hover_0_points": {
+      "samples": 150,
+      "median_ms": 2.118,
+      "p95_ms": 2.232,
+      "max_ms": 3.321
+    },
+    "pin_point": {
+      "samples": 10,
+      "median_ms": 10.837,
+      "p95_ms": 15.877,
+      "max_ms": 16.276
+    },
+    "hover_10_points": {
+      "samples": 150,
+      "median_ms": 2.864,
+      "p95_ms": 5.064,
+      "max_ms": 7.386
+    },
+    "full_redraw_reference_10_points": {
+      "samples": 20,
+      "median_ms": 132.26,
+      "p95_ms": 153.445,
+      "max_ms": 169.072
+    },
+    "zoom_release": {
+      "samples": 10,
+      "median_ms": 125.705,
+      "p95_ms": 132.039,
+      "max_ms": 133.826
+    },
+    "last_selection_motion_ms": 0.63,
+    "clear_10_points_ms": 1.053
+  },
+  "comparison_six_epures": {
+    "axes": 6,
+    "hover_0_points": {
+      "samples": 150,
+      "median_ms": 2.115,
+      "p95_ms": 2.24,
+      "max_ms": 2.43
+    },
+    "pin_point": {
+      "samples": 10,
+      "median_ms": 10.383,
+      "p95_ms": 15.549,
+      "max_ms": 16.068
+    },
+    "hover_10_points": {
+      "samples": 150,
+      "median_ms": 2.876,
+      "p95_ms": 2.954,
+      "max_ms": 3.005
+    },
+    "full_redraw_reference_10_points": {
+      "samples": 20,
+      "median_ms": 112.339,
+      "p95_ms": 118.578,
+      "max_ms": 122.772
+    },
+    "zoom_release": {
+      "samples": 10,
+      "median_ms": 103.889,
+      "p95_ms": 111.997,
+      "max_ms": 114.233
+    },
+    "last_selection_motion_ms": 0.515,
+    "clear_10_points_ms": 1.124
+  },
+  "external_two_y": {
+    "axes": 2,
+    "hover_0_points": {
+      "samples": 150,
+      "median_ms": 2.594,
+      "p95_ms": 3.41,
+      "max_ms": 8.845
+    },
+    "pin_point": {
+      "samples": 10,
+      "median_ms": 10.483,
+      "p95_ms": 15.054,
+      "max_ms": 15.611
+    },
+    "hover_10_points": {
+      "samples": 150,
+      "median_ms": 3.34,
+      "p95_ms": 3.444,
+      "max_ms": 3.57
+    },
+    "full_redraw_reference_10_points": {
+      "samples": 20,
+      "median_ms": 62.207,
+      "p95_ms": 66.01,
+      "max_ms": 66.209
+    },
+    "zoom_release": {
+      "samples": 10,
+      "median_ms": 48.837,
+      "p95_ms": 60.458,
+      "max_ms": 65.035
+    },
+    "last_selection_motion_ms": 0.544,
+    "clear_10_points_ms": 0.913
+  },
+  "physics_unchanged": true,
+  "max_relative_balance": 9.309648020301631e-15
+}

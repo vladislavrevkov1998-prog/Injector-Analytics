@@ -1,15 +1,17 @@
 """Independent comparison data and charts, synchronized by physical coordinates."""
 import json
+import textwrap
 import numpy as np
 from pathlib import Path
 from PyQt5.QtCore import QObject,QThread,pyqtSignal
 from PyQt5.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QComboBox,QPushButton,
-    QLabel,QFileDialog,QCheckBox,QMessageBox)
+    QLabel,QFileDialog,QCheckBox,QMessageBox,QSpinBox)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from .core import project_from_json,calculate_plane
 from .analysis import cell_values,matching_index,UNITS
 from .analytics_io import read_chart_tables
+from .plot_interaction import attach_interaction
 
 class ProjectWorker(QObject):
     completed=pyqtSignal(object)
@@ -29,24 +31,37 @@ class ProjectWorker(QObject):
 class ComparisonPanel(QWidget):
     def __init__(self,owner):
         super().__init__(owner);self.owner=owner;self.planes=[];self.cfg=None;self.tables=[];self.thread=None
-        self._loading_cfg=None
+        self._loading_cfg=None;self._chart_key=None
         layout=QVBoxLayout(self);top=QHBoxLayout()
-        self.load_button=QPushButton('Сравнить: JSON / CSV / XLSX');self.load_button.clicked.connect(self.open_file);top.addWidget(self.load_button)
-        self.sync=QCheckBox('Синхронизировать z и R');self.sync.setChecked(True);top.addWidget(self.sync)
+        top.addWidget(QLabel('Загрузить:'))
+        self.load_button=QPushButton('JSON');self.excel_button=QPushButton('Excel');self.csv_button=QPushButton('CSV')
+        self.load_buttons=(self.load_button,self.excel_button,self.csv_button)
+        for button,file_filter in zip(self.load_buttons,('JSON (*.json)','Excel (*.xlsx)','CSV (*.csv)')):
+            button.clicked.connect(lambda checked=False,f=file_filter:self.open_file(f));top.addWidget(button)
+        self.sync=QCheckBox('Синхронизировать z и R');self.sync.setChecked(True);top.addWidget(self.sync);top.addStretch()
         layout.addLayout(top)
         controls=QHBoxLayout();self.plane=QComboBox();self.radius=QComboBox();self.kind=QComboBox()
         self.kind.addItems(['Линия','Точки','Столбцы'])
-        controls.addWidget(QLabel('z / лист'));controls.addWidget(self.plane);controls.addWidget(QLabel('R'));controls.addWidget(self.radius);controls.addWidget(self.kind);layout.addLayout(controls)
+        controls.addWidget(QLabel('z / лист'));controls.addWidget(self.plane);controls.addWidget(QLabel('R'));controls.addWidget(self.radius);controls.addWidget(self.kind);controls.addStretch();layout.addLayout(controls)
         table_controls=QHBoxLayout();self.x=QComboBox();self.y=QComboBox();self.y2=QComboBox()
-        for label,widget in [('X',self.x),('Y топливо',self.y),('Y₂ температура',self.y2)]:table_controls.addWidget(QLabel(label));table_controls.addWidget(widget)
+        for label,widget in [('X',self.x),('Y',self.y),('Y₂',self.y2)]:table_controls.addWidget(QLabel(label));table_controls.addWidget(widget)
+        table_controls.addStretch()
         self.table_controls=QWidget();self.table_controls.setLayout(table_controls);layout.addWidget(self.table_controls);self.table_controls.hide()
         self.notice=QLabel('Загрузите второй проект или таблицу с заголовками и числовыми столбцами.');self.notice.setWordWrap(True);layout.addWidget(self.notice)
-        self.figure=Figure(figsize=(6,5),tight_layout=True);self.canvas=FigureCanvasQTAgg(self.figure);layout.addWidget(self.canvas)
+        grid_controls=QHBoxLayout();self.plot_count=QSpinBox();self.plot_count.setRange(1,140)
+        self.plot_columns=QSpinBox();self.plot_columns.setRange(1,6)
+        self.plot_count.setToolTip("Для проекта: последовательные радиальные уровни от выбранного R. Для таблицы: последовательные числовые Y-столбцы; X и Y₂ исключаются.")
+        for label,widget in (("Графиков:",self.plot_count),("Колонок:",self.plot_columns)):
+            grid_controls.addWidget(QLabel(label));grid_controls.addWidget(widget)
+        reset=QPushButton("Исходный масштаб");reset.clicked.connect(lambda:self.interaction.reset_zoom());grid_controls.addWidget(reset);grid_controls.addStretch()
+        layout.addLayout(grid_controls)
+        self.figure=Figure(figsize=(6,5),tight_layout=True);self.canvas=FigureCanvasQTAgg(self.figure);self.canvas.setMinimumSize(160,120);layout.addWidget(self.canvas,1);self.interaction=attach_interaction(self.canvas)
         self.plane.currentIndexChanged.connect(self._plane_changed)
         for w in (self.radius,self.kind,self.x,self.y,self.y2):w.currentIndexChanged.connect(self.draw)
+        self.plot_count.valueChanged.connect(self.draw);self.plot_columns.valueChanged.connect(self.draw)
         self.sync.toggled.connect(self.sync_from_primary)
-    def open_file(self):
-        path,_=QFileDialog.getOpenFileName(self,'Данные для сравнения','','Данные (*.json *.csv *.xlsx)')
+    def open_file(self,file_filter="Данные (*.json *.csv *.xlsx)"):
+        path,_=QFileDialog.getOpenFileName(self,'Данные для сравнения','',file_filter)
         if path:
             try:self.load_path(path)
             except Exception as exc:QMessageBox.warning(self,'Ошибка импорта',str(exc))
@@ -59,7 +74,8 @@ class ComparisonPanel(QWidget):
             self.thread.started.connect(self.worker.run);self.worker.completed.connect(self._project_done)
             self.worker.failed.connect(self._failed);self.worker.finished.connect(self.thread.quit)
             self.worker.finished.connect(self.worker.deleteLater);self.thread.finished.connect(self._cleanup)
-            self.load_button.setEnabled(False);self.notice.setText('Расчёт второго проекта…');self.thread.start()
+            for button in self.load_buttons:button.setEnabled(False)
+            self.notice.setText('Расчёт второго проекта…');self.thread.start()
         else:
             tables=read_chart_tables(path)
             self.tables=tables;self.planes=[];self.cfg=None
@@ -73,7 +89,8 @@ class ComparisonPanel(QWidget):
     def _failed(self,text):
         self.notice.setText('Не удалось загрузить проект: '+text)
     def _cleanup(self):
-        self.thread.deleteLater();self.thread=None;self.worker=None;self._loading_cfg=None;self.load_button.setEnabled(True)
+        self.thread.deleteLater();self.thread=None;self.worker=None;self._loading_cfg=None
+        for button in self.load_buttons:button.setEnabled(True)
     def _plane_changed(self,*args):
         i=max(0,self.plane.currentIndex())
         if self.tables:
@@ -114,22 +131,46 @@ class ComparisonPanel(QWidget):
         if self.kind.currentIndex()==1:ax.scatter(x,y,s=12,label=label,color=color)
         elif self.kind.currentIndex()==2:ax.bar(x,y,label=label,color=color)
         else:ax.plot(x,y,label=label,color=color)
-    def draw(self,*args):
-        self.figure.clear();ax=self.figure.add_subplot(111)
+    def _state_key(self):
         i=max(0,self.plane.currentIndex())
+        if self.tables:source=('table',id(self.tables),i,self.x.currentData(),self.y.currentData(),self.y2.currentData())
+        elif self.planes:source=('project',id(self.planes[i]),self.cfg.density_kg_m3,self.owner.metric.currentData(),self.owner.volume_interval.value(),self.radius.currentData())
+        else:source=('empty',)
+        return source+(self.kind.currentIndex(),self.plot_count.value(),self.plot_columns.value())
+
+    def draw(self,*args):
+        if self._state_key()==self._chart_key:return
+        # One replacement of the axes resets annotations and zoom for changed data.
+        self.interaction.clear_artists()
+        self.figure.clear()
+        i=max(0,self.plane.currentIndex())
+        series=[];secondary=None
         if self.tables:
-            name,headers,cols=self.tables[i];xc,yc=self.x.currentData(),self.y.currentData()
-            if xc not in cols or yc not in cols:return
-            self._series(ax,cols[xc],cols[yc],headers[yc]);ax.set_xlabel(headers[xc]);ax.set_ylabel(headers[yc])
+            name,headers,data=self.tables[i];xc,yc=self.x.currentData(),self.y.currentData()
+            if xc not in data or yc not in data:
+                self.interaction.reset_axes();self.canvas.draw_idle();return
             secondary=self.y2.currentData()
-            if secondary in cols:
-                other=ax.twinx();self._series(other,cols[xc],cols[secondary],headers[secondary],color='#ad4e21');other.set_ylabel(headers[secondary]);other.tick_params(axis='y',colors='#ad4e21')
-                for line in other.lines:line.set_color('#ad4e21')
-            ax.set_title(name);self.notice.setText('Исходные точки без сглаживания; единицы берутся из заголовков таблицы.')
+            choices=[yc]+[k for k in data if k not in (xc,yc,secondary)]
+            maximum=len(choices)
+            for key in choices[:self.plot_count.value()]:
+                series.append((data[xc],data[key],headers[xc],headers[key],name+' · '+headers[key]))
+            self.notice.setText('Исходные точки без сглаживания; единицы берутся из заголовков таблицы.')
         elif self.planes:
-            p=self.planes[i];k=max(0,self.radius.currentIndex());metric=self.owner.metric.currentData()
+            p=self.planes[i];start=max(0,self.radius.currentIndex());metric=self.owner.metric.currentData()
             values=cell_values(p,metric,self.cfg.density_kg_m3,self.owner.volume_interval.value())
-            order=np.argsort(p.theta_centers_deg)
-            self._series(ax,p.theta_centers_deg[order],values[k,order],'Сравниваемый проект')
-            ax.set_xlabel('Окружной угол, °');ax.set_ylabel(UNITS[metric]);ax.set_title(f'z={p.z_mm:g} мм; R={p.radial_centers_mm[k]:g} мм')
-        ax.grid(alpha=.25);self.canvas.draw_idle()
+            maximum=len(p.radial_centers_mm);order=np.argsort(p.theta_centers_deg)
+            for offset in range(min(maximum,self.plot_count.value())):
+                k=(start+offset)%maximum
+                series.append((p.theta_centers_deg[order],values[k,order],'Окружной угол, °',UNITS[metric],f'z={p.z_mm:g} мм; R={p.radial_centers_mm[k]:g} мм'))
+        else:maximum=1
+        self.plot_count.blockSignals(True);self.plot_count.setMaximum(maximum);self.plot_count.blockSignals(False)
+        count=max(1,len(series));cols=min(count,self.plot_columns.value());rows=int(np.ceil(count/cols))
+        if not series:self.figure.add_subplot(111)
+        for slot,(x,y,xlabel,ylabel,title) in enumerate(series,1):
+            ax=self.figure.add_subplot(rows,cols,slot);self._series(ax,x,y,ylabel)
+            ax.set_xlabel(textwrap.fill(xlabel,28),fontsize=8);ax.set_ylabel(textwrap.fill(ylabel,18),fontsize=8);ax.set_title(title,fontsize=9);ax.grid(alpha=.25);ax.tick_params(labelsize=7)
+            if self.tables and secondary in data:
+                other=ax.twinx();self._series(other,data[xc],data[secondary],headers[secondary],color='#ad4e21')
+                other.set_ylabel(textwrap.fill(headers[secondary],18),fontsize=8);other.tick_params(axis='y',colors='#ad4e21',labelsize=7)
+        self._chart_key=self._state_key()
+        self.interaction.reset_axes();self.canvas.draw_idle()
