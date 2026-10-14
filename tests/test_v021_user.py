@@ -142,7 +142,8 @@ class TestUserQt(unittest.TestCase):
 
     def test_settings_open_once_and_common_pressures_roundtrip(self):
         count=self.w.tabs.count();self.w.open_settings();self.w.open_settings()
-        self.assertEqual(self.w.tabs.count(),count+1)
+        self.assertEqual(self.w.tabs.count(),count)
+        self.assertTrue(self.w.settings_page.isVisible())
         self.w.mode_widgets['flow_pressure_kgf_cm2'].setValue(40)
         self.w.mode_widgets['sector_pressure_kgf_cm2'].setValue(2)
         self.w._record_edit();self.assertEqual(self.w.cfg.flow_pressure_kgf_cm2,40)

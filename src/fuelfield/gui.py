@@ -5,7 +5,7 @@ from copy import deepcopy
 from pathlib import Path
 import numpy as np
 from PyQt5.QtCore import Qt, QThread, QObject, pyqtSignal, QTimer
-from PyQt5.QtGui import QKeySequence, QFont, QPolygon
+from PyQt5.QtGui import QKeySequence, QFont, QPolygon, QColor
 from PyQt5.QtCore import QPoint
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
     QSpinBox, QDoubleSpinBox, QLineEdit, QFileDialog, QMessageBox, QSplitter,
     QGroupBox, QScrollArea, QPlainTextEdit, QHeaderView, QAbstractItemView,
     QStatusBar, QProgressBar, QMenu, QAction, QInputDialog, QCheckBox,
-    QUndoStack, QUndoCommand, QStackedWidget, QStyledItemDelegate
+    QUndoStack, QUndoCommand, QStackedWidget, QStyledItemDelegate, QDialog
 )
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -29,10 +29,13 @@ from .v02 import (GEOMETRY_KEYS,NOZZLE_KINDS,effective_nozzle,flow_status,
                   validate_nozzles,follow_row,capture_report)
 from .characteristics import flow_to_kg_h,flow_from_kg_h
 from .editors import CatalogEditor,PresetEditor
+from .analysis import METRICS,UNITS,cell_values,matching_index
+from .analytics_io import write_epures_xlsx
+from .comparison import ComparisonPanel
 
 FIELDS = [
     ('id','ID'),('enabled','Установлена'),('nozzle_kind','Тип форсунки'),
-    ('atomizer_type_id','ID распылителя'),('row','Ряд'),('manual_write','Ручная запись'),
+    ('atomizer_type_id','Имя распылителя'),('row','Ряд'),('manual_write','Ручная запись'),
     ('theta_deg','θ форс., °'),('radius_mm','R форс., мм'),
     ('flow_kg_h','Gт, кг/ч'),('flow_mode','Расход из'),('effective_flow','Расход в режиме, кг/ч'),
     ('alpha_deg','α, полный °'),('r_nozzle_mm','R_сопла, мм'),('h0_mm','h0, мм'),
@@ -68,12 +71,12 @@ class TypeDelegate(QStyledItemDelegate):
             for key,label in NOZZLE_KINDS.items():editor.addItem(label,key)
         elif self.key=='atomizer_type_id':
             editor.addItem('','')
-            for item in self.owner.cfg.atomizer_types:editor.addItem(item['id']+' · '+item['name'],item['id'])
+            for item in self.owner.cfg.atomizer_types:editor.addItem(item['name'],item['id'])
         else:
             for source in ('manual','sectors','curve'):editor.addItem(source,source)
         return editor
     def setEditorData(self,editor,index):
-        value=index.data();found=editor.findData(value)
+        value=index.data(Qt.UserRole) if self.key=='atomizer_type_id' else index.data();found=editor.findData(value)
         if found<0:found=editor.findText(value)
         if found>=0:editor.setCurrentIndex(found)
         else:editor.setEditText(value)
@@ -107,6 +110,11 @@ class PasteTable(QTableWidget):
         super().__init__(*args)
         self.in_batch=False
         self.batch_invalid=False
+
+    def setItem(self,row,column,item):
+        if not item.flags() & (Qt.ItemIsEditable | Qt.ItemIsUserCheckable):
+            item.setBackground(QColor('#eee6f6'))
+        super().setItem(row,column,item)
 
     def paste_text(self,raw):
         start=self.currentIndex()
@@ -192,7 +200,7 @@ class CalcWorker(QObject):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Fuel Field Pilot — v0.2.1')
+        self.setWindowTitle('Fuel Field Pilot — v0.3.0')
         self.resize(1480,930)
         self.cfg=Settings(pressure_mode='calibrated',flow_pressure_kgf_cm2=30.,sector_pressure_kgf_cm2=2.5)
         self.nozzles=default_nozzles(self.cfg)
@@ -303,9 +311,9 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(page,'01 · Геометрия и сетка')
 
     def open_settings(self):
-        index=self.tabs.indexOf(self.settings_page)
-        if index<0:index=self.tabs.addTab(self.settings_page,'Настройки')
-        self.tabs.setCurrentIndex(index)
+        self.settings_page.show()
+        self.settings_page.raise_()
+        self.settings_page.activateWindow()
 
     def _build_nozzles_tab(self):
         page=QWidget();layout=QVBoxLayout(page);top=QHBoxLayout()
@@ -316,7 +324,7 @@ class MainWindow(QMainWindow):
             button=QPushButton(label);button.clicked.connect(slot);top.addWidget(button)
         top.addStretch();gear=QPushButton('⚙');gear.setToolTip('Настройки испытаний и расстановки')
         gear.setFixedWidth(36);gear.clicked.connect(self.open_settings);top.addWidget(gear);layout.addLayout(top)
-        self.settings_page=QWidget();settings=QVBoxLayout(self.settings_page);form=QFormLayout()
+        self.settings_page=QDialog(self);self.settings_page.setWindowTitle('Настройки испытаний и расстановки');settings=QVBoxLayout(self.settings_page);form=QFormLayout()
         self.duration_spin=_dbl(180,.01,1e6,3,10.)
         self.density_spin=_dbl(800,1,10000,2,10.)
         form.addRow('Время сбора, с',self.duration_spin);form.addRow('Плотность топлива, кг/м³',self.density_spin)
@@ -335,7 +343,7 @@ class MainWindow(QMainWindow):
             ('allow_extrapolation','Экстраполяция'),('placement_mode','Расстановка')]:form.addRow(label,self.mode_widgets[key])
         settings.addLayout(form)
         self.flow_notice=QLabel();self.flow_notice.setWordWrap(True);settings.addWidget(self.flow_notice)
-        close=QPushButton('Закрыть настройки');close.clicked.connect(lambda:self.tabs.removeTab(self.tabs.indexOf(self.settings_page)))
+        close=QPushButton('Закрыть настройки');close.clicked.connect(self.settings_page.close)
         settings.addWidget(close);settings.addStretch()
         # Retain the group-operation API for existing scripts; assignment in the
         # visible UI is now performed directly in cells through editable lists.
@@ -349,7 +357,7 @@ class MainWindow(QMainWindow):
         self.nozzle_table.setSelectionBehavior(QAbstractItemView.SelectItems)
         self.nozzle_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.nozzle_table.verticalHeader().setDefaultSectionSize(25)
-        header=self.nozzle_table.horizontalHeader();header.setDefaultSectionSize(112);header.setMinimumSectionSize(65)
+        header=self.nozzle_table.horizontalHeader();header.setSectionsClickable(True);header.setDefaultSectionSize(112);header.setMinimumSectionSize(65)
         self.nozzle_table.setColumnWidth(INTCOL['id'],52)
         for key,width in [('nozzle_kind',150),('atomizer_type_id',145),('manual_write',125),('effective_flow',200)]:
             self.nozzle_table.setColumnWidth(INTCOL[key],width)
@@ -449,9 +457,9 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.calc_btn=QPushButton('Рассчитать четыре сечения (F5)')
         self.calc_btn.clicked.connect(self.run_calc)
         actions.addWidget(self.calc_btn)
-        self.plane_select=QComboBox();self.plane_select.currentIndexChanged.connect(self._plot_result)
+        self.plane_select=QComboBox();self.plane_select.setMinimumWidth(150);self.plane_select.currentIndexChanged.connect(self._plot_result)
         actions.addWidget(QLabel('Сечение:'));actions.addWidget(self.plane_select)
-        for label,slot in [('CSV: матрицы',self.export_results),('PNG: текущее',self.export_png),
+        for label,slot in [('XLSX: эпюры',self.export_xlsx),('CSV: матрицы',self.export_results),('PNG: текущее',self.export_png),
                             ('PNG: все 4',self.export_all_png)]:
             b=QPushButton(label);b.clicked.connect(slot);actions.addWidget(b)
         actions.addStretch();lay.addLayout(actions)
@@ -479,8 +487,19 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.balance_label=QLabel('Результатов пока нет. Задайте исходные данные и нажмите «Рассчитать».')
         self.balance_label.setWordWrap(True);lay.addWidget(self.balance_label)
         note=QLabel('Важно: 6×140 — контрольные ячейки для количественного анализа; подробная карта — непрерывное отображение отдельных ядер. '
+                    'Представление применяется к матрице и окружным эпюрам; подробное поле всегда в кг/(м²·с). '
+                    'Индексы при нулевом среднем не определены (пустые ячейки). '
                     'Полярная эпюра показывает угловую ИНТЕНСИВНОСТЬ, не физический контур факела. Контур форсунки — отдельная окружность.')
         note.setWordWrap(True);note.setStyleSheet('color:#525f71;');lay.addWidget(note)
+        representations=QHBoxLayout();self.metric=QComboBox()
+        for key,label in METRICS.items():self.metric.addItem(label,key)
+        self.volume_interval=_dbl(180,.001,1e9,3,10.);self.volume_interval.setEnabled(False)
+        self.compare_radius=QComboBox()
+        for w in (QLabel('Величина:'),self.metric,QLabel('Интервал объёма, с:'),self.volume_interval,
+                  QLabel('R для сравнения:'),self.compare_radius):representations.addWidget(w)
+        lay.addLayout(representations)
+        self.metric.currentIndexChanged.connect(self._representation_changed)
+        self.volume_interval.valueChanged.connect(self._representation_changed)
         plots=QTabWidget();self.plots=plots
         self.plot_stacks=[]
         self.figmap=Figure(figsize=(6,6),tight_layout=True)
@@ -500,7 +519,10 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         stack=QStackedWidget();stack.addWidget(self.curvecanvas);self.plot_stacks.append(stack)
         plots.addTab(stack,'Окружные эпюры радиальных уровней')
         plots.currentChanged.connect(self._plot_result)
-        lay.addWidget(plots)
+        panels=QSplitter(Qt.Horizontal);panels.addWidget(plots)
+        self.comparison=ComparisonPanel(self);panels.addWidget(self.comparison)
+        panels.setSizes([850,550]);lay.addWidget(panels)
+        self.compare_radius.currentIndexChanged.connect(self._comparison_radius_changed)
         self.tabs.addTab(page,'04 · Поля и эпюры')
 
     def _fill_controls(self):
@@ -591,6 +613,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                 elif key=='flow_kg_h':v=flow_from_kg_h(n.flow_kg_h,unit,self.cfg.density_kg_m3)
                 elif key=='manual_write':v=bool(n.geometry_overrides)
                 elif key=='nozzle_kind':v=NOZZLE_KINDS[n.nozzle_kind]
+                elif key=='row':v={'outer':'наружный','inner':'внутренний'}[n.row]
+                elif key=='atomizer_type_id':v=next((a['name'] for a in self.cfg.atomizer_types if a['id']==n.atomizer_type_id),n.atomizer_type_id)
                 else:v=getattr(effective if key in GEOMETRY_KEYS else n,key)
                 if key in ('enabled','manual_write'):
                     it=QTableWidgetItem('');it.setFlags(Qt.ItemIsEnabled|Qt.ItemIsSelectable|Qt.ItemIsUserCheckable)
@@ -605,6 +629,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                     if key=='flow_status':it.setToolTip(label)
                     if key in GEOMETRY_KEYS:
                         it.setToolTip('Индивидуальный override' if key in n.geometry_overrides else 'Из шаблона: '+NOZZLE_KINDS[n.nozzle_kind])
+                if key=='atomizer_type_id':
+                    it.setData(Qt.UserRole,n.atomizer_type_id);it.setData(Qt.UserRole+1,str(v))
                 tab.setItem(row,col,it)
         tab.blockSignals(False)
         notices=set();invalid=0
@@ -662,7 +688,12 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                     if key=='nozzle_kind':
                         raw[key]=next((k for k,label in NOZZLE_KINDS.items() if val.lower() in (k,label.lower())),val.lower())
                     elif key=='atomizer_type_id':
-                        raw[key]=next((a['id'] for a in cfg.atomizer_types if val in (a['id'],a['name'])),val)
+                        old_name=next((a['name'] for a in self.cfg.atomizer_types if a['id']==n.atomizer_type_id),n.atomizer_type_id)
+                        matches=[a['id'] for a in cfg.atomizer_types if val in (a['id'],a['name'])]
+                        if val==item.data(Qt.UserRole+1):raw[key]=item.data(Qt.UserRole)
+                        elif val==old_name:raw[key]=n.atomizer_type_id
+                        elif len(matches)>1:raise ValueError('Неоднозначное имя распылителя; выберите его из списка.')
+                        else:raw[key]=matches[0] if matches else val
                     else:raw[key]=val.lower()
             if geometry_changes:
                 values={k:getattr(effective,k) for k in GEOMETRY_KEYS};values.update(geometry_changes)
@@ -796,6 +827,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.results=[];self.smooth_fields=[]
         self._invalidate_render()
         self.plane_select.clear()
+        self.compare_radius.clear()
+        self.comparison.sync_from_primary()
         self.balance_label.setText('Исходные данные изменены. Нужен новый расчёт (F5).')
 
     def _queue_preview(self):
@@ -856,7 +889,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
 
     def _update_sector_label(self):
         n=next(n for n in self.nozzles if n.id==self.sector_id)
-        self.sector_label.setText(f'Форсунка №{n.id}, {n.row}: 36 секторных объёмов [мл]; '
+        self.sector_label.setText(f'Форсунка №{n.id}, {dict(outer='наружный',inner='внутренний')[n.row]}: 36 секторных объёмов [мл]; '
                                   f'сумма = {sum(n.sector_ml):.4g} мл; {n.sector_source}')
         try:
             report=capture_report(n,self.cfg)
@@ -1078,11 +1111,25 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             f'за наружной {p.outer_kg_s*3600:.5g} кг/ч; '
             f'невязка баланса {100*p.rel_balance_error:.3g}%.'
         )
+        previous=self.compare_radius.currentData()
+        self.compare_radius.blockSignals(True);self.compare_radius.clear()
+        for r in p.radial_centers_mm:self.compare_radius.addItem(f'{r:g} мм',float(r))
+        k=matching_index(p.radial_centers_mm,previous) if previous is not None else None
+        if k is not None:self.compare_radius.setCurrentIndex(k)
+        self.compare_radius.blockSignals(False)
         self._render_view(self.plots.currentIndex(),i)
+        self.comparison.sync_from_primary()
+
+    def _comparison_radius_changed(self,*args):
+        self._invalidate_render();self._plot_result()
+
+    def _representation_changed(self,*args):
+        self.volume_interval.setEnabled(self.metric.currentData()=='volume')
+        self._invalidate_render();self._plot_result();self.comparison.draw()
 
     def _render_view(self,view,i):
         key=(i,view,self.draw_outlines.isChecked(),self.draw_labels.isChecked(),
-             self.draw_rose_over_field.isChecked(),self.rose_scale.value())
+             self.draw_rose_over_field.isChecked(),self.rose_scale.value(),self.metric.currentData(),self.volume_interval.value(),self.compare_radius.currentData())
         fig_name,canvas_name=[('figmap','mapcanvas'),('figsmooth','smoothcanvas'),
                               ('figroses','rosescanvas'),('figcurves','curvecanvas')][view]
         stack=self.plot_stacks[view]
@@ -1112,13 +1159,15 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         n=self.cfg.n_angular
         theta_edge=np.deg2rad(self.cfg.grid_start_deg+(np.arange(n+1)-0.5)*360/n)
         th,r=np.meshgrid(theta_edge,p.radial_edges_mm)
-        data,norm,cmap=color_scale(p.flux_kg_m2_s,self.cfg,[p.flux_kg_m2_s for p in self.results])
+        metric=self.metric.currentData()
+        values=cell_values(p,metric,self.cfg.density_kg_m3,self.volume_interval.value())
+        data,norm,cmap=color_scale(values,self.cfg,[cell_values(v,metric,self.cfg.density_kg_m3,self.volume_interval.value()) for v in self.results])
         pc=ax.pcolormesh(th,r,data,shading='flat',cmap=cmap,norm=norm)
         ax.set_theta_zero_location('E')
         ax.set_theta_direction(1)
         ax.set_ylim(0,self.cfg.r_out_mm)
-        ax.set_title(f'Поле плотности расхода · z={p.z_mm:g} мм',pad=18,fontsize=11)
-        self.figmap.colorbar(pc,ax=ax,pad=.14,shrink=.68,label='кг/(м²·с)')
+        ax.set_title(f'{METRICS[metric]} · z={p.z_mm:g} мм',pad=18,fontsize=11)
+        self.figmap.colorbar(pc,ax=ax,pad=.14,shrink=.68,label=UNITS[metric])
         self._draw_nozzle_markers(ax,polar=True)
         self.mapcanvas.draw_idle()
 
@@ -1153,17 +1202,32 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         x=angles[order]
         for k in range(n):
             ax=self.figcurves.add_subplot(rows,cols,k+1)
-            y=p.flux_kg_m2_s[k][order]
+            y=cell_values(p,self.metric.currentData(),self.cfg.density_kg_m3,self.volume_interval.value())[k][order]
             ax.plot(np.r_[x,x[0]+360],np.r_[y,y[0]],lw=1.2)
-            ax.set_title(f'Уровень {k+1}: R={p.radial_centers_mm[k]:.2f} мм',fontsize=9)
+            selected=self.compare_radius.currentData() is not None and np.isclose(p.radial_centers_mm[k],self.compare_radius.currentData(),rtol=0,atol=1e-7)
+            ax.set_title(f'Уровень {k+1}: R={p.radial_centers_mm[k]:.2f} мм'+(' · сравнение' if selected else ''),fontsize=9,color='#734ca0' if selected else '#222222')
             ax.set_xlim(0,360)
             ax.grid(alpha=.24)
             ax.tick_params(labelsize=7)
-            ax.set_ylabel('кг/(м²·с)',fontsize=7)
+            ax.set_ylabel(UNITS[self.metric.currentData()],fontsize=7)
             ax.set_xlabel('Окружной угол, °',fontsize=7)
         self.figcurves.suptitle(f'Окружные эпюры · z={p.z_mm:g} мм',fontsize=11)
         self.figcurves.subplots_adjust(hspace=.65,wspace=.35,top=.92,bottom=.06)
         self.curvecanvas.draw_idle()
+
+    def closeEvent(self,event):
+        comparison=getattr(self,'comparison',None)
+        if self.thread is not None or comparison is not None and comparison.thread is not None:
+            self.statusBar().showMessage('Дождитесь завершения расчёта перед закрытием.',8000)
+            event.ignore();return
+        super().closeEvent(event)
+
+    def export_xlsx(self):
+        if len(self.results)!=4:self._error('Сначала рассчитайте четыре сечения.');return
+        path,_=QFileDialog.getSaveFileName(self,'Окружные эпюры четырёх сечений','epures.xlsx','Excel (*.xlsx)')
+        if path:
+            try:write_epures_xlsx(path,self.results,self.cfg,self.metric.currentData(),self.volume_interval.value())
+            except Exception as exc:self._error(exc)
 
     def export_results(self):
         if not self.results:self._error('Сначала выполните расчёт.');return
