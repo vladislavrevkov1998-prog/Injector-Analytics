@@ -16,7 +16,7 @@ class TestPhysics(unittest.TestCase):
         self.nozzles[7].enabled=False
         after=[(n.id,n.row,n.theta_deg,n.radius_mm) for n in self.nozzles]
         self.assertEqual(before,after)
-        self.assertAlmostEqual(self.nozzles[70].theta_deg,360/140)
+        self.assertAlmostEqual(self.nozzles[70].theta_deg,360-360/140)
     def test_four_planes_conservative(self):
         self.cfg.z_mm=[0,15,30,45]
         for z in self.cfg.z_mm:

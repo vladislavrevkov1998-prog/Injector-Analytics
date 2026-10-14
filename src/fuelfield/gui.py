@@ -5,14 +5,15 @@ from copy import deepcopy
 from pathlib import Path
 import numpy as np
 from PyQt5.QtCore import Qt, QThread, QObject, pyqtSignal, QTimer
-from PyQt5.QtGui import QKeySequence, QFont
+from PyQt5.QtGui import QKeySequence, QFont, QPolygon
+from PyQt5.QtCore import QPoint
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QTabWidget, QTableWidget, QTableWidgetItem, QLabel, QPushButton, QComboBox,
     QSpinBox, QDoubleSpinBox, QLineEdit, QFileDialog, QMessageBox, QSplitter,
     QGroupBox, QScrollArea, QPlainTextEdit, QHeaderView, QAbstractItemView,
     QStatusBar, QProgressBar, QMenu, QAction, QInputDialog, QCheckBox,
-    QUndoStack, QUndoCommand, QStackedWidget
+    QUndoStack, QUndoCommand, QStackedWidget, QStyledItemDelegate
 )
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -25,29 +26,60 @@ from .core import (
 from .data_io import import_sector_file, write_sector_csv, write_result_csv
 from .visualization import draw_nozzle_markers, draw_detailed_map, draw_polar_nozzles_map, color_scale
 from .v02 import (GEOMETRY_KEYS,NOZZLE_KINDS,effective_nozzle,flow_status,
-                  validate_nozzles,follow_row)
+                  validate_nozzles,follow_row,capture_report)
 from .characteristics import flow_to_kg_h,flow_from_kg_h
 from .editors import CatalogEditor,PresetEditor
 
 FIELDS = [
-    ('id','ID'),('enabled','Установлена'),('row','Ряд'),
+    ('id','ID'),('enabled','Установлена'),('nozzle_kind','Тип форсунки'),
+    ('atomizer_type_id','ID распылителя'),('row','Ряд'),('manual_write','Ручная запись'),
     ('theta_deg','θ форс., °'),('radius_mm','R форс., мм'),
-    ('flow_kg_h','Расход, кг/ч'),('flow_mode','Расход из'),
+    ('flow_kg_h','Gт, кг/ч'),('flow_mode','Расход из'),('effective_flow','Расход в режиме, кг/ч'),
     ('alpha_deg','α, полный °'),('r_nozzle_mm','R_сопла, мм'),('h0_mm','h0, мм'),
     ('k_linear','k лин.'),('k_quadratic','k квадр.'),('power','p степ.'),
     ('z_ref_mm','z ref, мм'),('inner_angle_deg','α внутр., °'),
     ('outer_angle_deg','α наруж., °'),('clock_deg','Clock, °'),
     ('decay_length_mm','L затух., мм'),('diffusion_deg_sqrt_mm','σ / √мм'),
-    ('rotation_deg_per_mm','ω °/мм'),('sector_source','Источник эпюры'),
-    ('atomizer_type_id','ID типа распылителя'),('nozzle_kind','Тип форсунки'),
-    ('flow_pressure_kgf_cm2','Δp измер. расхода, кгс/см²'),
-    ('sector_pressure_kgf_cm2','Δp секторов, кгс/см²'),('capture_efficiency','η сбора (пусто=?)'),
-    ('effective_flow','Расход в режиме, кг/ч'),('flow_status','Источник / статус / Δp'),
+    ('rotation_deg_per_mm','ω °/мм'),
 ]
 INTCOL = {key:i for i,(key,_) in enumerate(FIELDS)}
 READONLY={'id','row','sector_source','effective_flow','flow_status'}
-NUMERICS = {f for f,_ in FIELDS} - READONLY - {'enabled','row','flow_mode','atomizer_type_id','nozzle_kind'}
+NUMERICS = {f for f,_ in FIELDS} - READONLY - {'enabled','manual_write','row','flow_mode','atomizer_type_id','nozzle_kind'}
 SINGLE_NOZZLE_PREVIEW_RESOLUTION = 400  # 2.78× the former 240² display cells
+
+
+class UnitHeader(QHeaderView):
+    def paintSection(self,painter,rect,index):
+        super().paintSection(painter,rect,index)
+        if index not in (INTCOL['flow_kg_h'],INTCOL['effective_flow']):return
+        painter.save();painter.setClipRect(rect)
+        painter.fillRect(rect.right()-17,rect.top()+2,15,rect.height()-4,self.palette().button())
+        x=rect.right()-9;y=rect.center().y()
+        painter.setPen(Qt.NoPen);painter.setBrush(self.palette().buttonText())
+        painter.drawPolygon(QPolygon([QPoint(x-4,y-2),QPoint(x+4,y-2),QPoint(x,y+3)]))
+        painter.restore()
+
+
+class TypeDelegate(QStyledItemDelegate):
+    def __init__(self,owner,key):super().__init__(owner);self.owner=owner;self.key=key
+    def createEditor(self,parent,option,index):
+        editor=QComboBox(parent);editor.setEditable(True)
+        if self.key=='nozzle_kind':
+            for key,label in NOZZLE_KINDS.items():editor.addItem(label,key)
+        elif self.key=='atomizer_type_id':
+            editor.addItem('','')
+            for item in self.owner.cfg.atomizer_types:editor.addItem(item['id']+' · '+item['name'],item['id'])
+        else:
+            for source in ('manual','sectors','curve'):editor.addItem(source,source)
+        return editor
+    def setEditorData(self,editor,index):
+        value=index.data();found=editor.findData(value)
+        if found<0:found=editor.findText(value)
+        if found>=0:editor.setCurrentIndex(found)
+        else:editor.setEditText(value)
+    def setModelData(self,editor,model,index):
+        value=editor.currentData() if editor.currentIndex()>=0 and editor.currentText()==editor.itemText(editor.currentIndex()) else editor.currentText()
+        model.setData(index,value,Qt.EditRole)
 
 
 def _number(txt: str):
@@ -160,10 +192,11 @@ class CalcWorker(QObject):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Fuel Field Pilot — v0.2.0')
+        self.setWindowTitle('Fuel Field Pilot — v0.2.1')
         self.resize(1480,930)
-        self.cfg=Settings(pressure_mode='calibrated')
+        self.cfg=Settings(pressure_mode='calibrated',flow_pressure_kgf_cm2=30.,sector_pressure_kgf_cm2=2.5)
         self.nozzles=default_nozzles(self.cfg)
+        for n in self.nozzles:n.geometry_overrides=[]
         self.results=[]
         self.smooth_fields=[]
         self.sector_id=None
@@ -177,6 +210,9 @@ class MainWindow(QMainWindow):
         self.preview_timer=QTimer(self)
         self.preview_timer.setSingleShot(True)
         self.preview_timer.timeout.connect(self._draw_single_preview)
+        self.selection_timer=QTimer(self);self.selection_timer.setSingleShot(True)
+        self.selection_timer.timeout.connect(self._apply_sector_selection)
+        self._preview_key=None
         self.model_widgets={}
         self.geom_widgets={}
         self.mode_widgets={}
@@ -213,6 +249,8 @@ class MainWindow(QMainWindow):
         redo=self.undo_stack.createRedoAction(self,'Повторить')
         redo.setShortcuts([QKeySequence('Ctrl+Y'),QKeySequence('Ctrl+Shift+Z')])
         edit.addAction(redo)
+        menu=self.menuBar().addMenu('Настройки')
+        action=QAction('Испытания и расстановка',self);action.triggered.connect(self.open_settings);menu.addAction(action)
 
     def _build_geometry_tab(self):
         page=QWidget();layout=QVBoxLayout(page)
@@ -264,83 +302,79 @@ class MainWindow(QMainWindow):
         layout.addWidget(scroll)
         self.tabs.addTab(page,'01 · Геометрия и сетка')
 
+    def open_settings(self):
+        index=self.tabs.indexOf(self.settings_page)
+        if index<0:index=self.tabs.addTab(self.settings_page,'Настройки')
+        self.tabs.setCurrentIndex(index)
+
     def _build_nozzles_tab(self):
-        page=QWidget();layout=QVBoxLayout(page)
-        top=QHBoxLayout()
+        page=QWidget();layout=QVBoxLayout(page);top=QHBoxLayout()
         for label,slot in [
-            ('Импорт 36 секторов: Excel / CSV',self.import_sectors),
-            ('Экспорт эпюр CSV',self.export_sectors),
-            ('Копировать эпюру на выбранные',self.copy_sectors),
-            ('Расход из объёмов для выбранных',self.sum_sectors_to_flow),
-            ('ДЕМО: 10 кг/ч всем',self.assign_demo_flow),
-        ]:
-            b=QPushButton(label);b.clicked.connect(slot);top.addWidget(b)
-        layout.addLayout(top)
-        opts=QHBoxLayout()
-        self.duration_spin=_dbl(180,0.01,1e6,3,10.)
+            ('Импорт секторов',self.import_sectors),('Экспорт эпюр',self.export_sectors),
+            ('Копировать эпюру',self.copy_sectors),('Расход из объёмов',self.sum_sectors_to_flow),
+            ('ДЕМО: 10 кг/ч',self.assign_demo_flow)]:
+            button=QPushButton(label);button.clicked.connect(slot);top.addWidget(button)
+        top.addStretch();gear=QPushButton('⚙');gear.setToolTip('Настройки испытаний и расстановки')
+        gear.setFixedWidth(36);gear.clicked.connect(self.open_settings);top.addWidget(gear);layout.addLayout(top)
+        self.settings_page=QWidget();settings=QVBoxLayout(self.settings_page);form=QFormLayout()
+        self.duration_spin=_dbl(180,.01,1e6,3,10.)
         self.density_spin=_dbl(800,1,10000,2,10.)
-        opts.addWidget(QLabel('Время сбора, с:'));opts.addWidget(self.duration_spin)
-        opts.addWidget(QLabel('Плотность топлива, кг/м³:'));opts.addWidget(self.density_spin)
-        opts.addWidget(QLabel('Сумма V используется для расхода ТОЛЬКО в режиме «sectors».'))
-        opts.addStretch();layout.addLayout(opts)
-        modes=QHBoxLayout()
+        form.addRow('Время сбора, с',self.duration_spin);form.addRow('Плотность топлива, кг/м³',self.density_spin)
         pressure_mode=QComboBox();pressure_mode.addItem('Прежний режим проекта','legacy')
         pressure_mode.addItem('Пересчёт по характеристикам','calibrated')
         target=_dbl(30,.00001,100000,5)
-        extrap=QCheckBox('Разрешить экстраполяцию (с предупреждением)')
+        extrap=QCheckBox('Разрешить экспериментальную экстраполяцию (с предупреждением)')
         placement=QComboBox();placement.addItem('Позиции: ручные','manual')
-        placement.addItem('Auto-follow своего ряда','auto_follow')
+        placement.addItem('Auto-follow обоих рядов по часовой стрелке','auto_follow')
         self.mode_widgets=dict(pressure_mode=pressure_mode,target_pressure_kgf_cm2=target,
-                              allow_extrapolation=extrap,placement_mode=placement)
-        for w in (pressure_mode,QLabel('Целевой Δp, кгс/см²:'),target,extrap,placement):modes.addWidget(w)
-        layout.addLayout(modes)
-        self.flow_notice=QLabel('Измеренные расходы и секторные объёмы хранятся независимо.')
-        self.flow_notice.setWordWrap(True);layout.addWidget(self.flow_notice)
-        groups=QHBoxLayout();self.assign_type_selector=QComboBox()
-        self.assign_kind_selector=QComboBox()
+            allow_extrapolation=extrap,placement_mode=placement,
+            flow_pressure_kgf_cm2=_dbl(30,.00001,100000,5),
+            sector_pressure_kgf_cm2=_dbl(2.5,.00001,100000,5))
+        for key,label in [('pressure_mode','Режим расходов'),('target_pressure_kgf_cm2','Целевой Δp, кгс/см²'),
+            ('flow_pressure_kgf_cm2','Δp измерения Gт, кгс/см²'),('sector_pressure_kgf_cm2','Δp секторов, кгс/см²'),
+            ('allow_extrapolation','Экстраполяция'),('placement_mode','Расстановка')]:form.addRow(label,self.mode_widgets[key])
+        settings.addLayout(form)
+        self.flow_notice=QLabel();self.flow_notice.setWordWrap(True);settings.addWidget(self.flow_notice)
+        close=QPushButton('Закрыть настройки');close.clicked.connect(lambda:self.tabs.removeTab(self.tabs.indexOf(self.settings_page)))
+        settings.addWidget(close);settings.addStretch()
+        # Retain the group-operation API for existing scripts; assignment in the
+        # visible UI is now performed directly in cells through editable lists.
+        self.assign_type_selector=QComboBox(self);self.assign_type_selector.hide()
+        self.assign_kind_selector=QComboBox(self);self.assign_kind_selector.hide()
         for key,label in NOZZLE_KINDS.items():self.assign_kind_selector.addItem(label,key)
-        groups.addWidget(self.assign_type_selector)
-        button=QPushButton('Назначить распылитель выбранным');button.clicked.connect(self.assign_atomizer);groups.addWidget(button)
-        groups.addWidget(self.assign_kind_selector)
-        button=QPushButton('Назначить тип форсунки');button.clicked.connect(self.assign_nozzle_kind);groups.addWidget(button)
-        button=QPushButton('Сброс overrides выбранных');button.clicked.connect(self.reset_overrides);groups.addWidget(button)
-        layout.addLayout(groups)
         splitter=QSplitter(Qt.Vertical)
-        self.nozzle_table=PasteTable(140,len(FIELDS))
-        self.nozzle_table.setHorizontalHeaderLabels([lab for _,lab in FIELDS])
+        self.nozzle_table=PasteTable(140,len(FIELDS));self.nozzle_table.setHorizontalHeader(UnitHeader(Qt.Horizontal,self.nozzle_table))
+        self.nozzle_table.setHorizontalHeaderLabels([label for _,label in FIELDS])
         self.nozzle_table.setAlternatingRowColors(True)
         self.nozzle_table.setSelectionBehavior(QAbstractItemView.SelectItems)
         self.nozzle_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.nozzle_table.verticalHeader().setDefaultSectionSize(25)
-        self.nozzle_table.horizontalHeader().setDefaultSectionSize(112)
+        header=self.nozzle_table.horizontalHeader();header.setDefaultSectionSize(112);header.setMinimumSectionSize(65)
         self.nozzle_table.setColumnWidth(INTCOL['id'],52)
-        self.nozzle_table.setColumnWidth(INTCOL['sector_source'],170)
-        self.nozzle_table.itemSelectionChanged.connect(self._sector_selection)
-        self.nozzle_table.horizontalHeader().sectionClicked.connect(self._toggle_flow_unit)
-        splitter.addWidget(self.nozzle_table)
-        box=QWidget();p=QVBoxLayout(box)
-        self.sector_label=QLabel('Секторные объёмы форсунки: выберите строку выше. Данные в мл.')
-        p.addWidget(self.sector_label)
-        self.sector_table=PasteTable(36,2)
-        self.sector_table.setHorizontalHeaderLabels(['Сектор №','Объём, мл'])
-        self.sector_table.horizontalHeader().setStretchLastSection(True)
-        self.sector_table.setMaximumWidth(360)
+        for key,width in [('nozzle_kind',150),('atomizer_type_id',145),('manual_write',125),('effective_flow',200)]:
+            self.nozzle_table.setColumnWidth(INTCOL[key],width)
+        for key in ('nozzle_kind','atomizer_type_id','flow_mode'):
+            self.nozzle_table.setItemDelegateForColumn(INTCOL[key],TypeDelegate(self,key))
+        self.nozzle_table.currentCellChanged.connect(self._sector_selection)
+        header.sectionClicked.connect(self._toggle_flow_unit);splitter.addWidget(self.nozzle_table)
+        box=QWidget();bottom=QVBoxLayout(box)
+        self.sector_label=QLabel();self.sector_label.setWordWrap(True);bottom.addWidget(self.sector_label)
+        self.sector_table=PasteTable(36,2);self.sector_table.setHorizontalHeaderLabels(['Сектор №','Объём, мл'])
+        self.sector_table.horizontalHeader().setStretchLastSection(True);self.sector_table.setMaximumWidth(290)
         for k in range(36):
-            it=QTableWidgetItem(str(k+1));it.setFlags(Qt.ItemIsEnabled)
-            self.sector_table.setItem(k,0,it)
+            item=QTableWidgetItem(str(k+1));item.setFlags(Qt.ItemIsEnabled);self.sector_table.setItem(k,0,item)
         self.sector_table.itemChanged.connect(self._sector_changed)
         row=QHBoxLayout();row.addWidget(self.sector_table)
-        notes=QLabel('Порядок секторов: №1 направлен к средней линии ФУ; №2–36 идут против часовой стрелки при взгляде со стороны выхода топлива.\n\n'
-                     'При ручном редактировании эпюры изменяется форма распределения, но НЕ независимый расход форсунки (manual).\n\n'
-                     'Ctrl+C / Ctrl+V копируют/вставляют данные из Excel. «Расход из»: manual, sectors или curve. Заголовок расхода переключает кг/ч ↔ л/мин.\n\n'
-                     'Если используете «sectors», расход = сумма мл × плотность / время опыта. Этот подход НЕ учитывает капли вне бокса.')
-        notes.setWordWrap(True);row.addWidget(notes);p.addLayout(row)
-        self.figpreview=Figure(figsize=(7,3),tight_layout=True)
-        self.previewcanvas=FigureCanvas(self.figpreview)
-        row.addWidget(self.previewcanvas,2)
+        fine=QWidget();fine.setMaximumWidth(330);fine_layout=QVBoxLayout(fine)
+        self.capture_label=QLabel();self.capture_label.setWordWrap(True);fine_layout.addWidget(self.capture_label)
+        self.nozzle_status=QLabel();self.nozzle_status.setWordWrap(True);fine_layout.addWidget(self.nozzle_status)
+        note=QLabel('Сектор 1 — к средней линии ФУ; 2–36 — против часовой стрелки со стороны выхода топлива. '
+            'Gт хранится независимо от секторов. Положительное отклонение означает недобор; отрицательное — избыток.')
+        note.setWordWrap(True);fine_layout.addWidget(note);fine_layout.addStretch();row.addWidget(fine)
+        self.figpreview=Figure(figsize=(7,3),tight_layout=True);self.previewcanvas=FigureCanvas(self.figpreview)
+        row.addWidget(self.previewcanvas,2);bottom.addLayout(row)
         splitter.addWidget(box);splitter.setStretchFactor(0,3);splitter.setStretchFactor(1,2)
-        layout.addWidget(splitter)
-        self.tabs.addTab(page,'02 · 140 форсунок и 36 секторов')
+        layout.addWidget(splitter);self.tabs.addTab(page,'02 · 140 форсунок и 36 секторов')
 
     def _build_models_tab(self):
         page=QWidget();lay=QVBoxLayout(page);form=QFormLayout()
@@ -489,6 +523,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.scale_shared.setChecked(self.cfg.color_shared_z)
         for key,w in self.mode_widgets.items():
             value=getattr(self.cfg,key)
+            if value is None and key in ('flow_pressure_kgf_cm2','sector_pressure_kgf_cm2'):
+                value=getattr(self.nozzles[0],key)
             if isinstance(w,QComboBox):w.setCurrentIndex(w.findData(value))
             elif isinstance(w,QCheckBox):w.setChecked(value)
             else:w.setValue(value)
@@ -528,7 +564,9 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         for key,w in self.mode_widgets.items():
             value=w.currentData() if isinstance(w,QComboBox) else w.isChecked() if isinstance(w,QCheckBox) else w.value()
             original=getattr(self.cfg,key)
-            if isinstance(w,QDoubleSpinBox) and value==round(original,w.decimals()):value=original
+            if original is None and key in ('flow_pressure_kgf_cm2','sector_pressure_kgf_cm2'):
+                if value==round(getattr(self.nozzles[0],key),w.decimals()):value=None
+            elif isinstance(w,QDoubleSpinBox) and value==round(original,w.decimals()):value=original
             setattr(cfg,key,value)
         cfg.validate()
         return cfg
@@ -537,7 +575,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         tab=self.nozzle_table
         tab.blockSignals(True);tab.setRowCount(len(self.nozzles))
         unit=self.cfg.display_flow_unit
-        tab.setHorizontalHeaderItem(INTCOL['flow_kg_h'],QTableWidgetItem('Измер. расход, '+('кг/ч' if unit=='kg/h' else 'л/мин')))
+        tab.setHorizontalHeaderItem(INTCOL['flow_kg_h'],QTableWidgetItem('Gт, '+('кг/ч' if unit=='kg/h' else 'л/мин')))
         tab.setHorizontalHeaderItem(INTCOL['effective_flow'],QTableWidgetItem('Расход в режиме, '+('кг/ч' if unit=='kg/h' else 'л/мин')))
         for row,n in enumerate(self.nozzles):
             effective=effective_nozzle(n,self.cfg)
@@ -551,14 +589,19 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                 if key=='effective_flow':v=calculated
                 elif key=='flow_status':v=label
                 elif key=='flow_kg_h':v=flow_from_kg_h(n.flow_kg_h,unit,self.cfg.density_kg_m3)
+                elif key=='manual_write':v=bool(n.geometry_overrides)
+                elif key=='nozzle_kind':v=NOZZLE_KINDS[n.nozzle_kind]
                 else:v=getattr(effective if key in GEOMETRY_KEYS else n,key)
-                if key=='enabled':
+                if key in ('enabled','manual_write'):
                     it=QTableWidgetItem('');it.setFlags(Qt.ItemIsEnabled|Qt.ItemIsSelectable|Qt.ItemIsUserCheckable)
                     it.setCheckState(Qt.Checked if v else Qt.Unchecked)
+                    if key=='manual_write':it.setToolTip('Разрешить ручную геометрию; снятие галочки возвращает текущий шаблон.')
                 else:
                     val='' if v is None else f'{v:.9g}' if isinstance(v,float) else str(v)
                     it=QTableWidgetItem(val)
-                    if key in READONLY:it.setFlags(Qt.ItemIsEnabled|Qt.ItemIsSelectable)
+                    if key in READONLY or key in GEOMETRY_KEYS and not n.geometry_overrides:
+                        it.setFlags(Qt.ItemIsEnabled|Qt.ItemIsSelectable)
+                    it.setToolTip(val)
                     if key=='flow_status':it.setToolTip(label)
                     if key in GEOMETRY_KEYS:
                         it.setToolTip('Индивидуальный override' if key in n.geometry_overrides else 'Из шаблона: '+NOZZLE_KINDS[n.nozzle_kind])
@@ -578,14 +621,25 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         if self.sector_id is None:self.sector_id=1
         self._show_sectors(self.sector_id)
 
-    def _read_nozzles(self):
+    def _read_nozzles(self,cfg=None):
+        cfg=cfg or self.cfg
         nozzles=[];angle_edits={}
         for i,n in enumerate(self.nozzles):
             raw=vars(n).copy();raw['geometry_overrides']=list(n.geometry_overrides)
             effective=effective_nozzle(n,self.cfg);geometry_changes={}
+            manual=self.nozzle_table.item(i,INTCOL['manual_write']).checkState()==Qt.Checked
+            if manual and not n.geometry_overrides:
+                values={key:getattr(effective,key) for key in GEOMETRY_KEYS}
+                raw.update({key:value for key,value in values.items() if key!='r_nozzle_mm'})
+                raw['rc0_mm']=values['r_nozzle_mm']-values['h0_mm']/2
+                raw['geometry_overrides']=list(GEOMETRY_KEYS)
+            elif not manual:raw['geometry_overrides']=[]
+            for key in ('flow_pressure_kgf_cm2','sector_pressure_kgf_cm2'):
+                if getattr(cfg,key) is not None:raw[key]=getattr(cfg,key)
             for col,(key,_) in enumerate(FIELDS):
                 item=self.nozzle_table.item(i,col)
                 if key in READONLY:continue
+                if key=='manual_write':continue
                 if key=='enabled':raw[key]=item.checkState()==Qt.Checked;continue
                 val=item.text().strip()
                 if key in NUMERICS:
@@ -599,21 +653,25 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                     except ValueError:raise ValueError(f'Строка {i+1}, {FIELDS[col][1]}: неверное число «{val}».')
                     if not np.isfinite(value):raise ValueError(f'Строка {i+1}: число должно быть конечным.')
                     if key in GEOMETRY_KEYS:
-                        if not unchanged:geometry_changes[key]=value
+                        if manual and not unchanged:geometry_changes[key]=value
                     elif key=='flow_kg_h':
                         raw[key]=n.flow_kg_h if unchanged else flow_to_kg_h(value,self.cfg.display_flow_unit,self.cfg.density_kg_m3)
                     else:raw[key]=value
                     if key=='theta_deg' and value!=n.theta_deg:angle_edits[n.id]=value
                 else:
-                    raw[key]=val if key=='atomizer_type_id' else val.lower()
+                    if key=='nozzle_kind':
+                        raw[key]=next((k for k,label in NOZZLE_KINDS.items() if val.lower() in (k,label.lower())),val.lower())
+                    elif key=='atomizer_type_id':
+                        raw[key]=next((a['id'] for a in cfg.atomizer_types if val in (a['id'],a['name'])),val)
+                    else:raw[key]=val.lower()
             if geometry_changes:
                 values={k:getattr(effective,k) for k in GEOMETRY_KEYS};values.update(geometry_changes)
                 raw.update({k:v for k,v in values.items() if k!='r_nozzle_mm'})
                 raw['rc0_mm']=values['r_nozzle_mm']-values['h0_mm']/2
                 raw['geometry_overrides']=sorted(set(raw['geometry_overrides'])|set(geometry_changes))
             nozzles.append(Nozzle(**raw))
-        validate_nozzles(nozzles,self.cfg)
-        if self.cfg.placement_mode=='auto_follow' and angle_edits:
+        validate_nozzles(nozzles,cfg)
+        if cfg.placement_mode=='auto_follow' and angle_edits:
             for new,old in zip(nozzles,self.nozzles):new.theta_deg=old.theta_deg
             for ident,theta in sorted(angle_edits.items()):follow_row(nozzles,ident,theta)
         return nozzles
@@ -633,8 +691,18 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
 
     def _toggle_flow_unit(self,column):
         if column not in (INTCOL['flow_kg_h'],INTCOL['effective_flow']):return
+        menu=QMenu(self.nozzle_table);self.flow_unit_menu=menu
+        for unit,label in (('kg/h','кг/ч'),('l/min','л/мин')):
+            action=menu.addAction(label);action.setCheckable(True);action.setChecked(self.cfg.display_flow_unit==unit)
+            action.triggered.connect(lambda checked,u=unit:self._set_flow_unit(u))
+        header=self.nozzle_table.horizontalHeader()
+        menu.popup(header.mapToGlobal(QPoint(header.sectionViewportPosition(column),header.height())))
+
+    def _set_flow_unit(self,unit):
+        if hasattr(self,'flow_unit_menu'):self.flow_unit_menu.close()
+        if unit==self.cfg.display_flow_unit:return
         self._record_edit()
-        self.cfg.display_flow_unit='l/min' if self.cfg.display_flow_unit=='kg/h' else 'kg/h'
+        self.cfg.display_flow_unit=unit
         self._fill_nozzles();self._record_edit(label='Единицы расхода')
 
     def assign_atomizer(self):
@@ -677,7 +745,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             self.statusBar().showMessage('Вставка отменена: объёмы должны быть конечными неотрицательными числами.',12000)
             return
         try:
-            cfg=self._read_controls();nozzles=self._read_nozzles()
+            cfg=self._read_controls();nozzles=self._read_nozzles(cfg)
             state=project_to_json(cfg,nozzles)
         except (ValueError,TypeError) as exc:
             self._restore_edit(self._edit_state)
@@ -731,41 +799,46 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.balance_label.setText('Исходные данные изменены. Нужен новый расчёт (F5).')
 
     def _queue_preview(self):
-        if hasattr(self,'previewcanvas'):self.preview_timer.start(0)
+        if hasattr(self,'previewcanvas'):self.preview_timer.start(120)
 
     def _draw_single_preview(self):
         if self.sector_id is None:return
         try:
             cfg=self._read_controls()
+            key=(self.sector_id,self._revision,cfg.color_scale_mode,cfg.color_vmin,cfg.color_vmax,cfg.color_out_of_range)
+            if key==self._preview_key:return
             n=effective_nozzle(next(n for n in self.nozzles if n.id==self.sector_id),cfg)
             # Only one source is evaluated, at z=0, without a 140-source calculation.
-            field=evaluate_continuous_field([n],cfg,0,resolution=SINGLE_NOZZLE_PREVIEW_RESOLUTION)
             x,y=polar_epure_coordinates(n,0,cfg,8,n_angles=288)
             theta=np.deg2rad(n.theta_deg)
             x0=n.radius_mm*np.cos(theta);y0=n.radius_mm*np.sin(theta)
+            from .core import geometry_at, _kernel_outer_limit
+            rc,h=geometry_at(n,0,cfg);span=max(_kernel_outer_limit(rc,h,cfg.radial_model)*1.2,1)
+            field=evaluate_continuous_field([n],cfg,0,resolution=SINGLE_NOZZLE_PREVIEW_RESOLUTION,
+                bounds_xy=(x0-span,x0+span,y0-span,y0+span),mask_track=False)
             self.figpreview.clear()
             ax=self.figpreview.add_subplot(121,projection='polar')
             ax.plot(np.arctan2(y-y0,x-x0),np.hypot(x-x0,y-y0))
             ax.set_title(f'№{n.id}: относительная эпюра, z=0',fontsize=9)
             ax=self.figpreview.add_subplot(122)
             data,norm,cmap=color_scale(field.masked_flux_kg_m2_s,cfg)
-            lim=cfg.r_out_mm
             # Interpolation is display-only. Strict clipping must not blend hidden pixels.
             interpolation='nearest' if cfg.color_scale_mode=='manual' and cfg.color_out_of_range=='clip' else 'bilinear'
-            im=ax.imshow(data,origin='lower',extent=[-lim,lim,-lim,lim],cmap=cmap,norm=norm,
+            im=ax.imshow(data,origin='lower',extent=[field.x_mm[0],field.x_mm[-1],field.y_mm[0],field.y_mm[-1]],cmap=cmap,norm=norm,
                          interpolation=interpolation)
-            from .core import geometry_at, _kernel_outer_limit
-            rc,h=geometry_at(n,0,cfg)
-            span=max(_kernel_outer_limit(rc,h,cfg.radial_model)*1.2,1)
             ax.set(xlim=(x0-span,x0+span),ylim=(y0-span,y0+span),aspect='equal')
             ax.set_title('Поле одной форсунки, z=0',fontsize=9)
             ax.set_xlabel('X, мм');ax.set_ylabel('Y, мм')
             self.figpreview.colorbar(im,ax=ax,shrink=.8,label='кг/(м²·с)')
             self.previewcanvas.draw_idle()
+            self._preview_key=key
         except (ValueError,TypeError) as exc:
             self.statusBar().showMessage(f'Превью: {exc}',5000)
 
-    def _sector_selection(self):
+    def _sector_selection(self,*args):
+        self.selection_timer.start(120)
+
+    def _apply_sector_selection(self):
         idx=self.nozzle_table.currentIndex()
         if idx.isValid() and idx.row()<len(self.nozzles):
             new_id=self.nozzles[idx.row()].id
@@ -785,6 +858,19 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         n=next(n for n in self.nozzles if n.id==self.sector_id)
         self.sector_label.setText(f'Форсунка №{n.id}, {n.row}: 36 секторных объёмов [мл]; '
                                   f'сумма = {sum(n.sector_ml):.4g} мл; {n.sector_source}')
+        try:
+            report=capture_report(n,self.cfg)
+            self.capture_label.setText(f'Полнота сбора: {report.fraction*100:.3f}%\n'
+                f'Отклонение от Gт: {report.deviation_percent:+.3f}%\n'
+                f'Недостающий объём: {report.missing_ml:+.3f} мл\n'
+                f'Ожидается: {report.expected_ml:.3f} мл\n'
+                f'Собранный расход, приведённый к давлению Gт: {report.collected_at_measurement_kg_h:.4g} кг/ч')
+        except ValueError as exc:self.capture_label.setText('Полнота сбора не определена: '+str(exc))
+        try:
+            status=flow_status(n,self.cfg)
+            self.nozzle_status.setText(f'{status.source}; Δp={status.pressure_kgf_cm2:g} кгс/см²; '
+                +('расчёт/оценка' if status.estimated else 'измерение')+'\n'+'; '.join(status.notices))
+        except ValueError as exc:self.nozzle_status.setText(str(exc))
 
     def _sector_changed(self,item):
         if item.column()!=1 or self.sector_id is None:return
@@ -803,8 +889,6 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         n.sector_ml[item.row()]=value
         n.sector_source='ручное редактирование'
         self._update_sector_label()
-        row=next(i for i,value in enumerate(self.nozzles) if value.id==n.id)
-        self.nozzle_table.item(row,INTCOL['sector_source']).setText(n.sector_source)
         self._queue_preview()
 
     def _selected_ids(self):
@@ -907,7 +991,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
 
     def _prepare(self):
         cfg=self._read_controls()
-        nozzles=self._read_nozzles()
+        nozzles=self._read_nozzles(cfg)
         validate_nozzles(nozzles,cfg)
         flowing=[n for n in nozzles if n.enabled and source_flow_kg_s(n,cfg)>0]
         if not flowing:
@@ -1125,7 +1209,9 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         reply=QMessageBox.question(self,'Новый проект','Сбросить все значения и эпюры?',QMessageBox.Yes|QMessageBox.No)
         if reply!=QMessageBox.Yes:return
         self._restoring=True
-        self.cfg=Settings(pressure_mode='calibrated');self.nozzles=default_nozzles(self.cfg);self.sector_id=1
+        self.cfg=Settings(pressure_mode='calibrated',flow_pressure_kgf_cm2=30.,sector_pressure_kgf_cm2=2.5)
+        self.nozzles=default_nozzles(self.cfg);self.sector_id=1
+        for n in self.nozzles:n.geometry_overrides=[]
         self.project_file=None;self.results=[];self.smooth_fields=[];self._fill_nozzles();self._fill_controls()
         self.plane_select.clear();self.balance_label.setText('Нет расчётных результатов.')
         self._reset_history()
@@ -1134,7 +1220,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         try:
             self._record_edit()
             cfg=self._read_controls()
-            nozzles=self._read_nozzles()
+            nozzles=self._read_nozzles(cfg)
             path=self.project_file
             if not path or save_as:
                 path,_=QFileDialog.getSaveFileName(self,'Сохранить проект','fuel_field_project.json','JSON (*.json)')

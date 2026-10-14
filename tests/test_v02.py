@@ -136,12 +136,11 @@ class TestV02Physics(unittest.TestCase):
         ns[0].radius_mm=float('nan')
         with self.assertRaises(ValueError):validate_nozzles(ns,cfg)
 
-    def test_auto_follow_keeps_same_row_spacing_and_disabled_positions(self):
+    def test_auto_follow_keeps_both_clockwise_rows_and_disabled_positions(self):
         cfg,ns=fixture();before=deepcopy(ns);ns[10].enabled=False
         follow_row(ns,5,ns[4].theta_deg+12)
         for old,new in zip(before,ns):
-            delta=12 if old.row=='outer' and old.id>=5 else 0
-            self.assertAlmostEqual(new.theta_deg,old.theta_deg+delta,places=12)
+            self.assertAlmostEqual(new.theta_deg,(old.theta_deg+12)%360,places=12)
             self.assertEqual(new.radius_mm,old.radius_mm)
         self.assertFalse(ns[10].enabled)
 
@@ -274,6 +273,8 @@ class TestV02QtWorkflows(unittest.TestCase):
         pairs=[(calculate_plane(self.w.nozzles,self.w.cfg,z),evaluate_continuous_field(self.w.nozzles,self.w.cfg,z)) for z in self.w.cfg.z_mm]
         self.w._done(pairs);results=self.w.results
         self.w._toggle_flow_unit(INTCOL['flow_kg_h'])
+        self.assertEqual(self.w.cfg.display_flow_unit,'kg/h')
+        self.w.flow_unit_menu.actions()[1].trigger()
         self.assertEqual(self.w.cfg.display_flow_unit,'l/min')
         self.assertEqual(self.w.nozzle_table.item(0,INTCOL['flow_kg_h']).text(),'1')
         self.assertIs(self.w.results,results)
@@ -291,10 +292,12 @@ class TestV02QtWorkflows(unittest.TestCase):
         self.w.preset_editor.apply()
         self.assertEqual(effective_nozzle(self.w.nozzles[0],self.w.cfg).alpha_deg,60)
         self.assertEqual(self.w.nozzles[0].geometry_overrides,[])
+        self.w.nozzle_table.item(0,INTCOL['manual_write']).setCheckState(Qt.Checked)
         self.w.nozzle_table.item(0,INTCOL['alpha_deg']).setText('55')
         self.assertIn('alpha_deg',self.w.nozzles[0].geometry_overrides)
         self.assertEqual(effective_nozzle(self.w.nozzles[0],self.w.cfg).alpha_deg,55)
         self.w.undo_stack.undo();self.assertEqual(effective_nozzle(self.w.nozzles[0],self.w.cfg).alpha_deg,60)
+        self.w.undo_stack.undo();self.assertEqual(self.w.nozzles[0].geometry_overrides,[])
         self.w.undo_stack.undo();self.assertEqual(effective_nozzle(self.w.nozzles[0],self.w.cfg).alpha_deg,45)
 
     def test_radius_and_thickness_ui_keep_outer_radius_fixed(self):
@@ -304,14 +307,14 @@ class TestV02QtWorkflows(unittest.TestCase):
         self.assertEqual((n.r_nozzle_mm,n.rc0_mm,n.h0_mm),(20,17,6))
         self.w.undo_stack.undo();self.assertEqual((self.w.nozzles[0].r_nozzle_mm,self.w.nozzles[0].h0_mm),(20,4))
 
-    def test_auto_follow_edit_and_undo_preserve_other_row(self):
+    def test_auto_follow_edit_and_undo_move_both_rows(self):
         self.configure();self.w.mode_widgets['placement_mode'].setCurrentIndex(1)
         self.assertFalse(self.w.nozzle_table.item(0,INTCOL['row']).flags() & Qt.ItemIsEditable)
         before=deepcopy(self.w.nozzles)
         self.w.nozzle_table.item(4,INTCOL['theta_deg']).setText('40')
         delta=40-before[4].theta_deg
         for old,new in zip(before,self.w.nozzles):
-            self.assertAlmostEqual(new.theta_deg,old.theta_deg+(delta if old.row=='outer' and old.id>=5 else 0))
+            self.assertAlmostEqual(new.theta_deg,(old.theta_deg+delta)%360)
         self.w.undo_stack.undo()
         self.assertEqual([n.theta_deg for n in self.w.nozzles],[n.theta_deg for n in before])
 
@@ -337,15 +340,14 @@ class TestV02QtWorkflows(unittest.TestCase):
         self.w.sector_table.item(0,1).setText('10')
         self.assertEqual(self.w.nozzles[0].flow_kg_h,100)
         self.assertIn('η=1',self.w.flow_notice.text())
-        tab.item(0,INTCOL['capture_efficiency']).setText('0.5')
-        self.assertNotIn('η=1',tab.item(0,INTCOL['flow_status']).text())
-        self.assertIn('оценка',tab.item(0,INTCOL['flow_status']).text())
+        self.assertIn('Недостающий объём',self.w.capture_label.text())
+        self.assertIn('оценка',self.w.nozzle_status.text())
 
     def test_real_worker_runs_three_modes_and_presets_after_json_reopen(self):
         from PyQt5.QtTest import QTest
         self.configure();tab=self.w.nozzle_table
         tab.item(0,INTCOL['flow_mode']).setText('sectors')
-        tab.item(0,INTCOL['capture_efficiency']).setText('0.8')
+        self.w.nozzles[0].capture_efficiency=.8  # Legacy explicit correction remains readable.
         sectors=self.w.sector_table;sectors.setCurrentCell(0,1)
         sectors.setRangeSelected(QTableWidgetSelectionRange(0,1,35,1),True);sectors.paste_text('10')
         tab.item(1,INTCOL['flow_kg_h']).setText('5')

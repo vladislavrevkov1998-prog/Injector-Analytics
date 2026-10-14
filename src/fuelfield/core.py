@@ -97,8 +97,15 @@ class Settings:
     allow_extrapolation: bool = False
     placement_mode: str = 'manual'
     display_flow_unit: str = 'kg/h'
+    # None preserves pressures in older per-nozzle projects until bench settings
+    # are explicitly supplied. New GUI projects use common bench pressures.
+    flow_pressure_kgf_cm2: Optional[float] = None
+    sector_pressure_kgf_cm2: Optional[float] = None
 
     def validate(self):
+        for pressure in (self.flow_pressure_kgf_cm2,self.sector_pressure_kgf_cm2):
+            if pressure is not None and (not np.isfinite(pressure) or pressure<=0):
+                raise ValueError('Давления испытаний должны быть положительными конечными числами.')
         validate_catalog(self.atomizer_types,self.nozzle_presets)
         if not isinstance(self.allow_extrapolation,bool):raise ValueError('Разрешение экстраполяции должно быть логическим значением.')
         if not all(np.isfinite(v) for v in (self.r_in_mm,self.r_out_mm,self.row_inner_mm,
@@ -155,26 +162,26 @@ class Settings:
 
 
 def default_nozzles(settings: Settings) -> list[Nozzle]:
-    """70 outer at theta=0+5.142857*k, 70 inner at +2.571429 degrees."""
+    """Clockwise numbering; inner positions are half a pitch behind outer ones."""
     rows = []
     for k in range(70):
-        rows.append(Nozzle(id=k+1, row='outer', theta_deg=k*360/70,
+        rows.append(Nozzle(id=k+1, row='outer', theta_deg=(-k*360/70)%360,
                            radius_mm=settings.row_outer_mm))
     for k in range(70):
-        rows.append(Nozzle(id=k+71, row='inner', theta_deg=(k+0.5)*360/70,
+        rows.append(Nozzle(id=k+71, row='inner', theta_deg=(-(k+0.5)*360/70)%360,
                            radius_mm=settings.row_inner_mm))
     return rows
 
 
 def apply_default_positions(nozzles: list[Nozzle], settings: Settings):
     """Change *only* nozzle coordinates, never enable flags/measurements/ids."""
-    outer = [n for n in nozzles if n.row == 'outer']
-    inner = [n for n in nozzles if n.row == 'inner']
+    outer = sorted((n for n in nozzles if n.row == 'outer'),key=lambda n:n.id)
+    inner = sorted((n for n in nozzles if n.row == 'inner'),key=lambda n:n.id)
     for k, n in enumerate(outer):
-        n.theta_deg = k*360/len(outer) if outer else 0
+        n.theta_deg = (-k*360/len(outer))%360 if outer else 0
         n.radius_mm = settings.row_outer_mm
     for k, n in enumerate(inner):
-        n.theta_deg = (k+0.5)*360/len(inner) if inner else 0
+        n.theta_deg = (-(k+0.5)*360/len(inner))%360 if inner else 0
         n.radius_mm = settings.row_inner_mm
 
 
@@ -395,7 +402,8 @@ def _kernel_outer_limit(rc,h,model):
 
 
 def evaluate_continuous_field(nozzles: list[Nozzle], cfg: Settings,
-                              z_mm: float, resolution: Optional[int] = None) -> SmoothField:
+                              z_mm: float, resolution: Optional[int] = None,
+                              bounds_xy=None, mask_track=True) -> SmoothField:
     """High-resolution XY preview of superposed local polar source kernels.
 
     Uses analytic-area density per nozzle, sampled on a regular XY grid. This
@@ -407,7 +415,12 @@ def evaluate_continuous_field(nozzles: list[Nozzle], cfg: Settings,
     if not 64 <= dim <= 1200:
         raise ValueError('Неверное разрешение карты.')
     extent = float(cfg.r_out_mm)
-    axis = np.linspace(-extent,extent,dim)
+    if bounds_xy is None:bounds_xy=(-extent,extent,-extent,extent)
+    xmin,xmax,ymin,ymax=bounds_xy
+    if not all(np.isfinite(v) for v in bounds_xy) or xmin>=xmax or ymin>=ymax:
+        raise ValueError('Некорректные границы карты.')
+    axis = np.linspace(xmin,xmax,dim)
+    y_axis = np.linspace(ymin,ymax,dim)
     flux = np.zeros((dim,dim),dtype=np.float64)
     # Do not construct a full dim×dim intermediate for every nozzle. A bounded
     # window is sufficient because outside 6 sigma the Gaussian is negligible.
@@ -426,12 +439,12 @@ def evaluate_continuous_field(nozzles: list[Nozzle], cfg: Settings,
         yp = n.radius_mm*np.sin(np.deg2rad(n.theta_deg))
         ix0 = max(0,int(np.searchsorted(axis,xp-rhi,side='left')))
         ix1 = min(dim,int(np.searchsorted(axis,xp+rhi,side='right')))
-        iy0 = max(0,int(np.searchsorted(axis,yp-rhi,side='left')))
-        iy1 = min(dim,int(np.searchsorted(axis,yp+rhi,side='right')))
+        iy0 = max(0,int(np.searchsorted(y_axis,yp-rhi,side='left')))
+        iy1 = min(dim,int(np.searchsorted(y_axis,yp+rhi,side='right')))
         if ix0 >= ix1 or iy0 >= iy1:
             continue
         xx = axis[None,ix0:ix1]-xp
-        yy = axis[iy0:iy1,None]-yp
+        yy = y_axis[iy0:iy1,None]-yp
         rr = np.hypot(xx,yy)
         radial = _radial_density(rr,rc,h,cfg.radial_model)
         if not np.any(radial):
@@ -454,10 +467,10 @@ def evaluate_continuous_field(nozzles: list[Nozzle], cfg: Settings,
         # Since the 36 values have mean 1, the circular integral equals 2π.
         ang = sector[indices%36]*(1-weight) + sector[(indices+1)%36]*weight
         flux[iy0:iy1,ix0:ix1] += (m_dot*1e6/(2*np.pi*integral))*radial*ang
-    xx,yy = np.meshgrid(axis,axis)
+    xx,yy = np.meshgrid(axis,y_axis)
     r_global = np.hypot(xx,yy)
-    valid = (r_global >= cfg.r_in_mm)&(r_global <= cfg.r_out_mm)
-    return SmoothField(axis,axis,flux,np.ma.masked_where(~valid,flux),float(z_mm))
+    valid = (r_global >= cfg.r_in_mm)&(r_global <= cfg.r_out_mm) if mask_track else np.ones_like(flux,dtype=bool)
+    return SmoothField(axis,y_axis,flux,np.ma.masked_where(~valid,flux),float(z_mm))
 
 
 def polar_epure_coordinates(n: Nozzle, z_mm: float, cfg: Settings,

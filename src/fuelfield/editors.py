@@ -23,6 +23,12 @@ HYDRAULIC_LABELS=dict(outlet_diameter_mm='Диаметр сопла dс, мм',
     inlet_length_mm='Длина входа Lвх, мм',outlet_length_mm='Длина сопла Lс, мм',
     cone_angle_deg='Угол входного конуса ψ, °',kinematic_viscosity_mm2_s='Кинематическая вязкость ν, мм²/с')
 
+HYDRAULIC_RESULTS=dict(geometric_a='A геометрическая',deformation='ε деформации',
+    theta='θ трения',a_active='Aд (расчёт)',a_equivalent='Aₑ (расчёт)',phi='φ заполнения',
+    re_inlet='Re одного входа',re_equivalent='Re суммарного входа',friction='λк',
+    loss_inlet='Δ входа',loss_chamber='Δ камеры',loss_outlet='Δ сопла',
+    total_loss='ΔΣ',mu='μ расхода',film_mm='Толщина плёнки, мм',mass_kg_h='G, кг/ч')
+
 
 class CatalogEditor(QWidget):
     changed=pyqtSignal(object)
@@ -45,7 +51,7 @@ class CatalogEditor(QWidget):
         self.table.setHorizontalHeaderLabels(['Δp, кгс/см²','Q, кг/ч'])
         self.table.horizontalHeader().setStretchLastSection(True);body.addWidget(self.table,1)
         self.theory_panel=QWidget();theory_layout=QVBoxLayout(self.theory_panel)
-        self.theory_table=table_class(len(HYDRAULIC_LABELS),2)
+        self.theory_table=table_class(len(HYDRAULIC_LABELS)+len(HYDRAULIC_RESULTS),2)
         self.theory_table.setHorizontalHeaderLabels(['Гидравлический параметр','Значение'])
         self.theory_table.horizontalHeader().setStretchLastSection(True)
         self.theory_table.setMinimumHeight(310)
@@ -55,6 +61,10 @@ class CatalogEditor(QWidget):
             spin.setDecimals(4);spin.setRange(.0001,100000.);spin.setValue(value)
         graph_form=QFormLayout();graph_form.addRow('График: Δp от, кгс/см²',self.plot_min)
         graph_form.addRow('График: Δp до, кгс/см²',self.plot_max);theory_layout.addLayout(graph_form)
+        self.diagnostic_pressure=QDoubleSpinBox();self.diagnostic_pressure.setDecimals(5)
+        self.diagnostic_pressure.setRange(.00001,100000.)
+        self.diagnostic_pressure.setValue(owner.cfg.target_pressure_kgf_cm2)
+        graph_form.addRow('Расчётные строки: Δp, кгс/см²',self.diagnostic_pressure)
         note=QLabel('Геометрия здесь относится к гидравлическому распылителю. '
             'R_сопла и h0 поля орошения настраиваются отдельно. '
             'Начальные параметры демонстрационные; ν задавайте для жидкости при температуре измерения. '
@@ -81,6 +91,7 @@ class CatalogEditor(QWidget):
         self.theory_table.itemChanged.connect(self.preview)
         self.theory_table.batchFinished.connect(self.preview)
         self.plot_min.valueChanged.connect(self.preview);self.plot_max.valueChanged.connect(self.preview)
+        self.diagnostic_pressure.valueChanged.connect(self.preview)
         self._unit='kg/h'
         self._density=owner.cfg.density_kg_m3
         self.fill_parameters(DityakinParameters().to_dict());self.change_kind()
@@ -132,6 +143,24 @@ class CatalogEditor(QWidget):
             self.theory_table.setItem(row,1,value)
         self.theory_table.blockSignals(False)
         self.theory_table.resizeColumnToContents(0)
+        self.fill_results(None)
+
+    def fill_results(self,state):
+        from PyQt5.QtCore import Qt
+        self.theory_table.blockSignals(True)
+        for row,(key,label) in enumerate(HYDRAULIC_RESULTS.items(),start=len(HYDRAULIC_LABELS)):
+            if state is None:value='—'
+            else:
+                derived=dict(geometric_a=state.a_active*self.curve.parameters.deformation,
+                    deformation=self.curve.parameters.deformation,theta=state.a_active/state.a_equivalent-1,
+                    total_loss=state.loss_inlet+state.loss_chamber+state.loss_outlet,mass_kg_h=state.mass_kg_s*3600)
+                number=derived[key] if key in derived else getattr(state,key)
+                value=f'{number:.9g}'
+            for col,text in enumerate((label,value)):
+                item=QTableWidgetItem(text);item.setFlags(Qt.ItemIsEnabled|Qt.ItemIsSelectable)
+                item.setToolTip('Рассчитано при Δp='+str(self.diagnostic_pressure.value())+' кгс/см²')
+                self.theory_table.setItem(row,col,item)
+        self.theory_table.blockSignals(False)
 
     def read_theory(self):
         params={}
@@ -179,9 +208,9 @@ class CatalogEditor(QWidget):
                 values=[self.curve.evaluate(float(p)).flow_kg_h for p in pressures]
                 values=[flow_from_kg_h(q,self.unit.currentData(),self.owner.cfg.density_kg_m3) for q in values]
                 ax.plot(pressures,values,label='Дитякин (расчёт)')
-                state=self.curve.hydraulics(float(pressures[-1]))
+                state=self.curve.hydraulics(self.diagnostic_pressure.value());self.fill_results(state)
                 self.status.setText(f'Расчёт по Дитякину, гл. 2 (1977); ρ={self.owner.cfg.density_kg_m3:g} кг/м³. '
-                    f'При Δp={pressures[-1]:g}: Aд={state.a_active:.4g}, Aₑ={state.a_equivalent:.4g}, '
+                    f'При Δp={self.diagnostic_pressure.value():g}: Aд={state.a_active:.4g}, Aₑ={state.a_equivalent:.4g}, '
                     f'φ={state.phi:.4g}, μ={state.mu:.4g}, λк={state.friction:.4g}, '
                     f'Reвх={state.re_inlet:.5g}; ΔΣ={state.loss_inlet+state.loss_chamber+state.loss_outlet:.4g}. '
                     'Потери в камере: численное интегрирование уравнения (41).')
@@ -193,7 +222,7 @@ class CatalogEditor(QWidget):
             self.status.setText(f'{len(p)} измеренных точек; Δp {min(p):g}…{max(p):g} кгс/см². '
                                'Вне диапазона требуется явное разрешение экстраполяции.')
         except ValueError as exc:
-            self.curve=None;self.status.setText(str(exc))
+            self.curve=None;self.fill_results(None);self.status.setText(str(exc))
         finally:
             ax.set_xlabel('Δp, кгс/см²');ax.set_ylabel('Q, '+self.unit.currentText());ax.grid(alpha=.25)
             self.canvas.draw_idle()
