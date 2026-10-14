@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 import math
 from .dityakin import characteristic_for_type
 
-GEOMETRY_DEFAULTS = dict(alpha_deg=45., r_nozzle_mm=12., h0_mm=4., k_linear=.08,
+GEOMETRY_DEFAULTS = dict(z_tip_mm=0.,alpha_deg=45., r_nozzle_mm=12., h0_mm=4., k_linear=.08,
     k_quadratic=.0004, power=.7, z_ref_mm=50., inner_angle_deg=10., outer_angle_deg=30.,
     clock_deg=0., decay_length_mm=70., diffusion_deg_sqrt_mm=1., rotation_deg_per_mm=0.)
 GEOMETRY_KEYS = tuple(GEOMETRY_DEFAULTS)

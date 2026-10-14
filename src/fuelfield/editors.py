@@ -12,7 +12,7 @@ from .v02 import GEOMETRY_KEYS,NOZZLE_KINDS,remove_atomizer,validate_catalog
 from .dityakin import DityakinParameters,DityakinCharacteristic
 import numpy as np
 
-PARAMETER_LABELS=dict(alpha_deg='α полный, °',r_nozzle_mm='R_сопла, мм',h0_mm='h0, мм',
+PARAMETER_LABELS=dict(z_tip_mm='z среза, мм',alpha_deg='α полный, °',r_nozzle_mm='R_сопла, мм',h0_mm='h0, мм',
     k_linear='k лин.',k_quadratic='k квадр.',power='p',z_ref_mm='z ref, мм',
     inner_angle_deg='α внутр., °',outer_angle_deg='α наруж., °',clock_deg='Clock, °',
     decay_length_mm='L затух., мм',diffusion_deg_sqrt_mm='σ / √мм',rotation_deg_per_mm='ω °/мм')
