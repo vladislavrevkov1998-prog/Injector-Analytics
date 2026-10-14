@@ -142,6 +142,7 @@ class ComparisonPanel(QWidget):
         return source+(self.kind.currentIndex(),self.plot_count.value(),self.plot_columns.value(),tuple(self.graph_selection.selected))
 
     def draw(self,*args):
+        if hasattr(self.owner,'fit_scale_button'):self.owner.fit_scale_button.setEnabled(bool(self.owner.results and self.owner.split_button.isChecked() and (self.tables or self.planes)))
         i=max(0,self.plane.currentIndex())
         if self.tables:
             _,headers,data=self.tables[i];xc,yc=self.x.currentData(),self.y.currentData();secondary=self.y2.currentData()

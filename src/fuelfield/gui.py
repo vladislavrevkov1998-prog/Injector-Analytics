@@ -34,6 +34,7 @@ from .plot_interaction import attach_interaction
 from .analytics_io import write_epures_xlsx
 from .comparison import ComparisonPanel
 from .graph_selection import GraphSelection
+from .regression_gui import RegressionDialog
 
 FIELDS = [
     ('id','ID'),('enabled','Установлена'),('nozzle_kind','Тип форсунки'),
@@ -208,7 +209,7 @@ class CalcWorker(QObject):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Fuel Field Pilot — v0.3.1')
+        self.setWindowTitle('Fuel Field Pilot — v0.4.0')
         self.resize(1480,930)
         self.cfg=Settings(pressure_mode='calibrated',flow_pressure_kgf_cm2=30.,sector_pressure_kgf_cm2=2.5)
         self.nozzles=default_nozzles(self.cfg)
@@ -318,6 +319,19 @@ class MainWindow(QMainWindow):
         form.addRow(editors)
         layout.addWidget(scroll)
         self.tabs.addTab(page,'01 · Геометрия и сетка')
+
+    def open_regression(self):
+        self._record_edit()
+        existing=getattr(self,'regression_dialog',None)
+        if existing is not None and existing.thread is not None:existing.show();existing.raise_();return
+        self.regression_dialog=RegressionDialog(self,PasteTable);self.regression_dialog.show()
+
+    def apply_project_state(self,state,label):
+        before=project_to_json(self.cfg,self.nozzles);cfg,nozzles=project_from_json(deepcopy(state))
+        self._restoring=True
+        try:self.cfg=cfg;self.nozzles=nozzles;self._fill_controls();self._fill_nozzles();self._edit_state=before
+        finally:self._restoring=False
+        self._record_edit(label=label)
 
     def open_sections_editor(self):
         dialog=QDialog(self);dialog.setWindowTitle('Осевые сечения: 1–50');layout=QVBoxLayout(dialog)
@@ -501,6 +515,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         for label,slot in [('XLSX: эпюры',self.export_xlsx),('CSV: матрицы',self.export_results),('PNG: текущее',self.export_png),
                             ('PNG: все z',self.export_all_png)]:
             b=QPushButton(label);b.clicked.connect(slot);actions.addWidget(b)
+        regression=QPushButton("Идентификация параметров");regression.clicked.connect(self.open_regression);actions.addWidget(regression)
         actions.addStretch();lay.addLayout(actions)
         self.progress=QProgressBar();self.progress.setRange(0,4);self.progress.setValue(0)
         lay.addWidget(self.progress)
@@ -549,7 +564,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             chart_controls.addWidget(QLabel(label));chart_controls.addWidget(widget)
             widget.valueChanged.connect(self._view_changed)
         chart_controls.addWidget(self.graph_selection)
-        self.fit_scale_button=QPushButton("Подогнать масштаб");self.fit_scale_button.clicked.connect(self._fit_plot_scales);chart_controls.addWidget(self.fit_scale_button)
+        self.fit_scale_button=QPushButton("Подогнать масштаб");self.fit_scale_button.setEnabled(False);self.fit_scale_button.clicked.connect(self._fit_plot_scales);chart_controls.addWidget(self.fit_scale_button)
         self.plot_count.setToolTip("Количество последовательных радиальных уровней, начиная с выбранного R; полный набор начинается с первого уровня.")
         reset=QPushButton("Исходный масштаб");self.reset_plot_button=reset;reset.setEnabled(False);reset.clicked.connect(self._reset_plot_zoom);chart_controls.addWidget(reset)
         chart_controls.addStretch()
@@ -913,7 +928,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             self.figpreview.clear()
             ax=self.figpreview.add_subplot(121,projection='polar')
             ax.plot(np.arctan2(y-y0,x-x0),np.hypot(x-x0,y-y0))
-            ax.set_title(f'№{n.id}: относительная эпюра, z=0',fontsize=9)
+            ax.set_title(f'№{n.id}: эпюра, z лок.=0; z={n.z_tip_mm:g} мм',fontsize=9)
             ax=self.figpreview.add_subplot(122)
             data,norm,cmap=color_scale(field.masked_flux_kg_m2_s,cfg)
             # Interpolation is display-only. Strict clipping must not blend hidden pixels.
@@ -1188,6 +1203,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.comparison.sync_from_primary()
 
     def _toggle_split(self,enabled):
+        self.fit_scale_button.setEnabled(bool(enabled and self.results and (self.comparison.planes or self.comparison.tables)))
         self.comparison.setVisible(enabled)
         if enabled:
             self.result_panels.setSizes([max(1,self.result_panels.width()*3//5),max(1,self.result_panels.width()*2//5)])
@@ -1325,7 +1341,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
 
     def closeEvent(self,event):
         comparison=getattr(self,'comparison',None)
-        if self.thread is not None or comparison is not None and comparison.thread is not None:
+        regression=getattr(self,'regression_dialog',None)
+        if self.thread is not None or comparison is not None and comparison.thread is not None or regression is not None and regression.thread is not None:
             self.statusBar().showMessage('Дождитесь завершения расчёта перед закрытием.',8000)
             event.ignore();return
         super().closeEvent(event)
