@@ -4,7 +4,7 @@ The source-polar midpoint quadrature has strictly normalized discrete mass weigh
 It is an engineering quadrature, not a DPM or interaction model.
 """
 from __future__ import annotations
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, fields
 from typing import Optional
 import numpy as np
 from .v02 import (GEOMETRY_KEYS, default_presets, validate_catalog, effective_nozzle,
@@ -59,6 +59,8 @@ class Nozzle:
     capture_efficiency: Optional[float] = None
     nozzle_kind: str = 'uncooled'
     geometry_overrides: list[str] = field(default_factory=lambda:list(GEOMETRY_KEYS))
+    z_tip_mm: float = 0.0
+    _extra: dict = field(default_factory=dict,repr=False)
 
     @property
     def r_nozzle_mm(self):
@@ -102,6 +104,14 @@ class Settings:
     flow_pressure_kgf_cm2: Optional[float] = None
     sector_pressure_kgf_cm2: Optional[float] = None
 
+    _extra: dict = field(default_factory=dict,repr=False)
+    _project_extra: dict = field(default_factory=dict,repr=False)
+
+    def __post_init__(self):
+        from copy import deepcopy
+        self.nozzle_presets=deepcopy(self.nozzle_presets)
+        for params in self.nozzle_presets.values():params.setdefault("z_tip_mm",0.)
+
     def validate(self):
         for pressure in (self.flow_pressure_kgf_cm2,self.sector_pressure_kgf_cm2):
             if pressure is not None and (not np.isfinite(pressure) or pressure<=0):
@@ -125,8 +135,10 @@ class Settings:
             raise ValueError('Шкала: нужны конечные min < max.')
         if not (0 < self.r_in_mm < self.r_out_mm):
             raise ValueError('Требуется 0 < Rвнутр < Rнаруж.')
-        if len(self.z_mm) != 4 or not all(np.isfinite(z) for z in self.z_mm) or min(self.z_mm) < 0:
-            raise ValueError('Нужны 4 неотрицательных расстояния z [мм].')
+        if not 1<=len(self.z_mm)<=50 or not all(np.isfinite(z) and z>=0 for z in self.z_mm):
+            raise ValueError('Нужны 1–50 конечных неотрицательных координат z [мм].')
+        if len(self.z_mm)>1 and np.any(np.diff(np.sort(self.z_mm))<=1e-7):
+            raise ValueError('Координаты сечений должны быть уникальны с допуском 10⁻⁷ мм.')
         if not 1 <= self.n_radial <= 40 or not 8 <= self.n_angular <= 1440:
             raise ValueError('Число уровней 1..40, окружных ячеек 8..1440.')
         if self.n_sample_radial < 8 or self.n_sample_angular < 72:
@@ -193,7 +205,8 @@ def geometry_at(n: Nozzle, z_mm: float, cfg: Settings):
     n=effective_nozzle(n,cfg)
     if n.h0_mm <= 0 or n.rc0_mm < 0:
         raise ValueError(f'Форсунка {n.id}: Rc0 >=0 и h0 >0 обязательны.')
-    z = float(z_mm)
+    z = float(z_mm)-n.z_tip_mm
+    if not np.isfinite(z) or z<0:raise ValueError(f"Форсунка {n.id}: сечение находится до среза сопла.")
     if cfg.geometry_model == 'two_angles':
         lo = n.rc0_mm - n.h0_mm/2 + z*np.tan(np.deg2rad(n.inner_angle_deg))
         hi = n.rc0_mm + n.h0_mm/2 + z*np.tan(np.deg2rad(n.outer_angle_deg))
@@ -226,7 +239,8 @@ def angular_profile(n: Nozzle, z_mm: float, cfg: Settings):
         # Running a nozzle with no sector observations falls back to uniform:
         a = np.ones(36, dtype=float)
     a = 36.0 * a / np.sum(a)  # mean == 1, irrespective of collected volume
-    z = max(0.0, z_mm)
+    z = float(z_mm)-n.z_tip_mm
+    if z<0:return np.zeros(36)
     if cfg.angular_model == 'linear':
         lam = max(0, 1-z/max(1e-12, n.decay_length_mm))
         a = 1+lam*(a-1)
@@ -251,6 +265,8 @@ def sample_kernel(n: Nozzle, z_mm: float, cfg: Settings):
     Sector 1 is centered toward the track middle line; sectors 2..36 are CCW
     in the chosen XY view from the fuel outlet. Rotation parameter in degrees.
     """
+    n=effective_nozzle(n,cfg)
+    if z_mm<n.z_tip_mm:return np.array([]),np.array([]),np.array([])
     rc, h = geometry_at(n, z_mm, cfg)
     if cfg.radial_model == 'gaussian':
         sigma = h/(2*np.sqrt(2*np.log(2)))  # FWHM of Gaussian profile = h
@@ -279,7 +295,7 @@ def sample_kernel(n: Nozzle, z_mm: float, cfg: Settings):
     ap = ap/ap.sum()  # exact conservation even for non-multiple-of-36 grids
     # Global polar direction to first sector: inner outward, outer inward.
     base_deg = n.theta_deg + (180.0 if n.row == 'outer' else 0.0)
-    facing = np.deg2rad(base_deg + n.clock_deg + n.rotation_deg_per_mm*z_mm)
+    facing = np.deg2rad(base_deg + n.clock_deg + n.rotation_deg_per_mm*(z_mm-n.z_tip_mm))
     direction = phi+facing
     xpos = (n.radius_mm*np.cos(np.deg2rad(n.theta_deg)) +
             r[:,None]*np.cos(direction)[None,:])
@@ -318,7 +334,7 @@ def calculate_plane(nozzles: list[Nozzle], cfg: Settings, z_mm: float) -> PlaneR
     inner = outer = injected = 0.0
     for n in nozzles:
         n=effective_nozzle(n,cfg)
-        if not n.enabled: continue
+        if not n.enabled or z_mm<n.z_tip_mm: continue
         flow = source_flow_kg_s(n,cfg)
         if flow <= 0: continue
         if not np.isfinite(flow):
@@ -343,28 +359,37 @@ def calculate_plane(nozzles: list[Nozzle], cfg: Settings, z_mm: float) -> PlaneR
                        injected,float(mass.sum()),inner,outer)
 
 
+def _json_record(obj):
+    data=asdict(obj);extra=data.pop('_extra',{});data.pop('_project_extra',None)
+    return {**extra,**data}
+
+
 def project_to_json(settings: Settings, nozzles: list[Nozzle]):
-    return {'format':'fuel-field-pilot-v1','version':'0.2','settings':asdict(settings),
-            'nozzles':[{**asdict(n),'r_nozzle_mm':n.r_nozzle_mm} for n in nozzles]}
+    return {**settings._project_extra,'format':'fuel-field-pilot-v1','version':'0.4',
+            'settings':_json_record(settings),
+            'nozzles':[{**_json_record(n),'r_nozzle_mm':n.r_nozzle_mm} for n in nozzles]}
+
+
+def _load_record(cls,data):
+    known={f.name for f in fields(cls)};raw={k:v for k,v in data.items() if k in known}
+    raw['_extra']={**raw.get('_extra',{}),**{k:v for k,v in data.items() if k not in known}}
+    return cls(**raw)
 
 
 def project_from_json(data):
-    if data.get('format') != 'fuel-field-pilot-v1':
-        raise ValueError('Неподдерживаемый формат проекта')
-    cfg = Settings(**data['settings'])
+    if data.get('format') != 'fuel-field-pilot-v1':raise ValueError('Неподдерживаемый формат проекта')
+    cfg=_load_record(Settings,data['settings'])
+    cfg._project_extra={k:v for k,v in data.items() if k not in ('format','version','settings','nozzles')}
     nozzles=[]
     for item in data['nozzles']:
-        raw=dict(item)
-        radius=raw.pop('r_nozzle_mm',None)
+        raw=dict(item);radius=raw.pop('r_nozzle_mm',None)
         if radius is not None:
             derived=radius-raw.get('h0_mm',4.)/2
-            if 'rc0_mm' in raw and not np.isclose(derived,raw['rc0_mm'],rtol=1e-12,atol=1e-12):
-                raise ValueError('Несогласованные R_сопла и legacy Rc0.')
+            if 'rc0_mm' in raw and not np.isclose(derived,raw['rc0_mm'],rtol=1e-12,atol=1e-12):raise ValueError('Несогласованные R_сопла и legacy Rc0.')
             raw.setdefault('rc0_mm',derived)
-        nozzles.append(Nozzle(**raw))
+        nozzles.append(_load_record(Nozzle,raw))
     cfg.validate()
-    if len(nozzles) != 140 or set(n.id for n in nozzles)!=set(range(1,141)):
-        raise ValueError('В v0.1 проект должен содержать 140 уникальных форсунок')
+    if len(nozzles)!=140 or set(n.id for n in nozzles)!=set(range(1,141)):raise ValueError('Проект должен содержать 140 уникальных форсунок')
     validate_nozzles(nozzles,cfg)
     return cfg,nozzles
 
@@ -426,7 +451,7 @@ def evaluate_continuous_field(nozzles: list[Nozzle], cfg: Settings,
     # window is sufficient because outside 6 sigma the Gaussian is negligible.
     for n in nozzles:
         n=effective_nozzle(n,cfg)
-        if not n.enabled:
+        if not n.enabled or z_mm<n.z_tip_mm:
             continue
         m_dot = source_flow_kg_s(n,cfg)
         if m_dot <= 0:
@@ -458,7 +483,7 @@ def evaluate_continuous_field(nozzles: list[Nozzle], cfg: Settings,
         # Sector 1 faces the middle of the annulus, CCW sector numbering.
         sector = angular_profile(n,z_mm,cfg)
         facing = np.deg2rad(n.theta_deg + (180 if n.row=='outer' else 0)
-                               + n.clock_deg+n.rotation_deg_per_mm*z_mm)
+                               + n.clock_deg+n.rotation_deg_per_mm*(z_mm-n.z_tip_mm))
         angle = (np.arctan2(yy,xx)-facing)%(2*np.pi)
         phase = angle*36/(2*np.pi)
         indices = np.floor(phase).astype(np.int32)
@@ -482,6 +507,7 @@ def polar_epure_coordinates(n: Nozzle, z_mm: float, cfg: Settings,
     The baseline is dimensionless a(phi); optional amplitude includes flow.
     """
     n=effective_nozzle(n,cfg)
+    if z_mm<n.z_tip_mm:return np.array([]),np.array([])
     phi = np.linspace(0,2*np.pi,n_angles+1)
     amp36 = angular_profile(n,z_mm,cfg)
     phase = (phi%(2*np.pi))*36/(2*np.pi)
@@ -490,7 +516,7 @@ def polar_epure_coordinates(n: Nozzle, z_mm: float, cfg: Settings,
     amp = amp36[left%36]*(1-w)+amp36[(left+1)%36]*w
     amp = amp*(source_flow_kg_s(n,cfg)/max(1e-16,flow_reference_kg_s) if include_flow else 1)
     facing = np.deg2rad(n.theta_deg + (180 if n.row=='outer' else 0)
-                           + n.clock_deg + n.rotation_deg_per_mm*z_mm)
+                           + n.clock_deg + n.rotation_deg_per_mm*(z_mm-n.z_tip_mm))
     x0 = n.radius_mm*np.cos(np.deg2rad(n.theta_deg))
     y0 = n.radius_mm*np.sin(np.deg2rad(n.theta_deg))
     return x0+relative_radius_mm*amp*np.cos(phi+facing), y0+relative_radius_mm*amp*np.sin(phi+facing)

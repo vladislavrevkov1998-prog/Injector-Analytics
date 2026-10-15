@@ -33,11 +33,13 @@ from .analysis import METRICS,UNITS,EQUATIONS,cell_values,matching_index
 from .plot_interaction import attach_interaction
 from .analytics_io import write_epures_xlsx
 from .comparison import ComparisonPanel
+from .graph_selection import GraphSelection
+from .regression_gui import RegressionDialog
 
 FIELDS = [
     ('id','ID'),('enabled','Установлена'),('nozzle_kind','Тип форсунки'),
     ('atomizer_type_id','Имя распылителя'),('row','Ряд'),('manual_write','Ручная запись'),
-    ('theta_deg','θ форс., °'),('radius_mm','R форс., мм'),
+    ('z_tip_mm','z среза, мм'),('theta_deg','θ форс., °'),('radius_mm','R форс., мм'),
     ('flow_kg_h','Gт, кг/ч'),('flow_mode','Расход из'),('effective_flow','Расход в режиме, кг/ч'),
     ('alpha_deg','α, полный °'),('r_nozzle_mm','R_сопла, мм'),('h0_mm','h0, мм'),
     ('k_linear','k лин.'),('k_quadratic','k квадр.'),('power','p степ.'),
@@ -182,6 +184,8 @@ class CalcWorker(QObject):
     progress=pyqtSignal(str)
     completed=pyqtSignal(object)
     failed=pyqtSignal(str)
+    cancelled=pyqtSignal()
+    finished=pyqtSignal()
     def __init__(self,settings,nozzles):
         super().__init__()
         self.settings=settings;self.nozzles=nozzles
@@ -189,19 +193,23 @@ class CalcWorker(QObject):
         try:
             result=[]
             for i,z in enumerate(self.settings.z_mm):
-                self.progress.emit(f'Сечение {i+1}/4, z={z:g} мм…')
+                if QThread.currentThread().isInterruptionRequested():self.cancelled.emit();return
+                self.progress.emit(f'Сечение {i+1}/{len(self.settings.z_mm)}, z={z:g} мм…')
                 plane=calculate_plane(self.nozzles,self.settings,z)
+                if QThread.currentThread().isInterruptionRequested():self.cancelled.emit();return
                 preview=evaluate_continuous_field(self.nozzles,self.settings,z)
                 result.append((plane,preview))
+            if QThread.currentThread().isInterruptionRequested():self.cancelled.emit();return
             self.completed.emit(result)
         except Exception:
             self.failed.emit(traceback.format_exc())
+        finally:self.finished.emit()
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Fuel Field Pilot — v0.3.1')
+        self.setWindowTitle('Fuel Field Pilot — v0.4.0')
         self.resize(1480,930)
         self.cfg=Settings(pressure_mode='calibrated',flow_pressure_kgf_cm2=30.,sector_pressure_kgf_cm2=2.5)
         self.nozzles=default_nozzles(self.cfg)
@@ -278,13 +286,14 @@ class MainWindow(QMainWindow):
             ('n_radial','Число радиальных уровней',_integer(6,1,40)),
             ('n_angular','Число окружных ячеек',_integer(140,8,1440)),
             ('grid_start_deg','Первый центр окружной матрицы: угол, °',_dbl(0,-360,360)),
-            ('z_mm','Расстояния четырёх сечений z, мм',QLineEdit('0; 20; 40; 60')),
+            ('z_mm','Координаты сечений z, мм (1–50)',QLineEdit('0; 20; 40; 60')),
             ('radial_centers_mm','Радиусы центров уровней, мм (пусто = равномерно)',QLineEdit('')),
         ]
         for key,label,w in fields:
             self.geom_widgets[key]=w
             if isinstance(w,QLineEdit):w.setMinimumWidth(380)
             form.addRow(label,w)
+        sections=QPushButton("Редактор сечений: добавить / удалить / порядок");sections.clicked.connect(self.open_sections_editor);form.addRow(sections)
         btnrow=QHBoxLayout()
         btn=QPushButton('Применить позиции двух рядов к 140 форсункам')
         btn.setToolTip('Изменяет только радиус и угол форсунок, не затрагивая включение, номер, расход и эпюру.')
@@ -310,6 +319,48 @@ class MainWindow(QMainWindow):
         form.addRow(editors)
         layout.addWidget(scroll)
         self.tabs.addTab(page,'01 · Геометрия и сетка')
+
+    def open_regression(self):
+        self._record_edit()
+        existing=getattr(self,'regression_dialog',None)
+        if existing is not None and existing.thread is not None:existing.show();existing.raise_();return
+        self.regression_dialog=RegressionDialog(self,PasteTable);self.regression_dialog.show()
+
+    def apply_project_state(self,state,label):
+        before=project_to_json(self.cfg,self.nozzles);cfg,nozzles=project_from_json(deepcopy(state))
+        self._restoring=True
+        try:self.cfg=cfg;self.nozzles=nozzles;self._fill_controls();self._fill_nozzles();self._edit_state=before
+        finally:self._restoring=False
+        self._record_edit(label=label)
+
+    def open_sections_editor(self):
+        dialog=QDialog(self);dialog.setWindowTitle('Осевые сечения: 1–50');layout=QVBoxLayout(dialog)
+        layout.addWidget(QLabel('Глобальные координаты от начала ФУ, мм. Больше сечений — дольше расчёт.'))
+        table=PasteTable(len(self.cfg.z_mm),1);table.setHorizontalHeaderLabels(['z, мм'])
+        for row,z in enumerate(self.cfg.z_mm):table.setItem(row,0,QTableWidgetItem(repr(z)))
+        layout.addWidget(table);buttons=QHBoxLayout()
+        def add():
+            if table.rowCount()>=50:return
+            row=table.rowCount();table.insertRow(row);table.setItem(row,0,QTableWidgetItem(str(max([_number(table.item(i,0).text()) for i in range(row)]+[0])+10)))
+        def remove():
+            for row in sorted({i.row() for i in table.selectedIndexes()},reverse=True):
+                if table.rowCount()>1:table.removeRow(row)
+        def move(delta):
+            row=table.currentRow();other=row+delta
+            if row<0 or not 0<=other<table.rowCount():return
+            a=table.takeItem(row,0);b=table.takeItem(other,0);table.setItem(row,0,b);table.setItem(other,0,a);table.setCurrentCell(other,0)
+        def sort():
+            try:values=sorted(_number(table.item(i,0).text()) for i in range(table.rowCount()))
+            except ValueError:self._error('Введите числовые координаты.');return
+            for i,z in enumerate(values):table.item(i,0).setText(repr(z))
+        def apply():
+            try:
+                values=[_number(table.item(i,0).text()) for i in range(table.rowCount())];cfg=deepcopy(self.cfg);cfg.z_mm=values;cfg.validate()
+            except ValueError as exc:self._error(exc);return
+            self.geom_widgets['z_mm'].setText('; '.join(repr(z) for z in values));self._record_edit(label='Осевые сечения');dialog.accept()
+        for label,slot in [('Добавить',add),('Удалить',remove),('↑',lambda:move(-1)),('↓',lambda:move(1)),('Упорядочить',sort),('Применить',apply)]:
+            button=QPushButton(label);button.clicked.connect(slot);buttons.addWidget(button)
+        layout.addLayout(buttons);dialog.resize(620,430);self.sections_dialog=dialog;self.sections_table=table;dialog.show()
 
     def open_settings(self):
         self.settings_page.show()
@@ -455,14 +506,16 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
     def _build_results_tab(self):
         page=QWidget();lay=QVBoxLayout(page)
         actions=QHBoxLayout()
-        self.calc_btn=QPushButton('Рассчитать четыре сечения (F5)')
+        self.calc_btn=QPushButton('Рассчитать сечения (F5)')
         self.calc_btn.clicked.connect(self.run_calc)
         actions.addWidget(self.calc_btn)
+        self.cancel_calc_btn=QPushButton("Отменить");self.cancel_calc_btn.setEnabled(False);self.cancel_calc_btn.clicked.connect(lambda:self.thread.requestInterruption() if self.thread else None);actions.addWidget(self.cancel_calc_btn)
         self.plane_select=QComboBox();self.plane_select.setMinimumWidth(150);self.plane_select.currentIndexChanged.connect(self._plot_result)
         actions.addWidget(QLabel('Сечение:'));actions.addWidget(self.plane_select)
         for label,slot in [('XLSX: эпюры',self.export_xlsx),('CSV: матрицы',self.export_results),('PNG: текущее',self.export_png),
-                            ('PNG: все 4',self.export_all_png)]:
+                            ('PNG: все z',self.export_all_png)]:
             b=QPushButton(label);b.clicked.connect(slot);actions.addWidget(b)
+        regression=QPushButton("Идентификация параметров");regression.clicked.connect(self.open_regression);actions.addWidget(regression)
         actions.addStretch();lay.addLayout(actions)
         self.progress=QProgressBar();self.progress.setRange(0,4);self.progress.setValue(0)
         lay.addWidget(self.progress)
@@ -481,7 +534,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.scale_mode=QComboBox();self.scale_mode.addItem('Auto','auto');self.scale_mode.addItem('Manual','manual')
         self.scale_min=_dbl(0,decimals=8);self.scale_max=_dbl(1,decimals=8)
         self.scale_range=QComboBox();self.scale_range.addItem('Saturate','saturate');self.scale_range.addItem('Clip to range','clip')
-        self.scale_shared=QCheckBox('Общая шкала четырёх z')
+        self.scale_shared=QCheckBox('Общая шкала всех z')
         for w in (QLabel('Цветовая шкала:'),self.scale_mode,QLabel('min'),self.scale_min,
                   QLabel('max'),self.scale_max,self.scale_range,self.scale_shared):scales.addWidget(w)
         scales.addStretch();lay.addLayout(scales)
@@ -505,10 +558,13 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         representations.insertWidget(2,self.metric_equation)
         chart_controls=QHBoxLayout()
         self.plot_count=_integer(6,1,140);self.plot_columns=_integer(2,1,6)
+        self.graph_selection=GraphSelection(self.plot_count);self.graph_selection.changed.connect(self._view_changed)
         self.plot_count.setEnabled(False);self.plot_columns.setEnabled(False)
         for label,widget in (("Графиков эпюр:",self.plot_count),("Колонок:",self.plot_columns)):
             chart_controls.addWidget(QLabel(label));chart_controls.addWidget(widget)
             widget.valueChanged.connect(self._view_changed)
+        chart_controls.addWidget(self.graph_selection)
+        self.fit_scale_button=QPushButton("Подогнать масштаб");self.fit_scale_button.setEnabled(False);self.fit_scale_button.clicked.connect(self._fit_plot_scales);chart_controls.addWidget(self.fit_scale_button)
         self.plot_count.setToolTip("Количество последовательных радиальных уровней, начиная с выбранного R; полный набор начинается с первого уровня.")
         reset=QPushButton("Исходный масштаб");self.reset_plot_button=reset;reset.setEnabled(False);reset.clicked.connect(self._reset_plot_zoom);chart_controls.addWidget(reset)
         chart_controls.addStretch()
@@ -578,7 +634,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self._restoring=restoring
 
     def _read_controls(self):
-        cfg=Settings(**{k:getattr(self.cfg,k) for k in vars(self.cfg)})
+        cfg=deepcopy(self.cfg)
         for key,w in self.geom_widgets.items():
             if key in ('z_mm','radial_centers_mm'):
                 text=w.text().strip().replace(',','.')
@@ -862,17 +918,17 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             if key==self._preview_key:return
             n=effective_nozzle(next(n for n in self.nozzles if n.id==self.sector_id),cfg)
             # Only one source is evaluated, at z=0, without a 140-source calculation.
-            x,y=polar_epure_coordinates(n,0,cfg,8,n_angles=288)
+            x,y=polar_epure_coordinates(n,n.z_tip_mm,cfg,8,n_angles=288)
             theta=np.deg2rad(n.theta_deg)
             x0=n.radius_mm*np.cos(theta);y0=n.radius_mm*np.sin(theta)
             from .core import geometry_at, _kernel_outer_limit
-            rc,h=geometry_at(n,0,cfg);span=max(_kernel_outer_limit(rc,h,cfg.radial_model)*1.2,1)
-            field=evaluate_continuous_field([n],cfg,0,resolution=SINGLE_NOZZLE_PREVIEW_RESOLUTION,
+            rc,h=geometry_at(n,n.z_tip_mm,cfg);span=max(_kernel_outer_limit(rc,h,cfg.radial_model)*1.2,1)
+            field=evaluate_continuous_field([n],cfg,n.z_tip_mm,resolution=SINGLE_NOZZLE_PREVIEW_RESOLUTION,
                 bounds_xy=(x0-span,x0+span,y0-span,y0+span),mask_track=False)
             self.figpreview.clear()
             ax=self.figpreview.add_subplot(121,projection='polar')
             ax.plot(np.arctan2(y-y0,x-x0),np.hypot(x-x0,y-y0))
-            ax.set_title(f'№{n.id}: относительная эпюра, z=0',fontsize=9)
+            ax.set_title(f'№{n.id}: эпюра, z лок.=0; z={n.z_tip_mm:g} мм',fontsize=9)
             ax=self.figpreview.add_subplot(122)
             data,norm,cmap=color_scale(field.masked_flux_kg_m2_s,cfg)
             # Interpolation is display-only. Strict clipping must not blend hidden pixels.
@@ -880,7 +936,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             im=ax.imshow(data,origin='lower',extent=[field.x_mm[0],field.x_mm[-1],field.y_mm[0],field.y_mm[-1]],cmap=cmap,norm=norm,
                          interpolation=interpolation)
             ax.set(xlim=(x0-span,x0+span),ylim=(y0-span,y0+span),aspect='equal')
-            ax.set_title('Поле одной форсунки, z=0',fontsize=9)
+            ax.set_title(f'Поле одной форсунки: z={n.z_tip_mm:g} мм, z лок.=0',fontsize=9)
             ax.set_xlabel('X, мм');ax.set_ylabel('Y, мм')
             self.figpreview.colorbar(im,ax=ax,shrink=.8,label='кг/(м²·с)')
             self.previewcanvas.draw_idle()
@@ -1062,10 +1118,10 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             self.cfg=cfg;self.nozzles=nozzles
         except Exception as exc:
             self._error(exc);return
-        self._invalidate_results()
         self._calc_revision=self._revision
+        self.progress.setRange(0,len(cfg.z_mm))
         self.progress.setValue(0)
-        self.calc_btn.setEnabled(False)
+        self.calc_btn.setEnabled(False);self.cancel_calc_btn.setEnabled(True)
         self.thread=QThread(self)
         self.worker=CalcWorker(cfg,nozzles)
         self.worker.moveToThread(self.thread)
@@ -1073,8 +1129,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.worker.progress.connect(self._progress)
         self.worker.completed.connect(self._done)
         self.worker.failed.connect(self._failed)
-        self.worker.completed.connect(self.thread.quit)
-        self.worker.failed.connect(self.thread.quit)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.cancelled.connect(lambda:self.statusBar().showMessage("Расчёт отменён; частичные поля не применены.",10000))
         self.thread.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self._cleanup_thread)
         self.thread.start()
@@ -1082,7 +1138,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
 
     def _progress(self,message):
         self.statusBar().showMessage(message)
-        self.progress.setValue(min(3,self.progress.value()+1))
+        self.progress.setValue(min(self.progress.maximum(),self.progress.value()+1))
 
     def _done(self,planes):
         if hasattr(self,'_calc_revision') and self._calc_revision!=self._revision:
@@ -1091,7 +1147,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         if hasattr(self,'_invalidate_render'):self._invalidate_render()
         self.results=[v[0] for v in planes]
         self.smooth_fields=[v[1] for v in planes]
-        self.progress.setValue(4)
+        self.progress.setValue(len(planes))
         # The worker emits (PlaneResult, ContinuousField) pairs.
         # `self.results` already contains the unwrapped PlaneResult objects.
         # Keep signals blocked through the initial selection to avoid drawing
@@ -1106,7 +1162,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             self.plane_select.blockSignals(False)
         self._plot_result()
         count=sum(1 for n in self.nozzles if n.enabled and source_flow_kg_s(n,self.cfg)>0)
-        self.statusBar().showMessage(f'Готово: 4 сечения, {count} форсунок с расходом.',20000)
+        self.statusBar().showMessage(f'Готово: {len(self.results)} '+('сечение' if len(self.results)%10==1 and len(self.results)%100!=11 else 'сечения' if len(self.results)%10 in (2,3,4) and len(self.results)%100 not in (12,13,14) else 'сечений')+f', {count} форсунок с расходом.',20000)
 
     def _failed(self,message):
         self._error('Расчёт не выполнен:\n'+message[-2200:])
@@ -1116,7 +1172,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.thread.deleteLater()
         self.thread=None
         self.worker=None
-        self.calc_btn.setEnabled(True)
+        self.calc_btn.setEnabled(True);self.cancel_calc_btn.setEnabled(False)
 
     def _plot_result(self,*args):
         for widget in (self.plot_count,self.plot_columns,self.reset_plot_button):widget.setEnabled(self.plots.currentIndex()==3)
@@ -1126,7 +1182,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         total=p.injected_kg_s*3600
         self.balance_label.setText(
             f'<b>Сечение {i+1}, z={p.z_mm:g} мм.</b> '
-            f'Введено {total:.5g} кг/ч; в тракте {p.inside_kg_s*3600:.5g} кг/ч '
+            f'Через сопла перед сечением {total:.5g} кг/ч; в тракте {p.inside_kg_s*3600:.5g} кг/ч '
             f'({100*p.inside_kg_s/max(p.injected_kg_s,1e-15):.2f}%); '
             f'за внутренней границей {p.inner_kg_s*3600:.5g} кг/ч; '
             f'за наружной {p.outer_kg_s*3600:.5g} кг/ч; '
@@ -1139,14 +1195,44 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         k=matching_index(p.radial_centers_mm,previous) if previous is not None else None
         if k is not None:self.compare_radius.setCurrentIndex(k)
         self.compare_radius.blockSignals(False)
+        total=len(p.radial_centers_mm);start=0 if self.plot_count.value()==total else max(0,self.compare_radius.currentIndex())
+        self.graph_selection.configure([(float(r),f"Уровень {k+1}: R={r:g} мм") for k,r in enumerate(p.radial_centers_mm)],
+            [float(p.radial_centers_mm[(start+k)%total]) for k in range(total)],identity=tuple(p.radial_centers_mm))
+        self.graph_selection.setEnabled(self.plots.currentIndex()==3)
         self._render_view(self.plots.currentIndex(),i)
         self.comparison.sync_from_primary()
 
     def _toggle_split(self,enabled):
+        self.fit_scale_button.setEnabled(bool(enabled and self.results and (self.comparison.planes or self.comparison.tables)))
         self.comparison.setVisible(enabled)
         if enabled:
             self.result_panels.setSizes([max(1,self.result_panels.width()*3//5),max(1,self.result_panels.width()*2//5)])
             self.comparison.sync_from_primary()
+
+    def _fit_plot_scales(self):
+        if not self.results or not self.split_button.isChecked():return
+        self.plots.setCurrentIndex(3)
+        self.result_panels.setSizes([self.result_panels.width()//2]*2)
+        QApplication.processEvents()
+        primary=self.curvecanvas;other=self.comparison.canvas
+        axes=list(primary.figure.axes)+list(other.figure.axes)
+        if not axes:return
+        for canvas in (primary,other):canvas.draw()
+        width=min(ax.bbox.width for ax in axes);height=min(ax.bbox.height for ax in axes)
+        for ax in axes:
+            bbox=ax.get_position();fw,fh=ax.figure.bbox.width,ax.figure.bbox.height
+            ax.set_position([bbox.x0+(bbox.width-width/fw)/2,bbox.y0+(bbox.height-height/fh)/2,width/fw,height/fh])
+        groups={}
+        for ax in axes:
+            if hasattr(ax,'_compare_y'):groups.setdefault((getattr(ax,'_compare_x',None),ax._compare_y),[]).append(ax)
+        for (xunit,yunit),items in groups.items():
+            if xunit is None or len(items)<2:continue
+            xmin=min(ax.get_xlim()[0] for ax in items);xmax=max(ax.get_xlim()[1] for ax in items)
+            ymin=min(ax.get_ylim()[0] for ax in items);ymax=max(ax.get_ylim()[1] for ax in items)
+            for ax in items:ax.set_xlim(xmin,xmax);ax.set_ylim(ymin,ymax)
+        # Keep explicit equal-size positions through subsequent paints.
+        for canvas in (primary,other):canvas.figure.set_layout_engine(None);canvas.draw_idle()
+        self.statusBar().showMessage('Размеры графиков выровнены; совместимые оси получили общий диапазон.',10000)
 
     def _reset_plot_zoom(self):
         canvas=self.plot_stacks[self.plots.currentIndex()].currentWidget()
@@ -1162,7 +1248,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
 
     def _render_view(self,view,i):
         key=(i,view,self.draw_outlines.isChecked(),self.draw_labels.isChecked(),
-             self.draw_rose_over_field.isChecked(),self.rose_scale.value(),self.metric.currentData(),self.volume_interval.value(),self.compare_radius.currentData(),self.plot_count.value(),self.plot_columns.value())
+             self.draw_rose_over_field.isChecked(),self.rose_scale.value(),self.metric.currentData(),self.volume_interval.value(),self.compare_radius.currentData(),self.plot_count.value(),self.plot_columns.value(),tuple(self.graph_selection.selected))
         fig_name,canvas_name=[('figmap','mapcanvas'),('figsmooth','smoothcanvas'),
                               ('figroses','rosescanvas'),('figcurves','curvecanvas')][view]
         stack=self.plot_stacks[view]
@@ -1230,7 +1316,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.figcurves.clear()
         total=len(p.radial_centers_mm);n=min(total,self.plot_count.value())
         start=0 if n==total else max(0,self.compare_radius.currentIndex())
-        indices=[(start+k)%total for k in range(n)]
+        indices=[matching_index(p.radial_centers_mm,r) for r in self.graph_selection.selected]
+        indices=[k for k in indices if k is not None];n=len(indices)
         cols=min(n,self.plot_columns.value())
         rows=int(np.ceil(n/cols))
         angles=p.theta_centers_deg
@@ -1242,6 +1329,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             ax.plot(np.r_[x,x[0]+360],np.r_[y,y[0]],lw=1.2)
             selected=self.compare_radius.currentData() is not None and np.isclose(p.radial_centers_mm[k],self.compare_radius.currentData(),rtol=0,atol=1e-7)
             ax.set_title(f'Уровень {k+1}: R={p.radial_centers_mm[k]:.2f} мм'+(' · сравнение' if selected else ''),fontsize=9,color='#734ca0' if selected else '#222222')
+            ax._compare_x='angle_deg';ax._compare_y=UNITS[self.metric.currentData()]
             ax.set_xlim(0,360)
             ax.grid(alpha=.24)
             ax.tick_params(labelsize=7)
@@ -1253,21 +1341,22 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
 
     def closeEvent(self,event):
         comparison=getattr(self,'comparison',None)
-        if self.thread is not None or comparison is not None and comparison.thread is not None:
+        regression=getattr(self,'regression_dialog',None)
+        if self.thread is not None or comparison is not None and comparison.thread is not None or regression is not None and regression.thread is not None:
             self.statusBar().showMessage('Дождитесь завершения расчёта перед закрытием.',8000)
             event.ignore();return
         super().closeEvent(event)
 
     def export_xlsx(self):
-        if len(self.results)!=4:self._error('Сначала рассчитайте четыре сечения.');return
-        path,_=QFileDialog.getSaveFileName(self,'Окружные эпюры четырёх сечений','epures.xlsx','Excel (*.xlsx)')
+        if not self.results:self._error('Сначала рассчитайте сечения.');return
+        path,_=QFileDialog.getSaveFileName(self,'Окружные эпюры всех сечений','epures.xlsx','Excel (*.xlsx)')
         if path:
             try:write_epures_xlsx(path,self.results,self.cfg,self.metric.currentData(),self.volume_interval.value())
             except Exception as exc:self._error(exc)
 
     def export_results(self):
         if not self.results:self._error('Сначала выполните расчёт.');return
-        path,_=QFileDialog.getSaveFileName(self,'Матрицы четырех сечений','fuel_fields.csv','CSV (*.csv)')
+        path,_=QFileDialog.getSaveFileName(self,'Матрицы всех сечений','fuel_fields.csv','CSV (*.csv)')
         if path:
             try:write_result_csv(path,self.results)
             except Exception as exc:self._error(exc)
@@ -1289,11 +1378,11 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
 
     def export_all_png(self):
         if not self.results:self._error('Сначала выполните расчёт.');return
-        folder=QFileDialog.getExistingDirectory(self,'Папка для четырех карт и 24 графиков')
+        folder=QFileDialog.getExistingDirectory(self,'Папка для всех сечений и графиков')
         if not folder:return
         try:
             current=self.plane_select.currentIndex()
-            for i in range(4):
+            for i in range(len(self.results)):
                 self.plane_select.setCurrentIndex(i)
                 for view in range(4):self._render_view(view,i)
                 self.figmap.savefig(os.path.join(folder,f'section_{i+1}_field.png'),dpi=180,bbox_inches='tight')
@@ -1301,7 +1390,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                 self.figsmooth.savefig(os.path.join(folder,f'section_{i+1}_detailed.png'),dpi=180,bbox_inches='tight')
                 self.figroses.savefig(os.path.join(folder,f'section_{i+1}_polar_nozzles.png'),dpi=180,bbox_inches='tight')
             self.plane_select.setCurrentIndex(current)
-            self.statusBar().showMessage('Сохранены 16 PNG: матрицы, подробные поля, полярные эпюры и графики по радиальным уровням.',15000)
+            self.statusBar().showMessage(f'Сохранены {4*len(self.results)} PNG: карты и эпюры всех сечений.',15000)
         except Exception as exc:self._error(exc)
 
     def new_project(self):

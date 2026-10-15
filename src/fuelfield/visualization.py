@@ -12,6 +12,7 @@ from matplotlib import patheffects
 from matplotlib.colors import Normalize
 from matplotlib import colormaps
 from .core import polar_epure_coordinates, source_flow_kg_s
+from .v02 import effective_nozzle
 
 
 def color_scale(values, cfg, shared_values=None):
@@ -56,9 +57,11 @@ def draw_nozzle_markers(ax, cfg, nozzles, *, polar=False, outlines=True, labels=
             kw=dict(ha='center',va='center',fontsize=5,color='#fff' if n.enabled else '#aaa',
                     zorder=11,path_effects=stroke)
             if polar:
-                ax.text(angle,n.radius_mm,str(n.id),**kw)
+                tip=effective_nozzle(n,cfg).z_tip_mm
+                ax.text(angle,n.radius_mm,str(n.id)+(f'\nzₛ={tip:g}' if tip else ''),**kw)
             else:
-                ax.text(x0,y0,str(n.id),**kw)
+                tip=effective_nozzle(n,cfg).z_tip_mm
+                ax.text(x0,y0,str(n.id)+(f'\nzₛ={tip:g}' if tip else ''),**kw)
 
 
 def draw_polar_nozzle_profiles(ax, cfg, nozzles, z_mm, scale_mm, *, fill=False):
