@@ -5,6 +5,7 @@ import hashlib,json,time
 import numpy as np
 from scipy.optimize import least_squares
 from .core import project_from_json,project_to_json,calculate_plane,geometry_at,source_flow_kg_s
+from .coordinates import grid_angles
 from .v02 import GEOMETRY_KEYS,NOZZLE_KINDS,effective_nozzle,validate_nozzles
 from .analysis import cell_values,matching_index
 
@@ -58,7 +59,7 @@ class RegressionTarget:
         if not np.all(np.isfinite(weights)) or np.any(weights<0):raise ValueError('Веса должны быть конечными и неотрицательными')
         if not set(split).issubset({'train','holdout','test'}):raise ValueError('Роль наблюдения: train / holdout / test')
         if not np.all(np.isfinite(np.asarray(self.y)[mask])) or np.any(np.asarray(self.y)[mask]<0):raise ValueError('Используемые топливные значения должны быть конечными и неотрицательными')
-        radii,edges=cfg.radial_centers_and_edges();angles=(cfg.grid_start_deg+np.arange(cfg.n_angular)*360/cfg.n_angular)%360
+        radii,edges=cfg.radial_centers_and_edges();angles=grid_angles(cfg)
         source_grid=self.metadata.get('model_settings')
         if source_grid:
             for key in ('r_in_mm','r_out_mm','n_radial','n_angular'):

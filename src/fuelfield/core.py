@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, asdict, fields
 from typing import Optional
 import numpy as np
+from .coordinates import grid_angles,angular_indices
 from .v02 import (GEOMETRY_KEYS, default_presets, validate_catalog, effective_nozzle,
                   flow_status, validate_nozzles)
 
@@ -76,6 +77,9 @@ class Settings:
     n_radial: int = 6
     n_angular: int = 140
     grid_start_deg: float = 0.0  # angular position of CENTER of first matrix cell
+    theta_zero_deg: float = 0.0  # physical location of measurement zero, from +X CCW
+    theta_direction: int = 1  # +1 CCW, -1 CW measurement traversal
+    display_x_axis: str = "angle"
     radial_centers_mm: Optional[list[float]] = None
     geometry_model: str = 'linear'
     angular_model: str = 'preserve'
@@ -154,6 +158,8 @@ class Settings:
                                    (self.radial_model, RADIAL_MODELS, 'радиальный профиль')):
             if value not in pool:
                 raise ValueError(f'Неизвестная модель «{label}»: {value}')
+        if not np.isfinite(self.theta_zero_deg) or self.theta_direction not in (-1,1) or isinstance(self.theta_direction,bool):raise ValueError("Нужны конечный угол нуля и направление +1/-1.")
+        if self.display_x_axis not in ("angle","cells"):raise ValueError("Ось X: градусы или ячейки.")
         self.radial_centers_and_edges()
 
     def radial_centers_and_edges(self):
@@ -259,7 +265,7 @@ def angular_profile(n: Nozzle, z_mm: float, cfg: Settings):
     return a
 
 
-def sample_kernel(n: Nozzle, z_mm: float, cfg: Settings):
+def sample_kernel(n: Nozzle, z_mm: float, cfg: Settings, *, unit_mass=False):
     """Return source-position points [mm] and *exactly* normalized flow weights [kg/s].
 
     Sector 1 is centered toward the track middle line; sectors 2..36 are CCW
@@ -301,7 +307,7 @@ def sample_kernel(n: Nozzle, z_mm: float, cfg: Settings):
             r[:,None]*np.cos(direction)[None,:])
     ypos = (n.radius_mm*np.sin(np.deg2rad(n.theta_deg)) +
             r[:,None]*np.sin(direction)[None,:])
-    weights = (source_flow_kg_s(n,cfg)*wr[:,None]*ap[None,:]).reshape(-1)
+    weights = ((1.0 if unit_mass else source_flow_kg_s(n,cfg))*wr[:,None]*ap[None,:]).reshape(-1)
     return xpos.reshape(-1), ypos.reshape(-1), weights
 
 @dataclass
@@ -347,14 +353,13 @@ def calculate_plane(nozzles: list[Nozzle], cfg: Settings, z_mm: float) -> PlaneR
         inner += float(np.sum(w[ir<0]))
         outer += float(np.sum(w[ir>=nrad]))
         if np.any(mask_in):
-            theta = (np.arctan2(yp[mask_in],xp[mask_in])-theta0+dtheta/2)%(2*np.pi)
-            ith = np.floor(theta/dtheta).astype(int).clip(0,nang-1)
+            ith = angular_indices(xp[mask_in],yp[mask_in],cfg)
             cell_id = ir[mask_in]*nang+ith
             mass += np.bincount(cell_id,weights=w[mask_in],minlength=nrad*nang).reshape(nrad,nang)
     area = (np.pi/nang)*(np.diff((edges*1e-3)**2))
     area = np.repeat(area[:,None],nang,axis=1)
     flux = mass/area
-    th_centers = (cfg.grid_start_deg+np.arange(nang)*360/nang)%360
+    th_centers = grid_angles(cfg)
     return PlaneResult(float(z_mm),mass,area,flux,centers,edges,th_centers,
                        injected,float(mass.sum()),inner,outer)
 
@@ -365,7 +370,7 @@ def _json_record(obj):
 
 
 def project_to_json(settings: Settings, nozzles: list[Nozzle]):
-    return {**settings._project_extra,'format':'fuel-field-pilot-v1','version':'0.4',
+    return {**settings._project_extra,'format':'fuel-field-pilot-v1','version':'0.5',
             'settings':_json_record(settings),
             'nozzles':[{**_json_record(n),'r_nozzle_mm':n.r_nozzle_mm} for n in nozzles]}
 
