@@ -1,0 +1,65 @@
+{
+  "version": "0.4.1",
+  "project": "examples/demo_project_user_field.json",
+  "python": "3.12.14",
+  "platform": "Linux",
+  "method": "Linux offscreen; Matplotlib events + Qt painting, 5 hover warmups excluded; extra real QTest mouseMove (delay=0), no concurrent tests",
+  "primary_four_sections_ms": 2743.971,
+  "split_four_sections_and_fields_ms": 3629.427,
+  "json_six_epures": {
+    "linked_pin": {
+      "samples": 10,
+      "median_ms": 51.848,
+      "p95_ms": 74.068,
+      "max_ms": 75.066
+    },
+    "hover_10_pins_10_oblique": {
+      "samples": 200,
+      "median_ms": 16.747,
+      "p95_ms": 22.41,
+      "max_ms": 87.254
+    },
+    "real_qt_hover_10_pins_10_oblique": {
+      "samples": 50,
+      "median_ms": 16.892,
+      "p95_ms": 21.054,
+      "max_ms": 30.656
+    },
+    "linked_zoom_both_canvases": {
+      "samples": 10,
+      "median_ms": 660.487,
+      "p95_ms": 733.794,
+      "max_ms": 776.428
+    },
+    "pearson_dialog_ms": 93.456
+  },
+  "xlsx_different_radius": {
+    "linked_pin": {
+      "samples": 10,
+      "median_ms": 36.202,
+      "p95_ms": 46.231,
+      "max_ms": 46.429
+    },
+    "hover_10_pins_10_oblique": {
+      "samples": 200,
+      "median_ms": 17.542,
+      "p95_ms": 22.598,
+      "max_ms": 29.997
+    },
+    "real_qt_hover_10_pins_10_oblique": {
+      "samples": 50,
+      "median_ms": 17.788,
+      "p95_ms": 20.141,
+      "max_ms": 20.701
+    },
+    "linked_zoom_both_canvases": {
+      "samples": 10,
+      "median_ms": 469.409,
+      "p95_ms": 532.171,
+      "max_ms": 544.189
+    },
+    "pearson_dialog_ms": 83.182
+  },
+  "physics_unchanged": true,
+  "max_relative_balance": 9.309648020301631e-15
+}
