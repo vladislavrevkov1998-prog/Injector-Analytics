@@ -40,7 +40,7 @@
 
 ## Запуск
 
-Из корня репозитория в Python 3.11+ (SciPy 1.16.3, NumPy 1.25.2–2.5.x):
+Из корня репозитория в Python 3.12+ (проверено на 3.12.14; SciPy 1.16.3, NumPy 1.25.2–2.5.x):
 
 ```bash
 python -m pip install -r requirements.txt
