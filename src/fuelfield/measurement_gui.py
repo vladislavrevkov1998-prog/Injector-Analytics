@@ -8,7 +8,7 @@ from PyQt5.QtCore import Qt,QObject,QThread,pyqtSignal,pyqtSlot,QAbstractTableMo
 from PyQt5.QtGui import QColor,QKeySequence
 from PyQt5.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QFormLayout,QLabel,QPushButton,QComboBox,QLineEdit,
     QSpinBox,QCheckBox,QFileDialog,QMessageBox,QTabWidget,QTableWidgetItem,QTableView,QHeaderView,QDialog,
-    QDialogButtonBox,QProgressBar,QApplication,QSplitter,QGroupBox,QScrollArea,QToolButton)
+    QDialogButtonBox,QProgressBar,QApplication,QSplitter,QGroupBox,QScrollArea,QToolButton,QTextBrowser)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from .numeric_input import DecimalSpinBox
@@ -118,7 +118,7 @@ class MeasurementPanel(QWidget):
         layout=QVBoxLayout(self);top=QHBoxLayout();self.import_buttons=[];self.edit_buttons=[]
         for label,slot in [('JSON сессии / проекта',self.open_json),('Остановки CSV/XLSX',lambda:self.open_table('steps')),('Давление CSV/XLSX',lambda:self.open_table('pressure')),('JSON: сохранить',self.export_session)]:
             b=QPushButton(label);b.clicked.connect(slot);top.addWidget(b);self.import_buttons.append(b)
-        top.addStretch();layout.addLayout(top)
+        top.addStretch();self.guide_button=QPushButton('Инструкция');self.guide_button.clicked.connect(self.show_guide);top.addWidget(self.guide_button);layout.addLayout(top)
         self.passport_toggle=QToolButton();self.passport_toggle.setText('Паспорт и параметры сессии');self.passport_toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon);self.passport_toggle.setCheckable(True);self.passport_toggle.setChecked(True);self.passport_toggle.setArrowType(Qt.DownArrow);layout.addWidget(self.passport_toggle)
         self.settings_widget=QWidget();settings=QHBoxLayout(self.settings_widget);settings.setContentsMargins(0,0,0,0);geometry=QGroupBox('Паспорт измерения');g=QFormLayout(geometry)
         self.z=spin(0,0,1e6);self.radii=QLineEdit();self.zero=spin(0,-360,360);self.direction=QComboBox();self.direction.addItem('Против часовой стрелки',1);self.direction.addItem('По часовой стрелке',-1);self.start_angle=spin(0,-360,360);self.nominal=QSpinBox();self.nominal.setRange(1,10000);self.nominal.setValue(140)
@@ -153,6 +153,24 @@ class MeasurementPanel(QWidget):
         self.nominal.valueChanged.connect(self.mark_dirty);self.time_extrap.toggled.connect(self.mark_dirty)
         self.steps.itemChanged.connect(self.mark_dirty);self.steps.batchFinished.connect(self.mark_dirty);self.manifolds.itemChanged.connect(self.mark_dirty);self.manifolds.batchFinished.connect(self.mark_dirty);self.pressure_model.dataChanged.connect(self.mark_dirty)
         self.load_project(force=True)
+    def show_guide(self):
+        if hasattr(self,'guide_dialog'):
+            self.guide_dialog.show();self.guide_dialog.raise_();self.guide_dialog.activateWindow();return
+        path=Path(__file__).resolve().parents[2]/'docs/V0.5_MEASUREMENT_SESSION_GUIDE.md'
+        try:content=path.read_text(encoding='utf-8')
+        except OSError as exc:self.status.setText('Не удалось открыть инструкцию: '+str(exc));return
+        self.guide_dialog=QDialog(self);self.guide_dialog.setWindowTitle('Инструкция: измерительная сессия');self.guide_dialog.resize(1000,720)
+        layout=QVBoxLayout(self.guide_dialog);browser=QTextBrowser();browser.setObjectName('measurement_session_guide');browser.setOpenExternalLinks(True);browser.setMarkdown(content)
+        navigation=QHBoxLayout();navigation.addWidget(QLabel('Раздел:'));sections=QComboBox();sections.setObjectName('measurement_session_guide_sections');navigation.addWidget(sections,1);layout.addLayout(navigation)
+        block=browser.document().begin()
+        while block.isValid():
+            if block.blockFormat().headingLevel() in (2,3):sections.addItem(block.text(),block.position())
+            block=block.next()
+        def jump(index):
+            cursor=browser.textCursor();cursor.setPosition(sections.itemData(index));browser.setTextCursor(cursor);browser.ensureCursorVisible()
+            scrollbar=browser.verticalScrollBar();scrollbar.setValue(scrollbar.value()+browser.cursorRect().top())
+        sections.activated.connect(jump);layout.addWidget(browser)
+        close=QDialogButtonBox(QDialogButtonBox.Close);close.button(QDialogButtonBox.Close).setText('Закрыть');close.rejected.connect(self.guide_dialog.close);layout.addWidget(close);self.guide_dialog.show()
     def mark_dirty(self,*args):
         if self.result is not None:
             self.status.setText('Входные данные изменены. На графиках и в экспорте остаётся предыдущий расчётный снимок; выполните новый расчёт.')
