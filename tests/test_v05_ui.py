@@ -89,6 +89,10 @@ class TestV05UI(unittest.TestCase):
   panel=self.w.measurement_panel;panel.set_session(source);panel.steps.item(0,17).setText('edited note');actual=panel.read_session()
   for key in ('z_mm','radii_mm','transport_delay_s','nozzle_delays_s'):self.assertEqual(getattr(actual,key),getattr(source,key))
   self.assertEqual(actual.steps[0].t_start_s,value);self.assertEqual(actual.steps[0].theta_deg,value);self.assertEqual(actual.steps[0].temperatures_C,step.temperatures_C)
+ def test_result_layout_reserves_plot_space_at_1280(self):
+  panel=self.w.measurement_panel;self.w.tabs.setCurrentWidget(panel);self.w.resize(1280,800);panel.pages.setCurrentWidget(panel.result_page);self.app.processEvents()
+  self.assertFalse(panel.passport_toggle.isChecked());self.assertGreater(panel.canvas.height(),350);self.assertGreater(panel.canvas.width(),500)
+  panel.passport_toggle.setChecked(True);self.app.processEvents();self.assertTrue(panel.settings_widget.isVisible());panel.pages.setCurrentIndex(0);self.app.processEvents();self.assertTrue(panel.passport_toggle.isChecked())
  def test_table_mapping_import_and_raw_rows_preserved(self):
   panel=self.w.measurement_panel
   with tempfile.TemporaryDirectory() as folder:

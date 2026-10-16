@@ -8,7 +8,7 @@ from PyQt5.QtCore import Qt,QObject,QThread,pyqtSignal,pyqtSlot,QAbstractTableMo
 from PyQt5.QtGui import QColor,QKeySequence
 from PyQt5.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QFormLayout,QLabel,QPushButton,QComboBox,QLineEdit,
     QSpinBox,QCheckBox,QFileDialog,QMessageBox,QTabWidget,QTableWidgetItem,QTableView,QHeaderView,QDialog,
-    QDialogButtonBox,QProgressBar,QApplication,QSplitter,QGroupBox,QScrollArea)
+    QDialogButtonBox,QProgressBar,QApplication,QSplitter,QGroupBox,QScrollArea,QToolButton)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from .numeric_input import DecimalSpinBox
@@ -119,14 +119,16 @@ class MeasurementPanel(QWidget):
         for label,slot in [('JSON сессии / проекта',self.open_json),('Остановки CSV/XLSX',lambda:self.open_table('steps')),('Давление CSV/XLSX',lambda:self.open_table('pressure')),('JSON: сохранить',self.export_session)]:
             b=QPushButton(label);b.clicked.connect(slot);top.addWidget(b);self.import_buttons.append(b)
         top.addStretch();layout.addLayout(top)
-        settings=QHBoxLayout();geometry=QGroupBox('Паспорт измерения');g=QFormLayout(geometry)
+        self.passport_toggle=QToolButton();self.passport_toggle.setText('Паспорт и параметры сессии');self.passport_toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon);self.passport_toggle.setCheckable(True);self.passport_toggle.setChecked(True);self.passport_toggle.setArrowType(Qt.DownArrow);layout.addWidget(self.passport_toggle)
+        self.settings_widget=QWidget();settings=QHBoxLayout(self.settings_widget);settings.setContentsMargins(0,0,0,0);geometry=QGroupBox('Паспорт измерения');g=QFormLayout(geometry)
         self.z=spin(0,0,1e6);self.radii=QLineEdit();self.zero=spin(0,-360,360);self.direction=QComboBox();self.direction.addItem('Против часовой стрелки',1);self.direction.addItem('По часовой стрелке',-1);self.start_angle=spin(0,-360,360);self.nominal=QSpinBox();self.nominal.setRange(1,10000);self.nominal.setValue(140)
         for label,widget in [('z измерения, мм',self.z),('Радиусы R1…R6, мм (через ;)',self.radii),('Ноль сессии от +X против ЧС, °',self.zero),('Направление обхода',self.direction),('Первый номинальный угол сессии, °',self.start_angle),('Номинальных положений в окружности',self.nominal)]:g.addRow(label,widget)
         settings.addWidget(geometry,1);policy=QGroupBox('Время и давление');p=QFormLayout(policy)
         self.default_group=QLineEdit('A');self.delay=spin(0,0,1e9);self.gap=spin(0,0,1e9);self.rtol=spin(1e-6,1e-10,.01,1e-6,10);self.time_extrap=QCheckBox('Разрешить временную экстраполяцию');self.curve_extrap=QLabel()
         for label,widget in [('Коллектор по умолчанию',self.default_group),('Заданная транспортная задержка τ, с',self.delay),('Макс. разрыв давления, с (0 = не ограничен)',self.gap),('Относительная точность Q-интеграла',self.rtol)]:p.addRow(label,widget)
         p.addRow(self.time_extrap);self.curve_extrap.setWordWrap(True);p.addRow(self.curve_extrap)
-        self.assumptions=QLabel('K фиксировано. Без измеренной задержки τ=0. Температура независима; её прогноз и подгонка не выполняются.');self.assumptions.setWordWrap(True);p.addRow(self.assumptions);settings.addWidget(policy,1);layout.addLayout(settings)
+        self.assumptions=QLabel('K фиксировано. Без измеренной задержки τ=0. Температура независима; её прогноз и подгонка не выполняются.');self.assumptions.setWordWrap(True);p.addRow(self.assumptions);settings.addWidget(policy,1);layout.addWidget(self.settings_widget)
+        self.passport_toggle.toggled.connect(self.settings_widget.setVisible);self.passport_toggle.toggled.connect(lambda checked:self.passport_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow))
         self.pages=QTabWidget();layout.addWidget(self.pages,1)
         page=QWidget();v=QVBoxLayout(page);self.steps=table_class(0,18);self.steps.setHorizontalHeaderLabels(['step_id','θ сессии, °','t начала, с','t конца, с','Метод',*[f'T_R{i}, °C' for i in range(1,7)],*[f'valid R{i}' for i in range(1,7)],'Примечание']);v.addWidget(self.steps)
         bar=QHBoxLayout()
@@ -138,6 +140,7 @@ class MeasurementPanel(QWidget):
         bar.addStretch();v.addLayout(bar);self.pages.addTab(page,'Давление и газ')
         self.manifolds=table_class(140,3);self.manifolds.setHorizontalHeaderLabels(['ID форсунки','Коллектор (пусто = общий)','Заданная задержка форсунки, с']);self.manifolds.horizontalHeader().setStretchLastSection(True);self.pages.addTab(self.manifolds,'Коллекторы / задержки')
         self._build_results();self.pages.addTab(self.result_page,'Результаты')
+        self.pages.currentChanged.connect(lambda index:self.passport_toggle.setChecked(self.pages.widget(index)!=self.result_page))
         actions=QHBoxLayout();self.check_button=QPushButton('Проверить');self.check_button.clicked.connect(self.check);actions.addWidget(self.check_button)
         self.attach_button=QPushButton('Сохранить сессию в проект');self.attach_button.clicked.connect(self.attach);actions.addWidget(self.attach_button)
         self.run_button=QPushButton('Рассчитать сессию');self.run_button.clicked.connect(self.run);actions.addWidget(self.run_button)
