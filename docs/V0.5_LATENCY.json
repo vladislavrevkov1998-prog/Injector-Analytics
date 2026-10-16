@@ -1,0 +1,99 @@
+{
+  "version": "0.5.0",
+  "source_commit": "7bbe73ac2b524eede09ccedf126af574217d2a84",
+  "session": {
+    "version": "0.5.0",
+    "python": "3.12.14",
+    "platform": "Linux",
+    "project": "examples/demo_project_user_field.json",
+    "protocol": "140 synthetic windows, 6 channels, constant physical Δp=30; source project unchanged",
+    "method": "Linux offscreen; true QTest mouseMove delay=0 and Qt painting; no concurrent tests",
+    "first_engine_ms": 2256.353,
+    "first_worker_and_render_ms": 3358.721,
+    "cached_engine_ms": 1167.787,
+    "cached_worker_and_render_ms": 1950.035,
+    "qt_heartbeat_gap_ms": {
+      "samples": 104,
+      "median_ms": 13.003,
+      "p95_ms": 18.545,
+      "max_ms": 990.117
+    },
+    "hover_six_dual_axes": {
+      "samples": 100,
+      "median_ms": 11.86,
+      "p95_ms": 38.516,
+      "max_ms": 191.877
+    },
+    "instant_snapshot_render_ms": 432.287,
+    "cancel_and_ui_check_ms": 551.519,
+    "max_static_field_difference": 4.156675004196586e-13,
+    "max_snapshot_balance": 5.699784502225492e-15,
+    "original_static_balance": 9.309648020301631e-15,
+    "physics_unchanged": true
+  },
+  "graphs": {
+    "version": "0.5.0",
+    "project": "examples/demo_project_user_field.json",
+    "python": "3.12.14",
+    "platform": "Linux",
+    "method": "Linux offscreen; Matplotlib events + Qt painting, 5 hover warmups excluded; extra real QTest mouseMove (delay=0), no concurrent tests",
+    "primary_four_sections_ms": 2680.267,
+    "split_four_sections_and_fields_ms": 3872.713,
+    "json_six_epures": {
+      "linked_pin": {
+        "samples": 10,
+        "median_ms": 52.056,
+        "p95_ms": 72.996,
+        "max_ms": 77.286
+      },
+      "hover_10_pins_10_oblique": {
+        "samples": 200,
+        "median_ms": 15.804,
+        "p95_ms": 18.353,
+        "max_ms": 21.896
+      },
+      "real_qt_hover_10_pins_10_oblique": {
+        "samples": 50,
+        "median_ms": 16.051,
+        "p95_ms": 18.438,
+        "max_ms": 27.831
+      },
+      "linked_zoom_both_canvases": {
+        "samples": 10,
+        "median_ms": 636.974,
+        "p95_ms": 693.839,
+        "max_ms": 699.323
+      },
+      "pearson_dialog_ms": 149.79
+    },
+    "xlsx_different_radius": {
+      "linked_pin": {
+        "samples": 10,
+        "median_ms": 32.23,
+        "p95_ms": 44.454,
+        "max_ms": 45.006
+      },
+      "hover_10_pins_10_oblique": {
+        "samples": 200,
+        "median_ms": 17.09,
+        "p95_ms": 19.37,
+        "max_ms": 29.133
+      },
+      "real_qt_hover_10_pins_10_oblique": {
+        "samples": 50,
+        "median_ms": 16.972,
+        "p95_ms": 18.567,
+        "max_ms": 20.209
+      },
+      "linked_zoom_both_canvases": {
+        "samples": 10,
+        "median_ms": 421.812,
+        "p95_ms": 463.699,
+        "max_ms": 482.734
+      },
+      "pearson_dialog_ms": 75.417
+    },
+    "physics_unchanged": true,
+    "max_relative_balance": 9.309648020301631e-15
+  }
+}
