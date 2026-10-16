@@ -1,5 +1,6 @@
 """Per-epure axis limits and explicit major/minor intervals."""
 from PyQt5.QtCore import Qt
+from PyQt5 import sip
 from PyQt5.QtWidgets import QDialog,QVBoxLayout,QFormLayout,QComboBox,QDoubleSpinBox,QDialogButtonBox,QLabel
 from matplotlib.ticker import MultipleLocator,AutoLocator,NullLocator
 
@@ -28,7 +29,7 @@ def open_axes_settings(canvas,parent=None):
             span=values[prefix+'max']-values[prefix+'min']
             if any(0<values[prefix+kind]<span/500 for kind in ('major','minor')):error.setText('Не более 500 делений на ось: увеличьте шаг.');return
         ax=axes[selector.currentIndex()]
-        if ax not in canvas.figure.axes:error.setText('Данные графика изменились. Откройте настройки осей заново.');return
+        if sip.isdeleted(canvas) or ax not in canvas.figure.axes:error.setText('Данные графика изменились. Откройте настройки осей заново.');return
         ax.set_xlim(values['xmin'],values['xmax']);ax.set_ylim(values['ymin'],values['ymax'])
         for axis,prefix in ((ax.xaxis,'x'),(ax.yaxis,'y')):
             major,minor=values[prefix+'major'],values[prefix+'minor']

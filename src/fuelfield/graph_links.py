@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 import math
 import numpy as np
+from PyQt5 import sip
 from PyQt5.QtCore import Qt,QEvent,QPointF,QPoint,QRectF
 from PyQt5.QtGui import QPainter,QPen,QColor,QPolygonF
 from PyQt5.QtWidgets import QWidget,QApplication,QMenu,QDialog,QVBoxLayout,QLabel,QDialogButtonBox
@@ -93,10 +94,16 @@ class GraphLinks:
         self.overlay=LinkOverlay(self);QApplication.instance().installEventFilter(self.overlay)
         # Keep a QObject event filter alive with the same lifetime as the window.
 
+    def reset(self):
+        self.links=[];self.pending=None;self.hovered=None
+        for c in self.controllers:c.link_manager=None
+        self.controllers=[]
+        if not sip.isdeleted(self.overlay):self.overlay.update()
     def refresh(self):
+        if sip.isdeleted(self.owner) or sip.isdeleted(self.overlay):return
         primary=getattr(self.owner,'curvecanvas',None);right=self.owner.comparison.canvas
         active=[]
-        if primary is not None and hasattr(primary,'interaction') and self.owner.plots.currentIndex()==3:active.append(primary.interaction)
+        if primary is not None and not sip.isdeleted(primary) and hasattr(primary,'interaction') and self.owner.plots.currentIndex()==3:active.append(primary.interaction)
         if self.owner.comparison.view.currentIndex()==0:active.append(right.interaction)
         current_axes={ax for c in active for ax in c.axes if ax in c.canvas.figure.axes}
         self.links=[l for l in self.links if l.first in current_axes and l.second in current_axes]
@@ -104,7 +111,7 @@ class GraphLinks:
         for c in active:
             c.link_manager=self
             if not getattr(c,'_link_draw_hook',False):
-                c.canvas.mpl_connect('draw_event',lambda event:self.overlay.update());c._link_draw_hook=True
+                c.canvas.mpl_connect('draw_event',lambda event:self.overlay.update() if not sip.isdeleted(self.overlay) else None);c._link_draw_hook=True
             for ax in c.axes:
                 if not getattr(ax,'_link_callbacks',False):
                     ax.callbacks.connect('xlim_changed',self.limits);ax.callbacks.connect('ylim_changed',self.limits);ax._link_callbacks=True
@@ -116,7 +123,7 @@ class GraphLinks:
     def sources(self):
         if not self.owner.split_button.isChecked() or self.owner.plots.currentIndex()!=3:return []
         canvas=self.owner.curvecanvas
-        if not hasattr(canvas,'interaction') or not canvas.isVisible():return []
+        if not self.owner.results or sip.isdeleted(canvas) or not hasattr(canvas,'interaction') or not canvas.isVisible():return []
         return [(ax,canvas.interaction) for ax in canvas.interaction.axes if ax.name=='rectilinear']
     def anchor(self,ax,c,right):
         # Matplotlib display coordinates use a bottom-left origin; Qt uses top-left.
@@ -124,7 +131,7 @@ class GraphLinks:
         x=ax.bbox.x1/ratio+9 if right else ax.bbox.x0/ratio-9;y=(ax.bbox.y0+ax.bbox.y1)/(2*ratio)
         point=self.overlay.mapFromGlobal(c.canvas.mapToGlobal(QPoint(int(x),int(c.canvas.height()-y))))
         return QPointF(point)
-    def visible(self,link):return link.first_controller.canvas.isVisible() and link.second_controller.canvas.isVisible() and self.owner.split_button.isChecked()
+    def visible(self,link):return not sip.isdeleted(link.first_controller.canvas) and not sip.isdeleted(link.second_controller.canvas) and link.first_controller.canvas.isVisible() and link.second_controller.canvas.isVisible() and self.owner.split_button.isChecked()
     def eventFilter(self,watched,event):
         kind=event.type()
         if kind in (QEvent.Resize,QEvent.Move,QEvent.Show,QEvent.Hide) and watched is self.owner.result_panels:

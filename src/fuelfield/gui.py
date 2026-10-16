@@ -895,14 +895,17 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self._queue_preview()
 
     def _invalidate_render(self):
+        if hasattr(self,'graph_links'):self.graph_links.reset()
         self._render_cache.clear()
-        for stack in self.plot_stacks:
+        names=[('figmap','mapcanvas'),('figsmooth','smoothcanvas'),('figroses','rosescanvas'),('figcurves','curvecanvas')]
+        for index,stack in enumerate(self.plot_stacks):
             # Keep one empty canvas so a stale field never remains visible.
             while stack.count()>1:
                 widget=stack.widget(stack.count()-1)
                 stack.removeWidget(widget);widget.deleteLater()
             if stack.count():
                 canvas=stack.widget(0);canvas.figure.clear();canvas.draw_idle()
+                figure_name,canvas_name=names[index];setattr(self,figure_name,canvas.figure);setattr(self,canvas_name,canvas)
 
     def _invalidate_results(self):
         self._revision+=1

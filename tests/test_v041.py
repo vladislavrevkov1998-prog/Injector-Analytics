@@ -121,6 +121,12 @@ class TestV041Qt(unittest.TestCase):
   self.assertTrue(all(np.asarray(l.get_xdata()).max()<=360 for l in lines));self.assertGreater(dialog.preview_pair.count(),1)
   dialog.preview_pair.setCurrentIndex(dialog.preview_pair.count()-1);self.assertIn('z=45',dialog.figure.axes[0].get_title())
   dialog.show_guide();self.assertTrue(dialog.guide_dialog.isVisible());dialog.guide_dialog.close();dialog.close()
+ def test_invalidation_detaches_deleted_canvases_and_axes_dialog(self):
+  from PyQt5.QtCore import QCoreApplication,QEvent
+  a,b=self.charts();m=self.w.graph_links;m.connect(a.figure.axes[0],a.interaction,b.figure.axes[0],b.interaction)
+  dialog=open_axes_settings(a,self.w);self.w._invalidate_results();QCoreApplication.sendPostedEvents(None,QEvent.DeferredDelete);self.app.processEvents()
+  m.refresh();m.overlay.repaint();self.assertFalse(m.links);self.assertFalse(m.sources());self.assertEqual(self.w.result_panels.count(),2)
+  self.assertIs(self.w.curvecanvas,self.w.plot_stacks[3].widget(0));dialog.apply_settings();dialog.close()
  def test_original_snapshot_prediction_matches_real_epures(self):
   target=RegressionTarget.from_project(self.w.cfg,self.w.nozzles,source_kind='synthetic');snapshot=RegressionSnapshot.capture(self.w.cfg,self.w.nozzles)
   pred=predict_snapshot(snapshot,target);np.testing.assert_allclose(pred,target.y,rtol=0,atol=0);self.assertEqual(RegressionSnapshot.capture(self.w.cfg,self.w.nozzles).sha256,snapshot.sha256)
