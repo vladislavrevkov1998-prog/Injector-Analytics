@@ -288,3 +288,16 @@ def fit(snapshot,target,parameters,*,budget=120,regularization=0.,criterion='abs
                      float(initial_cost or 0),cost,evaluations,status,tuple(notes),diagnostics,
                      dict(budget=budget,regularization=regularization,criterion=criterion,relative_floor=relative_floor,seed=seed,
                           geometry_model=c.geometry_model,angular_model=c.angular_model,algorithm='bounded least_squares + conservative coarse exploration'),time.perf_counter()-started)
+
+
+def predict_snapshot(snapshot,target,cancel=None):
+    """Original project prediction at target coordinates for an honest before/after view."""
+    cfg,nozzles=snapshot.restore();mapping=target.validate(cfg);mask,weights,_=target.arrays();used=mask&(weights>0)
+    fields={};prediction=np.full(len(target.y),np.nan)
+    for z in sorted({z for i,(z,_,_) in enumerate(mapping) if used[i]}):
+        if cancel and cancel():raise ValueError('Предпросмотр исходного проекта отменён')
+        plane=calculate_plane(nozzles,cfg,z)
+        fields[z]=plane.cell_mass_kg_s if target.quantity=='cell_mass' else cell_values(plane,METRIC[target.quantity],cfg.density_kg_m3)
+    for i,(z,r,a) in enumerate(mapping):
+        if used[i]:prediction[i]=fields[z][r,a]
+    return tuple(prediction)

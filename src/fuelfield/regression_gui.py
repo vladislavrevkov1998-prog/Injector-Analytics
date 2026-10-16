@@ -1,17 +1,20 @@
 """Nonmodal staged identification. Workers operate on immutable snapshots."""
 import json
+from pathlib import Path
 from copy import deepcopy
 import numpy as np
 from PyQt5.QtCore import Qt,QObject,QThread,pyqtSignal
 from PyQt5.QtWidgets import (QDialog,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QComboBox,QTableWidgetItem,
-    QDoubleSpinBox,QSpinBox,QFileDialog,QProgressBar)
+    QDoubleSpinBox,QSpinBox,QFileDialog,QProgressBar,QTextBrowser,QDialogButtonBox)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from .core import GEOMETRY_MODELS,ANGULAR_MODELS,project_to_json
 from .v02 import NOZZLE_KINDS
-from .regression import RegressionSnapshot,ParameterSpec,active_parameters,PARAM_UNITS,QUANTITIES,fit
+from .regression import RegressionSnapshot,ParameterSpec,active_parameters,PARAM_UNITS,QUANTITIES,fit,predict_snapshot
 from .regression_io import load_target,write_fit_xlsx
 from .editors import PARAMETER_LABELS
+from .plot_interaction import attach_interaction
+from .axes_settings import open_axes_settings
 
 class RegressionWorker(QObject):
     completed=pyqtSignal(object);failed=pyqtSignal(str);progress=pyqtSignal(int,object);finished=pyqtSignal()
@@ -30,14 +33,14 @@ def spin(value,low,high,decimals=6):
 
 class RegressionDialog(QDialog):
     def __init__(self,owner,table_class):
-        super().__init__(owner);self.owner=owner;self.thread=None;self.target=None;self.result=None;self.applied_hash=None;self._close_requested=False
+        super().__init__(owner);self.owner=owner;self.thread=None;self.target=None;self.result=None;self.original_prediction=None;self.applied_hash=None;self._close_requested=False
         self.snapshot=RegressionSnapshot.capture(owner.cfg,owner.nozzles);self.source_cfg,self.source_ns=self.snapshot.restore()
         self.setWindowTitle('Идентификация параметров: топливо → топливо');self.resize(1120,900)
         layout=QVBoxLayout(self);note=QLabel('Подбор по топливным эталонам на совпадающих контрольных ячейках. Источник остаётся неизменным до «Применить».');note.setWordWrap(True);layout.addWidget(note)
         files=QHBoxLayout();self.load_button=QPushButton('Загрузить топливный JSON / CSV / XLSX');self.load_button.clicked.connect(self.open_target);files.addWidget(self.load_button)
         self.quantity=QComboBox()
         for key,label in [('flux','Плотность расхода, кг/(м²·с)'),('cell_mass','Расход ячейки, кг/с'),('normalized_ring','Индекс кольца'),('normalized_track','Индекс тракта')]:self.quantity.addItem(label,key)
-        files.addWidget(QLabel('Величина:'));files.addWidget(self.quantity);files.addStretch();layout.addLayout(files)
+        files.addWidget(QLabel('Величина:'));files.addWidget(self.quantity);files.addStretch();help_button=QPushButton("Инструкция");help_button.clicked.connect(self.show_guide);files.addWidget(help_button);layout.addLayout(files)
         selection=QHBoxLayout();self.z=QComboBox();self.radius=QComboBox();self.angle_start=spin(0,0,360);self.angle_end=spin(360,0,360)
         for label,widget in [('z:',self.z),('R:',self.radius),('θ от:',self.angle_start),('до:',self.angle_end)]:selection.addWidget(QLabel(label));selection.addWidget(widget)
         selection.addStretch();layout.addLayout(selection)
@@ -50,6 +53,7 @@ class RegressionDialog(QDialog):
         for widget in (self.geometry,self.angular,self.scope):models.addWidget(widget);widget.currentIndexChanged.connect(self.rebuild_parameters)
         layout.addLayout(models)
         self.parameters=table_class(0,9);self.parameters.setHorizontalHeaderLabels(['Подбирать','Тип','Параметр','Единицы','Старт','min','max','Итог','Δ']);layout.addWidget(self.parameters)
+        self.parameter_note=QLabel('');self.parameter_note.setWordWrap(True);layout.addWidget(self.parameter_note)
         settings=QHBoxLayout();self.budget=QSpinBox();self.budget.setRange(20,3000);self.budget.setValue(120)
         self.seed=QSpinBox();self.seed.setRange(0,2147483647);self.penalty=spin(0,0,1e9);self.floor=spin(1e-9,1e-12,1e9,12)
         self.criterion=QComboBox();self.criterion.addItem('Абсолютная ошибка','absolute');self.criterion.addItem('Относительная ошибка','relative')
@@ -61,9 +65,18 @@ class RegressionDialog(QDialog):
         layout.addLayout(actions);self.cancel_button.setEnabled(False)
         for widget in (self.apply_button,self.preview_button,self.rollback_button,self.export_button):widget.setEnabled(False)
         self.progress=QProgressBar();layout.addWidget(self.progress);self.status=QLabel('Выберите топливный эталон. Температурные таблицы не являются целями подбора.');self.status.setWordWrap(True);layout.addWidget(self.status)
-        self.figure=Figure(figsize=(9,3),tight_layout=True);self.canvas=FigureCanvasQTAgg(self.figure);self.canvas.setMinimumSize(200,170);layout.addWidget(self.canvas)
+        preview_controls=QHBoxLayout();self.preview_pair=QComboBox();self.preview_pair.setMinimumWidth(240);self.preview_pair.setSizeAdjustPolicy(QComboBox.AdjustToContents);preview_controls.addWidget(QLabel('Эпюра до/после (z, R):'));preview_controls.addWidget(self.preview_pair)
+        self.preview_pair.currentIndexChanged.connect(self.preview)
+        axes_button=QPushButton('Оси…');axes_button.clicked.connect(lambda:self.open_preview_axes());preview_controls.addWidget(axes_button);preview_controls.addStretch();layout.addLayout(preview_controls)
+        self.figure=Figure(figsize=(9,3),tight_layout=True);self.canvas=FigureCanvasQTAgg(self.figure);self.canvas.setMinimumSize(200,210);layout.addWidget(self.canvas);self.interaction=attach_interaction(self.canvas)
         for widget in (self.z,self.radius):widget.currentIndexChanged.connect(self.rebuild_parameters)
         for widget in (self.angle_start,self.angle_end):widget.valueChanged.connect(self.rebuild_parameters)
+    def show_guide(self):
+        self.guide_dialog=QDialog(self);self.guide_dialog.setWindowTitle('Как пользоваться идентификацией');self.guide_dialog.resize(820,650)
+        layout=QVBoxLayout(self.guide_dialog);browser=QTextBrowser();browser.setOpenExternalLinks(True)
+        path=Path(__file__).resolve().parents[2]/'docs/V0.4.1_IDENTIFICATION_GUIDE.md'
+        browser.setMarkdown(path.read_text(encoding='utf-8'));layout.addWidget(browser)
+        close=QDialogButtonBox(QDialogButtonBox.Close);close.rejected.connect(self.guide_dialog.close);layout.addWidget(close);self.guide_dialog.show()
     def open_target(self):
         path,_=QFileDialog.getOpenFileName(self,'Топливный эталон','','Топливные данные (*.json *.csv *.xlsx)')
         if path:self.load_path(path)
@@ -72,7 +85,8 @@ class RegressionDialog(QDialog):
     def _target_done(self,target):
         try:target.validate(self.source_cfg)
         except ValueError as exc:self.status.setText(str(exc));return
-        self.target=deepcopy(target);self.result=None
+        self.target=deepcopy(target);self.result=None;self.original_prediction=None
+        self.interaction.clear_artists();self.preview_pair.clear()
         for widget in (self.apply_button,self.preview_button,self.export_button):widget.setEnabled(False)
         self.figure.clear();self.canvas.draw_idle()
         for widget,values,label in [(self.z,sorted(set(target.z_mm)),'Все z'),(self.radius,sorted(set(target.radius_mm)),'Все R')]:
@@ -91,10 +105,12 @@ class RegressionDialog(QDialog):
         cfg=deepcopy(self.source_cfg);cfg.geometry_model=self.geometry.currentData();cfg.angular_model=self.angular.currentData()
         try:target=self.selected_target()
         except ValueError:return
-        specs=[]
+        specs=[];available={scope:active_parameters(cfg,self.source_ns,target,scope) for scope in NOZZLE_KINDS}
         for scope in NOZZLE_KINDS:
             if self.scope.currentData() not in ('all',scope):continue
-            for key in active_parameters(cfg,self.source_ns,target,scope):specs.append((scope,key,cfg.nozzle_presets[scope][key]))
+            for key in available[scope]:specs.append((scope,key,cfg.nozzle_presets[scope][key]))
+        counts={scope:len(keys) for scope,keys in available.items()}
+        self.parameter_note.setText('Доступно: '+', '.join(f'{NOZZLE_KINDS[s]} — {n}' for s,n in counts.items())+'. Число зависит от модели, выбранных z, работающих форсунок и ручных записей. Для равномерных секторов Clock не влияет на поле; неактивные параметры скрыты.')
         self.parameters.setRowCount(len(specs))
         for row,(scope,key,value) in enumerate(specs):
             delta=max(abs(value)*.4,.001)
@@ -138,7 +154,12 @@ class RegressionDialog(QDialog):
         target,specs=checked
         kwargs=dict(budget=self.budget.value(),regularization=self.penalty.value(),seed=self.seed.value(),criterion=self.criterion.currentData(),relative_floor=self.floor.value(),geometry_model=self.geometry.currentData(),angular_model=self.angular.currentData())
         self.progress.setRange(0,kwargs['budget']);self.progress.setValue(0)
-        self._start(lambda worker:fit(self.snapshot,deepcopy(target),specs,progress=lambda n,cost:worker.progress.emit(n,cost),cancel=lambda:QThread.currentThread().isInterruptionRequested(),**kwargs),self._fit_done)
+        def calculate(worker):
+            cancelled=lambda:QThread.currentThread().isInterruptionRequested()
+            original=predict_snapshot(self.snapshot,target,cancelled)
+            result=fit(self.snapshot,deepcopy(target),specs,progress=lambda n,cost:worker.progress.emit(n,cost),cancel=cancelled,**kwargs)
+            return result,original
+        self._start(calculate,self._fit_done)
     def _start(self,function,completed):
         if self.thread is not None:return
         self.thread=QThread(self);self.worker=RegressionWorker(function);self.worker.moveToThread(self.thread)
@@ -156,7 +177,13 @@ class RegressionDialog(QDialog):
         self.cancel_button.setEnabled(False)
         if self._close_requested:self.close()
     def _fit_done(self,result):
-        self.result=result;self.preview_button.setEnabled(True);self.export_button.setEnabled(True);self.apply_button.setEnabled(result.status!='cancelled')
+        if isinstance(result,tuple):result,self.original_prediction=result
+        self.result=result;
+        mask,weights,_=result.target.arrays();pairs=sorted({(z,r) for i,(z,r) in enumerate(zip(result.target.z_mm,result.target.radius_mm)) if mask[i] and weights[i]>0})
+        self.preview_pair.blockSignals(True);self.preview_pair.clear()
+        for z,r in pairs:self.preview_pair.addItem(f'z={z:g} мм; R={r:g} мм',(z,r))
+        self.preview_pair.blockSignals(False)
+        self.preview_button.setEnabled(True);self.export_button.setEnabled(True);self.apply_button.setEnabled(result.status!='cancelled')
         for p,value in zip(result.parameters,result.fitted):
             for row in range(self.parameters.rowCount()):
                 if self.parameters.item(row,0).data(Qt.UserRole)==(p.scope,p.key):
@@ -165,12 +192,24 @@ class RegressionDialog(QDialog):
         fmt=lambda value:'N/A' if value is None else f'{value:.6g}'
         m=result.metrics;self.status.setText(f"{result.status}; train RMSE={fmt(m['train']['RMSE'])}; R²={fmt(m['train']['R2'])}; holdout RMSE={fmt(m['holdout']['RMSE'])}; ранг={result.diagnostics['rank']}; cond={fmt(result.diagnostics['condition'])}; расчётов={result.evaluations}.  "+' '.join(result.warnings))
         self.preview()
-    def preview(self):
-        if self.result is None:return
-        r=self.result;self.figure.clear();ax=self.figure.add_subplot(121);mask,weights,roles=r.target.arrays();use=mask&(weights>0)
-        ax.plot(np.asarray(r.target.y)[use],label='Эталон');ax.plot(np.asarray(r.initial_prediction)[use],label='Старт (до подбора)',alpha=.7);ax.plot(np.asarray(r.prediction)[use],label='После',alpha=.7);ax.set_ylabel(r.target.unit);ax.set_xlabel('Наблюдение (z/R/θ)');ax.legend(fontsize=7)
-        other=self.figure.add_subplot(122);angles=np.asarray(r.target.theta_deg)[use];residual=(np.asarray(r.prediction)-np.asarray(r.target.y))[use]
-        other.scatter(angles,residual,c=np.asarray(r.target.z_mm)[use],s=8);other.set_xlabel('θ, °');other.set_ylabel('Остаток, '+r.target.unit);other.grid(alpha=.2);self.canvas.draw_idle()
+    def open_preview_axes(self):self.axes_dialog=open_axes_settings(self.canvas,self)
+    def preview(self,*args):
+        if self.result is None or self.preview_pair.currentData() is None:return
+        r=self.result;self.interaction.clear_artists();self.figure.clear();ax=self.figure.add_subplot(121)
+        mask,weights,roles=r.target.arrays();z,radius=self.preview_pair.currentData()
+        use=mask&(weights>0)&np.isclose(r.target.z_mm,z,rtol=0,atol=1e-7)&np.isclose(r.target.radius_mm,radius,rtol=0,atol=1e-7)
+        indices=np.flatnonzero(use);indices=indices[np.argsort(np.asarray(r.target.theta_deg)[indices])];angles=np.asarray(r.target.theta_deg)[indices]
+        ax.plot(angles,np.asarray(r.target.y)[indices],'k.',ms=3,label='Эталон')
+        if self.original_prediction is not None:ax.plot(angles,np.asarray(self.original_prediction)[indices],label='Исходный проект',alpha=.8)
+        ax.plot(angles,np.asarray(r.initial_prediction)[indices],ls='--',label='Старт подбора',alpha=.7)
+        ax.plot(angles,np.asarray(r.prediction)[indices],label='После подбора',alpha=.8)
+        ax.set_title(f'z={z:g} мм; R={radius:g} мм',fontsize=9);ax.set_ylabel(r.target.unit);ax.set_xlabel('θ, °');ax.legend(fontsize=7);ax.grid(alpha=.2)
+        other=self.figure.add_subplot(122);reference=np.asarray(r.target.y)[indices]
+        before=np.asarray(self.original_prediction if self.original_prediction is not None else r.initial_prediction)[indices]-reference
+        other.plot(angles,before,label='До − эталон');other.plot(angles,np.asarray(r.prediction)[indices]-reference,label='После − эталон')
+        held=roles[indices]!='train';other.scatter(angles[held],(np.asarray(r.prediction)[indices]-reference)[held],s=16,label='Holdout / test')
+        other.set_xlabel('θ, °');other.set_ylabel('Остаток, '+r.target.unit);other.grid(alpha=.2);other.legend(fontsize=7)
+        self.interaction.reset_axes();self.canvas.draw_idle()
     def apply(self):
         if self.result is None or self.result.status=='cancelled':return
         self.owner._record_edit()

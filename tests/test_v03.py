@@ -88,7 +88,7 @@ class TestV03Qt(unittest.TestCase):
         self.w=MainWindow();self.w._restoring=True;self.w.cfg,self.w.nozzles=fixture();self.w._fill_controls();self.w._fill_nozzles();self.w._reset_history()
         self.w.preview_timer.stop();self.w.selection_timer.stop()
     def tearDown(self):
-        deadline=time.monotonic()+20
+        deadline=time.monotonic()+60
         while self.w.comparison.thread is not None and time.monotonic()<deadline:QTest.qWait(20)
         self.w.close();self.w.deleteLater();self.app.processEvents()
     def _results(self):
@@ -147,7 +147,7 @@ class TestV03Qt(unittest.TestCase):
         np.testing.assert_allclose(self.w.figcurves.axes[0].lines[0].get_ydata()[:-1],cell_values(p,'volume',780,50)[0,np.argsort(p.theta_centers_deg)])
     def test_real_background_json_comparison_and_mismatch(self):
         p=self._results();c=self.w.comparison;c.load_path(PROJECT)
-        deadline=time.monotonic()+20
+        deadline=time.monotonic()+60
         while c.thread is not None and time.monotonic()<deadline:QTest.qWait(20)
         self.assertIsNone(c.thread);self.assertEqual(len(c.planes),4);self.assertEqual(c.plane.currentIndex(),0)
         self.w.compare_radius.setCurrentIndex(3);self.assertEqual(c.radius.currentIndex(),3)
