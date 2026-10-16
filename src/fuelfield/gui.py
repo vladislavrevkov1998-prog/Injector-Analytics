@@ -31,9 +31,12 @@ from .characteristics import flow_to_kg_h,flow_from_kg_h
 from .editors import CatalogEditor,PresetEditor
 from .analysis import METRICS,UNITS,EQUATIONS,cell_values,matching_index
 from .plot_interaction import attach_interaction
+from .numeric_delegate import NumericDelegate
+from .axes_settings import open_axes_settings
 from .analytics_io import write_epures_xlsx
 from .comparison import ComparisonPanel
 from .graph_selection import GraphSelection
+from .graph_links import GraphLinks
 from .regression_gui import RegressionDialog
 
 FIELDS = [
@@ -113,6 +116,7 @@ class PasteTable(QTableWidget):
         super().__init__(*args)
         self.in_batch=False
         self.batch_invalid=False
+        self.setItemDelegate(NumericDelegate(self))
 
     def setItem(self,row,column,item):
         if not item.flags() & (Qt.ItemIsEditable | Qt.ItemIsUserCheckable):
@@ -532,7 +536,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         view.addStretch();lay.addLayout(view)
         scales=QHBoxLayout()
         self.scale_mode=QComboBox();self.scale_mode.addItem('Auto','auto');self.scale_mode.addItem('Manual','manual')
-        self.scale_min=_dbl(0,decimals=8);self.scale_max=_dbl(1,decimals=8)
+        self.scale_min=_dbl(0,decimals=8,step=.0001);self.scale_max=_dbl(1,decimals=8,step=.0001)
         self.scale_range=QComboBox();self.scale_range.addItem('Saturate','saturate');self.scale_range.addItem('Clip to range','clip')
         self.scale_shared=QCheckBox('Общая шкала всех z')
         for w in (QLabel('Цветовая шкала:'),self.scale_mode,QLabel('min'),self.scale_min,
@@ -567,6 +571,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.fit_scale_button=QPushButton("Подогнать масштаб");self.fit_scale_button.setEnabled(False);self.fit_scale_button.clicked.connect(self._fit_plot_scales);chart_controls.addWidget(self.fit_scale_button)
         self.plot_count.setToolTip("Количество последовательных радиальных уровней, начиная с выбранного R; полный набор начинается с первого уровня.")
         reset=QPushButton("Исходный масштаб");self.reset_plot_button=reset;reset.setEnabled(False);reset.clicked.connect(self._reset_plot_zoom);chart_controls.addWidget(reset)
+        self.axes_button=QPushButton("Оси…");self.axes_button.clicked.connect(lambda: self._open_axes_settings());chart_controls.addWidget(self.axes_button)
         chart_controls.addStretch()
         self.split_button=QToolButton();self.split_button.setCheckable(True)
         self.split_button.setText("◫");self.split_button.setToolTip("Split: показать / скрыть область сравнения")
@@ -600,6 +605,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.comparison.hide();panels.setSizes([1400,0]);lay.addWidget(panels)
         self.compare_radius.currentIndexChanged.connect(self._comparison_radius_changed)
         self.tabs.addTab(page,'04 · Поля и эпюры')
+        self.graph_links=GraphLinks(self)
 
     def _fill_controls(self):
         restoring=self._restoring;self._restoring=True
@@ -697,7 +703,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                     it.setCheckState(Qt.Checked if v else Qt.Unchecked)
                     if key=='manual_write':it.setToolTip('Разрешить ручную геометрию; снятие галочки возвращает текущий шаблон.')
                 else:
-                    val='' if v is None else f'{v:.9g}' if isinstance(v,float) else str(v)
+                    val='' if v is None else f'{v:.12g}' if isinstance(v,float) else str(v)
                     it=QTableWidgetItem(val)
                     if key in READONLY or key in GEOMETRY_KEYS and not n.geometry_overrides:
                         it.setFlags(Qt.ItemIsEnabled|Qt.ItemIsSelectable)
@@ -749,7 +755,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                     if key=='flow_kg_h':original=flow_from_kg_h(original,self.cfg.display_flow_unit,self.cfg.density_kg_m3)
                     if key=='capture_efficiency' and val in ('','?','unknown'):
                         raw[key]=None;continue
-                    displayed='' if original is None else f'{original:.9g}'
+                    displayed='' if original is None else f'{original:.12g}'
                     unchanged=val==displayed
                     try:value=original if unchanged else _number(val)
                     except ValueError:raise ValueError(f'Строка {i+1}, {FIELDS[col][1]}: неверное число «{val}».')
@@ -1175,7 +1181,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.calc_btn.setEnabled(True);self.cancel_calc_btn.setEnabled(False)
 
     def _plot_result(self,*args):
-        for widget in (self.plot_count,self.plot_columns,self.reset_plot_button):widget.setEnabled(self.plots.currentIndex()==3)
+        for widget in (self.plot_count,self.plot_columns,self.reset_plot_button,self.axes_button):widget.setEnabled(self.plots.currentIndex()==3)
         if not self.results:return
         i=max(0,self.plane_select.currentIndex())
         p=self.results[i]
@@ -1203,14 +1209,15 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.comparison.sync_from_primary()
 
     def _toggle_split(self,enabled):
-        self.fit_scale_button.setEnabled(bool(enabled and self.results and (self.comparison.planes or self.comparison.tables)))
+        self.fit_scale_button.setEnabled(bool(enabled and self.results and (self.comparison.planes or self.comparison.tables) and self.comparison.view.currentIndex()==0))
         self.comparison.setVisible(enabled)
         if enabled:
             self.result_panels.setSizes([max(1,self.result_panels.width()*3//5),max(1,self.result_panels.width()*2//5)])
             self.comparison.sync_from_primary()
+        if hasattr(self,"graph_links"):QTimer.singleShot(0,self.graph_links.refresh)
 
     def _fit_plot_scales(self):
-        if not self.results or not self.split_button.isChecked():return
+        if not self.results or not self.split_button.isChecked() or self.comparison.view.currentIndex()!=0:return
         self.plots.setCurrentIndex(3)
         self.result_panels.setSizes([self.result_panels.width()//2]*2)
         QApplication.processEvents()
@@ -1267,7 +1274,11 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         canvas=self._render_cache[key]
         setattr(self,fig_name,canvas.figure);setattr(self,canvas_name,canvas)
         stack.setCurrentWidget(canvas)
+        if hasattr(self,"graph_links"):QTimer.singleShot(0,self.graph_links.refresh)
         return canvas.figure
+
+    def _open_axes_settings(self):
+        self.axes_dialog=open_axes_settings(self.curvecanvas,self) if self.plots.currentIndex()==3 else None
 
     def _view_changed(self,*args):
         if self._restoring:return
