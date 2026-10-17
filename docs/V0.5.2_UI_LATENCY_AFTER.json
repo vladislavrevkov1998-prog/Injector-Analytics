@@ -1,0 +1,47 @@
+{
+  "source_root": "/workspace/Injector-Analytics",
+  "source_gui_sha256": "a1653015b1f50957e1f107327d78524649672a14a8f0da63f2babff44eb8e8bc",
+  "project": "demo_project_user_field.json",
+  "method": "Linux offscreen; QTest tab/slider actions, native QWidget pixels and Qt editingFinished focus signals; no UI timers disabled; 5 warmups for slider/focus; sequential source runs",
+  "worker_and_initial_render_ms": 4232.244,
+  "native_field_changed_pixels": 4510,
+  "slider_ms": {
+    "samples": 60,
+    "median_ms": 28.278,
+    "p95_ms": 32.235,
+    "max_ms": 33.904
+  },
+  "slider_full_draws": 0,
+  "first_visits_ms": [
+    51.709191997360904,
+    15.613284995197318,
+    59.3421989979106,
+    11.110063001979142
+  ],
+  "warm_tab_click_ms": {
+    "samples": 32,
+    "median_ms": 9.084,
+    "p95_ms": 10.304,
+    "max_ms": 10.511
+  },
+  "unchanged_control_focus_ms": {
+    "samples": 30,
+    "median_ms": 0.263,
+    "p95_ms": 0.533,
+    "max_ms": 1.985
+  },
+  "physical_edit_sync_ms": 47.535,
+  "physical_edit_qt_heartbeat_ms": {
+    "samples": 22,
+    "median_ms": 10.121,
+    "p95_ms": 10.276,
+    "max_ms": 53.014
+  },
+  "pressure_chart_batch": {
+    "edited_cells": 100,
+    "elapsed_ms": 188.725,
+    "chart_updates": 1,
+    "graphs": 2
+  },
+  "source_project_and_results_unchanged_by_navigation": true
+}

@@ -1,0 +1,25 @@
+[
+  {
+    "window_width": 1280,
+    "field_height": 351,
+    "slider_visible": true
+  },
+  {
+    "window_width": 1480,
+    "field_height": 351,
+    "slider_visible": true
+  },
+  {
+    "window_width": 1920,
+    "field_height": 391,
+    "slider_visible": true
+  },
+  {
+    "dialog_width": 1280,
+    "dialog_height": 820,
+    "graphs": 2,
+    "table_width": 657,
+    "chart_width": 597,
+    "pressure_rows": 140
+  }
+]

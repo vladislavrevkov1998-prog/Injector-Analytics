@@ -35,7 +35,7 @@
   Auto/Manual/Saturate/Clip to range, MathText, количественный CSV и PNG-экспорт.
 
 [Инструкция квазистационарного режима](docs/QUASISTATIONARY_GUIDE.md) ·
-[Проверки v0.5.2: 210 тестов, UI и отклик](docs/V0.5.2_VALIDATION.md).
+[Исправления v0.5.2: графики давления, UI и отклик](docs/V0.5.2_CORRECTIONS.md).
 
 Уравнения, коэффициенты, численное интегрирование потерь и поддерживаемая
 область описаны в [методике Дитякина](docs/DITYAKIN_METHOD.md).

@@ -262,6 +262,7 @@ class MainWindow(QMainWindow):
         self._restoring=False
         self._edit_state=project_to_json(self.cfg,self.nozzles)
         self._connect_edits()
+        self.tabs.currentChanged.connect(self._main_tab_changed)
         self._queue_preview()
 
     def _build_menu(self):
@@ -721,13 +722,15 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         tab.setHorizontalHeaderItem(INTCOL['effective_flow'],QTableWidgetItem('Расход в режиме, '+('кг/ч' if unit=='kg/h' else 'л/мин')))
         for row,n in enumerate(self.nozzles):
             effective=effective_nozzle(n,self.cfg)
-            try:
-                status=flow_status(n,self.cfg)
-                calculated=flow_from_kg_h(status.kg_s*3600,unit,self.cfg.density_kg_m3)
-                label=f'{status.source}; Δp={status.pressure_kgf_cm2:g}; '+('оценка' if status.estimated else 'измерено')
-                if status.notices:label+='; '+'; '.join(status.notices)
-            except ValueError as exc:calculated='—';label=str(exc)
-            if self.cfg.quasistationary:calculated='G(t): по шагам';label='Расход зависит от давления коллектора '+(n.manifold_id or 'по умолчанию')+'; значения по шагам — в отчёте 04.'
+            if self.cfg.quasistationary:
+                calculated='G(t): по шагам';label='Расход зависит от давления коллектора '+(n.manifold_id or 'по умолчанию')+'; значения по шагам — в отчёте 04.'
+            else:
+                try:
+                    status=flow_status(n,self.cfg)
+                    calculated=flow_from_kg_h(status.kg_s*3600,unit,self.cfg.density_kg_m3)
+                    label=f'{status.source}; Δp={status.pressure_kgf_cm2:g}; '+('оценка' if status.estimated else 'измерено')
+                    if status.notices:label+='; '+'; '.join(status.notices)
+                except ValueError as exc:calculated='—';label=str(exc)
             for col,(key,_) in enumerate(FIELDS):
                 if key=='effective_flow':v=calculated
                 elif key=='flow_status':v=label
@@ -756,6 +759,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         tab.blockSignals(False)
         notices=set();invalid=0
         for n in self.nozzles:
+            if self.cfg.quasistationary:break
             if not n.enabled:continue
             try:
                 status=flow_status(n,self.cfg)
@@ -887,11 +891,13 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             self.duration_spin,self.density_spin,self.scale_mode,self.scale_min,
             self.scale_max,self.scale_range,self.scale_shared]
         for w in widgets:
-            if isinstance(w,QComboBox):w.currentIndexChanged.connect(self._record_edit)
-            elif isinstance(w,QCheckBox):w.toggled.connect(self._record_edit)
-            else:w.editingFinished.connect(self._record_edit)
+            if isinstance(w,QComboBox):w.currentIndexChanged.connect(self._control_edited)
+            elif isinstance(w,QCheckBox):w.toggled.connect(self._control_edited)
+            else:w.editingFinished.connect(self._control_edited)
 
-    def _record_edit(self,*args,label='Изменение проекта'):
+    def _control_edited(self,*args):self._record_edit(control_only=True)
+
+    def _record_edit(self,*args,label='Изменение проекта',control_only=False):
         if self._restoring or self.nozzle_table.in_batch or self.sector_table.in_batch:return
         if self.sector_table.batch_invalid:
             self.sector_table.batch_invalid=False
@@ -899,7 +905,9 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             self.statusBar().showMessage('Вставка отменена: объёмы должны быть конечными неотрицательными числами.',12000)
             return
         try:
-            cfg=self._read_controls();nozzles=self._read_nozzles(cfg)
+            cfg=self._read_controls()
+            if control_only and cfg==self.cfg:return
+            nozzles=self._read_nozzles(cfg)
             state=project_to_json(cfg,nozzles)
         except (ValueError,TypeError) as exc:
             self._restore_edit(self._edit_state)
@@ -945,7 +953,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                 widget=stack.widget(stack.count()-1)
                 stack.removeWidget(widget);widget.deleteLater()
             if stack.count():
-                canvas=stack.widget(0);canvas.figure.clear();canvas.draw_idle()
+                canvas=stack.widget(0);canvas.figure.clear()
+                if canvas.isVisible():canvas.draw_idle()
                 figure_name,canvas_name=names[index];setattr(self,figure_name,canvas.figure);setattr(self,canvas_name,canvas)
 
     def _invalidate_results(self):
@@ -959,7 +968,15 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.balance_label.setText('Исходные данные изменены. Нужен новый расчёт (F5).')
 
     def _queue_preview(self):
-        if hasattr(self,'previewcanvas'):self.preview_timer.start(120)
+        if hasattr(self,'previewcanvas') and self.tabs.currentIndex()==1:self.preview_timer.start(120)
+
+    def _main_tab_changed(self,index):
+        # Hidden previews used to run after edits on every tab, including while
+        # the result slider was painting. Build the preview when it is needed.
+        if index==1:self._queue_preview()
+        else:self.preview_timer.stop()
+        if index!=3:self.time_timer.stop()
+        elif self.results:self._plot_result()
 
     def _draw_single_preview(self):
         if self.sector_id is None:return
@@ -996,6 +1013,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             self.statusBar().showMessage(f'Превью: {exc}',5000)
 
     def _sector_selection(self,*args):
+        self.preview_timer.stop()
         self.selection_timer.start(120)
 
     def _apply_sector_selection(self):
@@ -1392,9 +1410,15 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
     def _update_time_field(self,canvas=None,plane_index=None):
         self.time_timer.stop()
         if not self.quasi_result or not self.results:return
-        i=max(0,self.plane_select.currentIndex()) if plane_index is None else plane_index;step=self.time_slider.value();result=self.quasi_result;p=result.snapshot(i,step)
+        i=max(0,self.plane_select.currentIndex()) if plane_index is None else plane_index;step=self.time_slider.value();result=self.quasi_result
+        balance=result.balances[i*result.settings.n_steps+step]
         pressures='; '.join(f'{key}: Δp={values[step]:.7g} кгс/см²' for key,values in result.pressures.items())
-        self.time_label.setText(f'Шаг {step}/{result.settings.n_steps-1} · t={result.settings.times[step]:.8g} с · угол гребёнки {result.settings.angles[step]:.8g}° · {pressures}\nМгновенный баланс: подано {p.injected_kg_s*3600:.7g} кг/ч; внутри {p.inside_kg_s*3600:.7g}; за внутренней {p.inner_kg_s*3600:.7g}; за наружной {p.outer_kg_s*3600:.7g}; невязка {p.rel_balance_error:.3g}.')
+        reference=result.balances[i*result.settings.n_steps]['injected_kg_s'];delta=f'{(balance["injected_kg_s"]/reference-1)*100:+.3f}%' if reference else '—'
+        self.time_label.setText(
+            f'Шаг {step}/{result.settings.n_steps-1} · t={result.settings.times[step]:.8g} с · угол гребёнки {result.settings.angles[step]:.8g}° · {pressures}\n'
+            f'Мгновенный баланс: подано {balance["injected_kg_s"]*3600:.7g} кг/ч ({delta} к шагу 0); '
+            f'внутри {balance["inside_kg_s"]*3600:.7g}; за внутренней {balance["inner_kg_s"]*3600:.7g}; '
+            f'за наружной {balance["outer_kg_s"]*3600:.7g}; невязка {balance["relative_error"]:.3g}.')
         if canvas is None:
             if self.plots.currentIndex()!=1:return
             canvas=self.plot_stacks[1].currentWidget()
