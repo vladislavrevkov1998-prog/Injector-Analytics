@@ -94,7 +94,7 @@ class TestUserQt(unittest.TestCase):
 
     def test_columns_order_removed_bench_fields_and_header_menu_units(self):
         keys=[key for key,label in FIELDS]
-        self.assertEqual(keys[:5],['id','enabled','nozzle_kind','atomizer_type_id','row'])
+        self.assertEqual(keys[:6],['id','enabled','nozzle_kind','manifold_id','atomizer_type_id','row'])
         self.assertEqual(keys[keys.index('flow_mode')+1],'effective_flow')
         for key in ('flow_pressure_kgf_cm2','sector_pressure_kgf_cm2','capture_efficiency','flow_status'):
             self.assertNotIn(key,keys)

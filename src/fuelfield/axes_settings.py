@@ -1,4 +1,5 @@
 """Per-epure axis limits and explicit major/minor intervals."""
+from .numeric_input import DecimalSpinBox
 from PyQt5.QtCore import Qt
 from PyQt5 import sip
 from PyQt5.QtWidgets import QDialog,QVBoxLayout,QFormLayout,QComboBox,QDoubleSpinBox,QDialogButtonBox,QLabel
@@ -12,7 +13,7 @@ def open_axes_settings(canvas,parent=None):
     for i,ax in enumerate(axes):selector.addItem(f'{i+1}: {ax.get_title() or ax.get_ylabel() or "Эпюра"}')
     form.addRow('График / ось Y',selector);widgets={}
     for key,label in [('xmin','X min'),('xmax','X max'),('ymin','Y min'),('ymax','Y max'),('xmajor','X: шаг основных делений'),('xminor','X: шаг промежуточных'),('ymajor','Y: шаг основных делений'),('yminor','Y: шаг промежуточных')]:
-        spin=QDoubleSpinBox();spin.setDecimals(9);spin.setRange(-1e12 if key.endswith(('min','max')) else 0,1e12);spin.setSingleStep(.0001);form.addRow(label,spin);widgets[key]=spin
+        spin=DecimalSpinBox();spin.setDecimals(9);spin.setRange(-1e12 if key.endswith(('min','max')) else 0,1e12);spin.setSingleStep(.0001);form.addRow(label,spin);widgets[key]=spin
     note=QLabel('Шаг 0: автоматические основные / без промежуточных делений. Ctrl + средняя кнопка возвращает исходный диапазон.');note.setWordWrap(True);layout.addWidget(note)
     error=QLabel();layout.addWidget(error)
     def fill():

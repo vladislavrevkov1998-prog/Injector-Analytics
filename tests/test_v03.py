@@ -119,7 +119,7 @@ class TestV03Qt(unittest.TestCase):
         self.assertNotEqual(t.item(0,INTCOL['flow_kg_h']).background().color().name(),'#eee6f6')
         self.assertEqual(t.item(0,INTCOL['row']).text(),'наружный');self.assertEqual(t.item(70,INTCOL['row']).text(),'внутренний')
         self.assertEqual(t.horizontalHeaderItem(INTCOL['atomizer_type_id']).text(),'Имя распылителя')
-        old=deepcopy(self.w.nozzles);self.assertEqual(t.item(0,INTCOL['atomizer_type_id']).text(),'1,3')
+        old=deepcopy(self.w.nozzles);name=next(a['name'] for a in self.w.cfg.atomizer_types if a['id']==old[0].atomizer_type_id);self.assertEqual(t.item(0,INTCOL['atomizer_type_id']).text(),name)
         ns=self.w._read_nozzles();self.assertEqual([n.atomizer_type_id for n in ns],[n.atomizer_type_id for n in old])
         t.item(0,INTCOL['manual_write']).setCheckState(Qt.Checked)
         self.assertTrue(t.item(0,INTCOL['alpha_deg']).flags()&Qt.ItemIsEditable)

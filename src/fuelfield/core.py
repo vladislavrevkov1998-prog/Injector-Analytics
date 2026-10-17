@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, asdict, fields
 from typing import Optional
 import numpy as np
+from .coordinates import grid_angles,angular_indices
 from .v02 import (GEOMETRY_KEYS, default_presets, validate_catalog, effective_nozzle,
                   flow_status, validate_nozzles)
 
@@ -76,7 +77,10 @@ class Settings:
     z_mm: list[float] = field(default_factory=lambda: [0.0, 20.0, 40.0, 60.0])
     n_radial: int = 6
     n_angular: int = 140
-    grid_start_deg: float = 0.0  # angular position of CENTER of first matrix cell
+    grid_start_deg: float = 0.0  # First matrix cell CENTER in the measurement frame.
+    theta_zero_deg: float = 0.0  # Physical zero, measured from +X CCW.
+    theta_direction: int = 1  # +1 CCW, -1 CW in the measurement frame.
+    display_x_axis: str = 'angle'
     radial_centers_mm: Optional[list[float]] = None
     geometry_model: str = 'linear'
     angular_model: str = 'preserve'
@@ -116,6 +120,8 @@ class Settings:
         for params in self.nozzle_presets.values():params.setdefault("z_tip_mm",0.)
 
     def validate(self):
+        if not np.isfinite(self.theta_zero_deg) or self.theta_direction not in (-1,1) or isinstance(self.theta_direction,bool):raise ValueError('Нужны конечный угол нуля и направление +1/-1.')
+        if self.display_x_axis not in ('angle','cells'):raise ValueError('Ось X: градусы или окружные ячейки.')
         if not isinstance(self.quasistationary,bool) or not isinstance(self.quasi_settings,dict):
             raise ValueError('Неверные настройки режима расчёта')
         for pressure in (self.flow_pressure_kgf_cm2,self.sector_pressure_kgf_cm2):
@@ -338,8 +344,6 @@ def calculate_plane(nozzles: list[Nozzle], cfg: Settings, z_mm: float) -> PlaneR
     cfg.validate()
     centers, edges = cfg.radial_centers_and_edges()
     nrad, nang = cfg.n_radial, cfg.n_angular
-    dtheta = 2*np.pi/nang
-    theta0 = np.deg2rad(cfg.grid_start_deg)
     mass = np.zeros((nrad,nang))
     inner = outer = injected = 0.0
     for n in nozzles:
@@ -357,14 +361,13 @@ def calculate_plane(nozzles: list[Nozzle], cfg: Settings, z_mm: float) -> PlaneR
         inner += float(np.sum(w[ir<0]))
         outer += float(np.sum(w[ir>=nrad]))
         if np.any(mask_in):
-            theta = (np.arctan2(yp[mask_in],xp[mask_in])-theta0+dtheta/2)%(2*np.pi)
-            ith = np.floor(theta/dtheta).astype(int).clip(0,nang-1)
+            ith = angular_indices(xp[mask_in],yp[mask_in],cfg)
             cell_id = ir[mask_in]*nang+ith
             mass += np.bincount(cell_id,weights=w[mask_in],minlength=nrad*nang).reshape(nrad,nang)
     area = (np.pi/nang)*(np.diff((edges*1e-3)**2))
     area = np.repeat(area[:,None],nang,axis=1)
     flux = mass/area
-    th_centers = (cfg.grid_start_deg+np.arange(nang)*360/nang)%360
+    th_centers = grid_angles(cfg)
     return PlaneResult(float(z_mm),mass,area,flux,centers,edges,th_centers,
                        injected,float(mass.sum()),inner,outer)
 

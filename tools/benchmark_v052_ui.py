@@ -14,6 +14,9 @@ import numpy as np
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--source-root',type=Path,default=Path(__file__).resolve().parents[1])
 parser.add_argument('--out',type=Path,required=True)
+parser.add_argument('--frame-zero',type=float,default=0.,help='Physical +X/CCW position of measurement zero, degrees')
+parser.add_argument('--clockwise',action='store_true',help='Positive measurement direction is clockwise')
+parser.add_argument('--cells',action='store_true',help='Display epures in circumferential cells')
 args=parser.parse_args();root=args.source_root.resolve();sys.path.insert(0,str(root/'src'))
 from PyQt5.QtCore import Qt,QTimer
 from PyQt5.QtGui import QImage
@@ -42,6 +45,10 @@ def pixels(canvas):
 app=QApplication([]);app.setStyle('Fusion');w=MainWindow();w.show()
 source=root/'examples/demo_project_user_field.json';original=hashlib.sha256(source.read_bytes()).hexdigest()
 with patch('fuelfield.gui.QFileDialog.getOpenFileName',return_value=(str(source),'')):w.open_project()
+if args.frame_zero or args.clockwise or args.cells:
+    w.geom_widgets['theta_zero_deg'].setValue(args.frame_zero);w.geom_widgets['theta_zero_deg'].editingFinished.emit()
+    w.geom_widgets['theta_direction'].setCurrentIndex(w.geom_widgets['theta_direction'].findData(-1 if args.clockwise else 1))
+    w.x_axis.setCurrentIndex(w.x_axis.findData('cells' if args.cells else 'angle'))
 w.quasi_check.setChecked(True);d=w.quasi_dialog;d.load_path(root/'examples/demo_user_field_140_two_collectors.quasi.json');d.apply();d.close()
 started=time.perf_counter();w.run_calc();wait_until(lambda:w.thread is None);worker_ms=(time.perf_counter()-started)*1000
 assert w.quasi_result is not None;w.tabs.setCurrentIndex(3);w.plane_select.setCurrentIndex(2);w.plots.setCurrentIndex(1);app.processEvents();w.smoothcanvas.draw();QTest.qWait(40)
@@ -80,4 +87,5 @@ if charts is not None:
     d.grab().save(str(args.out.with_suffix('.png')))
 d.close();assert hashlib.sha256(source.read_bytes()).hexdigest()==original
 report=dict(source_root=str(root),source_gui_sha256=hashlib.sha256((root/'src/fuelfield/gui.py').read_bytes()).hexdigest(),project=source.name,method='Linux offscreen; QTest tab/slider actions, native QWidget pixels and Qt editingFinished focus signals; no UI timers disabled; 5 warmups for slider/focus; sequential source runs',worker_and_initial_render_ms=round(worker_ms,3),native_field_changed_pixels=changed,slider_ms=stats(frames),slider_full_draws=full_draws,first_visits_ms=cold,warm_tab_click_ms=stats(warm),unchanged_control_focus_ms=stats(focus),physical_edit_sync_ms=round(edit_ms,3),physical_edit_qt_heartbeat_ms=edit_heartbeat,pressure_chart_batch=pressure,source_project_and_results_unchanged_by_navigation=True)
+report['measurement_frame']=dict(zero_deg=getattr(w.cfg,'theta_zero_deg',0),direction=getattr(w.cfg,'theta_direction',1),x_axis=getattr(w.cfg,'display_x_axis','angle'))
 args.out.parent.mkdir(parents=True,exist_ok=True);args.out.write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n');print(json.dumps(report,indent=2));w.close()

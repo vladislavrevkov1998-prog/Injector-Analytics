@@ -7,6 +7,7 @@ from scipy.sparse import csc_matrix
 from .core import sample_kernel,PlaneResult,SmoothField,evaluate_continuous_field,project_to_json
 from .v02 import flow_status,curve_for,bench_pressure,effective_nozzle,validate_nozzles
 from .characteristics import ExtrapolationWarning
+from .coordinates import angular_indices,grid_angles,to_global
 
 FORMAT='fuel-quasistationary-settings'
 PRESSURE_FACTORS={'kgf/cm2':1.,'кгс/см²':1.,'bar':1e5/98066.5,'Pa':1/98066.5,'kPa':1000/98066.5,'MPa':1e6/98066.5}
@@ -62,7 +63,7 @@ class QuasiSettings:
     dt_s: float=1.
     t_start_s: float=0.
     first_angle_deg: float=0.
-    direction: int=1
+    direction: int=1  # +1/-1 relative to the positive measurement angle on 01.
     default_manifold: str='A'
     channels: tuple=()
     metadata: dict=field(default_factory=dict)
@@ -73,11 +74,12 @@ class QuasiSettings:
     def times(self):return self.t_start_s+np.arange(self.n_steps)*self.dt_s
     @property
     def angles(self):return (self.first_angle_deg+self.direction*np.arange(self.n_steps)*360/self.n_steps)%360
+    def global_angles(self,cfg):return to_global(self.angles,cfg)
     def validate(self,cfg=None,nozzles=None):
         if isinstance(self.n_steps,bool) or not isinstance(self.n_steps,int) or not 8<=self.n_steps<=1440:raise ValueError('Число шагов: целое 8…1440, равно числу окружных ячеек на 01')
         if finite(self.dt_s,'Шаг времени')<=0:raise ValueError('Шаг времени должен быть положительным и постоянным')
         finite(self.t_start_s,'Начало времени');finite(self.first_angle_deg,'Первый угол')
-        if self.direction not in (-1,1) or isinstance(self.direction,bool):raise ValueError('Направление: +1 против ЧС или −1 по ЧС')
+        if self.direction not in (-1,1) or isinstance(self.direction,bool):raise ValueError('Направление: +1 вперёд или −1 обратно по углам системы на 01')
         if not isinstance(self.default_manifold,str) or not self.default_manifold.strip():raise ValueError('Укажите коллектор по умолчанию')
         ids=[c.id for c in self.channels]
         if not ids or len(ids)!=len(set(ids)):raise ValueError('Нужны коллекторы с уникальными именами')
@@ -168,11 +170,11 @@ def build_influence(nozzles,cfg,z,flows,preview=True,cancel=None):
         if not n.enabled or z<effective_nozzle(n,cfg).z_tip_mm:continue
         reached[j]=1.;xp,yp,w=sample_kernel(n,z,cfg,unit_mass=True);ir=np.searchsorted(edges,np.hypot(xp,yp),side='right')-1;inside=(ir>=0)&(ir<cfg.n_radial)
         inner[j]=w[ir<0].sum();outer[j]=w[ir>=cfg.n_radial].sum()
-        theta=(np.arctan2(yp[inside],xp[inside])-np.deg2rad(cfg.grid_start_deg)+np.pi/cfg.n_angular)%(2*np.pi);ith=np.floor(theta*cfg.n_angular/(2*np.pi)).astype(int).clip(0,cfg.n_angular-1)
+        ith=angular_indices(xp[inside],yp[inside],cfg)
         weights[:,j]=np.bincount(ir[inside]*cfg.n_angular+ith,weights=w[inside],minlength=weights.shape[0])
     if np.max(np.abs(weights.sum(axis=0)+inner+outer-reached))>1e-12:raise ValueError('Не замкнута нормировка единичных пространственных влияний')
     area=np.repeat((np.pi/cfg.n_angular*np.diff((edges*.001)**2))[:,None],cfg.n_angular,axis=1)
-    op=Influence(deepcopy(cfg),float(z),weights,inner,outer,reached,area,radii,edges,(cfg.grid_start_deg+np.arange(cfg.n_angular)*360/cfg.n_angular)%360)
+    op=Influence(deepcopy(cfg),float(z),weights,inner,outer,reached,area,radii,edges,grid_angles(cfg))
     if preview:
         dim=int(cfg.preview_resolution);columns=[];data=[];pointers=[0]
         for j,n in enumerate(nozzles):

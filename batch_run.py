@@ -10,6 +10,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parent/'src'))
 from fuelfield.core import project_from_json,calculate_plane,evaluate_continuous_field
 from fuelfield.visualization import draw_nozzle_markers, draw_detailed_map, draw_polar_nozzles_map, color_scale
 from fuelfield.data_io import write_result_csv
+from fuelfield.coordinates import grid_angles,polar_ticks,plot_x,period,x_label
 
 
 def main():
@@ -44,11 +45,11 @@ def main():
         view_nozzles=[replace(n,flow_mode='manual',flow_kg_h=float(g*3600)) for n,g in zip(quasi.nozzles,quasi.flows[args.step])] if quasi else nozzles
         fig=plt.figure(figsize=(7,7))
         ax=fig.add_subplot(111,projection='polar')
-        theta_edge=np.deg2rad(cfg.grid_start_deg+(np.arange(cfg.n_angular+1)-.5)*360/cfg.n_angular)
+        theta_edge=np.deg2rad(grid_angles(cfg,edges=True))
         th,r=np.meshgrid(theta_edge,plane.radial_edges_mm)
         data,norm,cmap=color_scale(plane.flux_kg_m2_s,cfg,[p.flux_kg_m2_s for p in planes])
         m=ax.pcolormesh(th,r,data,shading='flat',cmap=cmap,norm=norm)
-        ax.set_theta_zero_location('E');ax.set_theta_direction(1)
+        ax.set_theta_zero_location('E');ax.set_theta_direction(1);polar_ticks(ax,cfg)
         ax.set_ylim(0,cfg.r_out_mm)
         ax.set_title(f'Section {i+1}, z={z:g} mm'+(' · accumulated matrix' if quasi else ''))
         draw_nozzle_markers(ax,cfg,nozzles,polar=True)
@@ -65,15 +66,15 @@ def main():
         cols=2 if cfg.n_radial>1 else 1
         rows=int(np.ceil(cfg.n_radial/cols))
         fig,axes=plt.subplots(rows,cols,figsize=(11,max(5,rows*2.5)),squeeze=False)
-        order=np.argsort(plane.theta_centers_deg)
+        display=plot_x(plane.theta_centers_deg,cfg,cfg.display_x_axis);order=np.argsort(display);cycle=period(cfg,cfg.display_x_axis)
         for k in range(cfg.n_radial):
             ax=axes.flat[k]
-            x=plane.theta_centers_deg[order]
+            x=display[order]
             y=plane.flux_kg_m2_s[k,order]
-            ax.plot(np.r_[x,x[0]+360],np.r_[y,y[0]])
+            ax.plot(np.r_[x,x[0]+cycle],np.r_[y,y[0]])
             ax.set_title(f'Level {k+1}, R={plane.radial_centers_mm[k]:g} mm')
-            ax.set_xlabel('angle, deg');ax.set_ylabel('kg/(m² s)');ax.grid(alpha=.2)
-            ax.set_xlim(0,360)
+            ax.set_xlabel(x_label(cfg,cfg.display_x_axis));ax.set_ylabel('kg/(m² s)');ax.grid(alpha=.2)
+            ax.set_xlim(0,cycle)
         for ax in list(axes.flat)[cfg.n_radial:]:ax.axis('off')
         fig.tight_layout();fig.savefig(out/f'section_{i+1}_profiles.png',dpi=140,bbox_inches='tight');plt.close(fig)
         if quasi:
