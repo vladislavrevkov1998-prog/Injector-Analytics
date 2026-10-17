@@ -129,6 +129,7 @@ def flow_status(n,cfg):
 def validate_nozzles(nozzles,cfg):
     ids={a['id'] for a in cfg.atomizer_types}
     for n in nozzles:
+        if not isinstance(n.manifold_id,str):raise ValueError(f'Форсунка {n.id}: имя коллектора должно быть текстом')
         if n.atomizer_type_id and n.atomizer_type_id not in ids:
             raise ValueError(f'Форсунка {n.id}: ссылка на отсутствующий тип {n.atomizer_type_id}.')
         if n.nozzle_kind not in NOZZLE_KINDS or n.row not in ('inner','outer'):

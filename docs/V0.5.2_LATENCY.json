@@ -1,0 +1,44 @@
+{
+  "version": "0.5.2",
+  "python": "3.12.14",
+  "platform": "Linux",
+  "project": "examples/demo_project_user_field.json",
+  "mode": "synthetic 140 steps, two collectors; real user geometry/flows/sectors/types unchanged; portable demonstration bindings",
+  "method": "Linux offscreen; no concurrent tests; 5 warmups excluded; direct callback with Qt painting + QTest slider keys/press/release and Qt held-button mouse moves",
+  "engine_ms": 3698.603,
+  "worker_and_initial_render_ms": 4177.021,
+  "qt_heartbeat_gap_ms": {
+    "samples": 283,
+    "median_ms": 10.29,
+    "p95_ms": 11.093,
+    "max_ms": 347.56
+  },
+  "frame_callback_ms": {
+    "samples": 140,
+    "median_ms": 36.867,
+    "p95_ms": 61.07,
+    "max_ms": 82.682
+  },
+  "real_qt_slider_ms": {
+    "samples": 60,
+    "median_ms": 47.887,
+    "p95_ms": 53.701,
+    "max_ms": 67.986
+  },
+  "full_canvas_draws_during_140_callback_frames": 0,
+  "mouse_drag": {
+    "movements": 100,
+    "displayed_updates": 9,
+    "elapsed_ms": 459.868,
+    "last_step": 139
+  },
+  "cancel_ms": 52.21,
+  "preview_cache_mb": 27.991,
+  "peak_process_rss_mb": 356.223,
+  "maximum_instantaneous_balance_error": 1.7161081670761277e-13,
+  "independent_v041_column_max_absolute_difference_kg_s": 1.5785983631388945e-16,
+  "independent_v041_detailed_field_max_absolute_difference": 5.684341886080802e-14,
+  "accumulated_matrices_unchanged_by_slider": true,
+  "project_unchanged_by_slider": true,
+  "user_source_file_unchanged": true
+}

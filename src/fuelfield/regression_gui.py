@@ -1,9 +1,6 @@
 """Nonmodal staged identification. Workers operate on immutable snapshots."""
-from .numeric_input import DecimalSpinBox
 import json
 from pathlib import Path
-from dataclasses import replace
-from .coordinates import from_global,plot_x,x_label
 from copy import deepcopy
 import numpy as np
 from PyQt5.QtCore import Qt,QObject,QThread,pyqtSignal
@@ -32,7 +29,7 @@ class RegressionWorker(QObject):
 
 
 def spin(value,low,high,decimals=6):
-    widget=DecimalSpinBox();widget.setDecimals(decimals);widget.setRange(low,high);widget.setValue(value);return widget
+    widget=QDoubleSpinBox();widget.setDecimals(decimals);widget.setRange(low,high);widget.setValue(value);return widget
 
 class RegressionDialog(QDialog):
     def __init__(self,owner,table_class):
@@ -102,9 +99,7 @@ class RegressionDialog(QDialog):
         if self.target is None:raise ValueError('Загрузите топливный эталон')
         if self.target.quantity!=self.quantity.currentData():raise ValueError('При смене величины загрузите эталон заново, единицы не переименовываются')
         if self.angle_end.value()<=self.angle_start.value():raise ValueError('Укажите θ конца больше θ начала; полный диапазон 0–360°')
-        target=self.target.subset(self.z.currentData(),self.radius.currentData())
-        angles=from_global(target.theta_deg,self.source_cfg);mask=np.asarray(target.mask,dtype=bool)&(angles>=self.angle_start.value())&(angles<=self.angle_end.value())
-        return replace(target,mask=tuple(mask))
+        return self.target.subset(self.z.currentData(),self.radius.currentData(),self.angle_start.value(),self.angle_end.value())
     def rebuild_parameters(self,*args):
         if not hasattr(self,'parameters') or self.target is None:return
         cfg=deepcopy(self.source_cfg);cfg.geometry_model=self.geometry.currentData();cfg.angular_model=self.angular.currentData()
@@ -203,17 +198,17 @@ class RegressionDialog(QDialog):
         r=self.result;self.interaction.clear_artists();self.figure.clear();ax=self.figure.add_subplot(121)
         mask,weights,roles=r.target.arrays();z,radius=self.preview_pair.currentData()
         use=mask&(weights>0)&np.isclose(r.target.z_mm,z,rtol=0,atol=1e-7)&np.isclose(r.target.radius_mm,radius,rtol=0,atol=1e-7)
-        indices=np.flatnonzero(use);display=plot_x(r.target.theta_deg,self.source_cfg,self.source_cfg.display_x_axis);indices=indices[np.argsort(display[indices])];angles=display[indices]
+        indices=np.flatnonzero(use);indices=indices[np.argsort(np.asarray(r.target.theta_deg)[indices])];angles=np.asarray(r.target.theta_deg)[indices]
         ax.plot(angles,np.asarray(r.target.y)[indices],'k.',ms=3,label='Эталон')
         if self.original_prediction is not None:ax.plot(angles,np.asarray(self.original_prediction)[indices],label='Исходный проект',alpha=.8)
         ax.plot(angles,np.asarray(r.initial_prediction)[indices],ls='--',label='Старт подбора',alpha=.7)
         ax.plot(angles,np.asarray(r.prediction)[indices],label='После подбора',alpha=.8)
-        ax.set_title(f'z={z:g} мм; R={radius:g} мм',fontsize=9);ax.set_ylabel(r.target.unit);ax.set_xlabel('θ, °' if self.source_cfg.display_x_axis=='angle' else x_label(self.source_cfg,'cells'));ax.legend(fontsize=7);ax.grid(alpha=.2)
+        ax.set_title(f'z={z:g} мм; R={radius:g} мм',fontsize=9);ax.set_ylabel(r.target.unit);ax.set_xlabel('θ, °');ax.legend(fontsize=7);ax.grid(alpha=.2)
         other=self.figure.add_subplot(122);reference=np.asarray(r.target.y)[indices]
         before=np.asarray(self.original_prediction if self.original_prediction is not None else r.initial_prediction)[indices]-reference
         other.plot(angles,before,label='До − эталон');other.plot(angles,np.asarray(r.prediction)[indices]-reference,label='После − эталон')
         held=roles[indices]!='train';other.scatter(angles[held],(np.asarray(r.prediction)[indices]-reference)[held],s=16,label='Holdout / test')
-        other.set_xlabel('θ, °' if self.source_cfg.display_x_axis=='angle' else x_label(self.source_cfg,'cells'));other.set_ylabel('Остаток, '+r.target.unit);other.grid(alpha=.2);other.legend(fontsize=7)
+        other.set_xlabel('θ, °');other.set_ylabel('Остаток, '+r.target.unit);other.grid(alpha=.2);other.legend(fontsize=7)
         self.interaction.reset_axes();self.canvas.draw_idle()
     def apply(self):
         if self.result is None or self.result.status=='cancelled':return

@@ -172,7 +172,6 @@ class GraphLinks:
         a,b=Curve(ax,c),Curve(other,d)
         if not a.valid or not b.valid:raise ValueError('Link требует монотонный X без повторов; исходную таблицу упорядочьте по X.')
         xa,xb=getattr(ax,'_compare_x',None),getattr(other,'_compare_x',None)
-        if getattr(ax,"_compare_frame",None) is not None and getattr(other,"_compare_frame",None) is not None and ax._compare_frame!=other._compare_frame:raise ValueError("Разные системы отсчёта X. Приведите их к общей системе.")
         if xa and xb and xa!=xb:raise ValueError('Разные единицы X: связь невозможна.')
         if max(a.x[0],b.x[0])>min(a.x[-1],b.x[-1]):raise ValueError('Нет общего диапазона X.')
         # A single partner per graph keeps point/scale synchronization unambiguous.

@@ -7,7 +7,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field, asdict, fields
 from typing import Optional
 import numpy as np
-from .coordinates import grid_angles,angular_indices
 from .v02 import (GEOMETRY_KEYS, default_presets, validate_catalog, effective_nozzle,
                   flow_status, validate_nozzles)
 
@@ -61,6 +60,7 @@ class Nozzle:
     nozzle_kind: str = 'uncooled'
     geometry_overrides: list[str] = field(default_factory=lambda:list(GEOMETRY_KEYS))
     z_tip_mm: float = 0.0
+    manifold_id: str = 'A'
     _extra: dict = field(default_factory=dict,repr=False)
 
     @property
@@ -77,9 +77,6 @@ class Settings:
     n_radial: int = 6
     n_angular: int = 140
     grid_start_deg: float = 0.0  # angular position of CENTER of first matrix cell
-    theta_zero_deg: float = 0.0  # physical location of measurement zero, from +X CCW
-    theta_direction: int = 1  # +1 CCW, -1 CW measurement traversal
-    display_x_axis: str = "angle"
     radial_centers_mm: Optional[list[float]] = None
     geometry_model: str = 'linear'
     angular_model: str = 'preserve'
@@ -107,6 +104,8 @@ class Settings:
     # are explicitly supplied. New GUI projects use common bench pressures.
     flow_pressure_kgf_cm2: Optional[float] = None
     sector_pressure_kgf_cm2: Optional[float] = None
+    quasistationary: bool = False
+    quasi_settings: dict = field(default_factory=dict)
 
     _extra: dict = field(default_factory=dict,repr=False)
     _project_extra: dict = field(default_factory=dict,repr=False)
@@ -117,6 +116,8 @@ class Settings:
         for params in self.nozzle_presets.values():params.setdefault("z_tip_mm",0.)
 
     def validate(self):
+        if not isinstance(self.quasistationary,bool) or not isinstance(self.quasi_settings,dict):
+            raise ValueError('Неверные настройки режима расчёта')
         for pressure in (self.flow_pressure_kgf_cm2,self.sector_pressure_kgf_cm2):
             if pressure is not None and (not np.isfinite(pressure) or pressure<=0):
                 raise ValueError('Давления испытаний должны быть положительными конечными числами.')
@@ -158,8 +159,6 @@ class Settings:
                                    (self.radial_model, RADIAL_MODELS, 'радиальный профиль')):
             if value not in pool:
                 raise ValueError(f'Неизвестная модель «{label}»: {value}')
-        if not np.isfinite(self.theta_zero_deg) or self.theta_direction not in (-1,1) or isinstance(self.theta_direction,bool):raise ValueError("Нужны конечный угол нуля и направление +1/-1.")
-        if self.display_x_axis not in ("angle","cells"):raise ValueError("Ось X: градусы или ячейки.")
         self.radial_centers_and_edges()
 
     def radial_centers_and_edges(self):
@@ -307,7 +306,7 @@ def sample_kernel(n: Nozzle, z_mm: float, cfg: Settings, *, unit_mass=False):
             r[:,None]*np.cos(direction)[None,:])
     ypos = (n.radius_mm*np.sin(np.deg2rad(n.theta_deg)) +
             r[:,None]*np.sin(direction)[None,:])
-    weights = ((1.0 if unit_mass else source_flow_kg_s(n,cfg))*wr[:,None]*ap[None,:]).reshape(-1)
+    weights = ((1. if unit_mass else source_flow_kg_s(n,cfg))*wr[:,None]*ap[None,:]).reshape(-1)
     return xpos.reshape(-1), ypos.reshape(-1), weights
 
 @dataclass
@@ -323,9 +322,14 @@ class PlaneResult:
     inside_kg_s: float
     inner_kg_s: float
     outer_kg_s: float
+    is_composite: bool = False
+    scan_times_s: object = None
+    scan_steps: object = None
+    scan_pressures: object = None
 
     @property
     def rel_balance_error(self):
+        if self.is_composite:return float('nan')
         denominator = max(self.injected_kg_s, 1e-15)
         return (self.inside_kg_s+self.inner_kg_s+self.outer_kg_s-self.injected_kg_s)/denominator
 
@@ -353,13 +357,14 @@ def calculate_plane(nozzles: list[Nozzle], cfg: Settings, z_mm: float) -> PlaneR
         inner += float(np.sum(w[ir<0]))
         outer += float(np.sum(w[ir>=nrad]))
         if np.any(mask_in):
-            ith = angular_indices(xp[mask_in],yp[mask_in],cfg)
+            theta = (np.arctan2(yp[mask_in],xp[mask_in])-theta0+dtheta/2)%(2*np.pi)
+            ith = np.floor(theta/dtheta).astype(int).clip(0,nang-1)
             cell_id = ir[mask_in]*nang+ith
             mass += np.bincount(cell_id,weights=w[mask_in],minlength=nrad*nang).reshape(nrad,nang)
     area = (np.pi/nang)*(np.diff((edges*1e-3)**2))
     area = np.repeat(area[:,None],nang,axis=1)
     flux = mass/area
-    th_centers = grid_angles(cfg)
+    th_centers = (cfg.grid_start_deg+np.arange(nang)*360/nang)%360
     return PlaneResult(float(z_mm),mass,area,flux,centers,edges,th_centers,
                        injected,float(mass.sum()),inner,outer)
 
@@ -370,7 +375,7 @@ def _json_record(obj):
 
 
 def project_to_json(settings: Settings, nozzles: list[Nozzle]):
-    return {**settings._project_extra,'format':'fuel-field-pilot-v1','version':'0.5',
+    return {**settings._project_extra,'format':'fuel-field-pilot-v1','version':'0.5.2',
             'settings':_json_record(settings),
             'nozzles':[{**_json_record(n),'r_nozzle_mm':n.r_nozzle_mm} for n in nozzles]}
 
@@ -433,7 +438,7 @@ def _kernel_outer_limit(rc,h,model):
 
 def evaluate_continuous_field(nozzles: list[Nozzle], cfg: Settings,
                               z_mm: float, resolution: Optional[int] = None,
-                              bounds_xy=None, mask_track=True) -> SmoothField:
+                              bounds_xy=None, mask_track=True, *, unit_mass=False) -> SmoothField:
     """High-resolution XY preview of superposed local polar source kernels.
 
     Uses analytic-area density per nozzle, sampled on a regular XY grid. This
@@ -458,7 +463,7 @@ def evaluate_continuous_field(nozzles: list[Nozzle], cfg: Settings,
         n=effective_nozzle(n,cfg)
         if not n.enabled or z_mm<n.z_tip_mm:
             continue
-        m_dot = source_flow_kg_s(n,cfg)
+        m_dot = 1. if unit_mass else source_flow_kg_s(n,cfg)
         if m_dot <= 0:
             continue
         rc,h = geometry_at(n,z_mm,cfg)
@@ -497,9 +502,10 @@ def evaluate_continuous_field(nozzles: list[Nozzle], cfg: Settings,
         # Since the 36 values have mean 1, the circular integral equals 2π.
         ang = sector[indices%36]*(1-weight) + sector[(indices+1)%36]*weight
         flux[iy0:iy1,ix0:ix1] += (m_dot*1e6/(2*np.pi*integral))*radial*ang
-    xx,yy = np.meshgrid(axis,y_axis)
-    r_global = np.hypot(xx,yy)
-    valid = (r_global >= cfg.r_in_mm)&(r_global <= cfg.r_out_mm) if mask_track else np.ones_like(flux,dtype=bool)
+    if mask_track:
+        xx,yy = np.meshgrid(axis,y_axis);r_global = np.hypot(xx,yy)
+        valid = (r_global >= cfg.r_in_mm)&(r_global <= cfg.r_out_mm)
+    else:valid = np.ones_like(flux,dtype=bool)
     return SmoothField(axis,y_axis,flux,np.ma.masked_where(~valid,flux),float(z_mm))
 
 

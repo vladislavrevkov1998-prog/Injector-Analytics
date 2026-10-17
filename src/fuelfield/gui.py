@@ -1,6 +1,5 @@
 """PyQt5 pilot for ring-field model. Launch with python main.py."""
 from __future__ import annotations
-from .numeric_input import DecimalSpinBox
 import json, os, sys, traceback
 from copy import deepcopy
 from pathlib import Path
@@ -14,7 +13,7 @@ from PyQt5.QtWidgets import (
     QSpinBox, QDoubleSpinBox, QLineEdit, QFileDialog, QMessageBox, QSplitter,
     QGroupBox, QScrollArea, QPlainTextEdit, QHeaderView, QAbstractItemView,
     QStatusBar, QProgressBar, QMenu, QAction, QInputDialog, QCheckBox,
-    QUndoStack, QUndoCommand, QStackedWidget, QStyledItemDelegate, QDialog, QToolButton
+    QUndoStack, QUndoCommand, QStackedWidget, QStyledItemDelegate, QDialog, QToolButton, QSlider
 )
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -30,7 +29,6 @@ from .v02 import (GEOMETRY_KEYS,NOZZLE_KINDS,effective_nozzle,flow_status,
                   validate_nozzles,follow_row,capture_report)
 from .characteristics import flow_to_kg_h,flow_from_kg_h
 from .editors import CatalogEditor,PresetEditor
-from .coordinates import to_global,from_global,grid_angles,plot_x,period,x_label,decorate_axes,polar_ticks
 from .analysis import METRICS,UNITS,EQUATIONS,cell_values,matching_index
 from .plot_interaction import attach_interaction
 from .numeric_delegate import NumericDelegate
@@ -40,7 +38,10 @@ from .comparison import ComparisonPanel
 from .graph_selection import GraphSelection
 from .graph_links import GraphLinks
 from .regression_gui import RegressionDialog
-from .measurement_gui import MeasurementPanel
+from .quasi import calculate_quasi,QuasiSettings,CalculationCancelled,CalculationOutput
+from .quasi_gui import QuasiDialog
+from .quasi_plotting import QuasiFieldAnimator
+from .quasi_io import write_report as write_quasi_report
 from . import __version__
 
 FIELDS = [
@@ -48,6 +49,7 @@ FIELDS = [
     ('atomizer_type_id','Имя распылителя'),('row','Ряд'),('manual_write','Ручная запись'),
     ('z_tip_mm','z среза, мм'),('theta_deg','θ форс., °'),('radius_mm','R форс., мм'),
     ('flow_kg_h','Gт, кг/ч'),('flow_mode','Расход из'),('effective_flow','Расход в режиме, кг/ч'),
+    ('manifold_id','Коллектор'),
     ('alpha_deg','α, полный °'),('r_nozzle_mm','R_сопла, мм'),('h0_mm','h0, мм'),
     ('k_linear','k лин.'),('k_quadratic','k квадр.'),('power','p степ.'),
     ('z_ref_mm','z ref, мм'),('inner_angle_deg','α внутр., °'),
@@ -57,7 +59,7 @@ FIELDS = [
 ]
 INTCOL = {key:i for i,(key,_) in enumerate(FIELDS)}
 READONLY={'id','row','sector_source','effective_flow','flow_status'}
-NUMERICS = {f for f,_ in FIELDS} - READONLY - {'enabled','manual_write','row','flow_mode','atomizer_type_id','nozzle_kind'}
+NUMERICS = {f for f,_ in FIELDS} - READONLY - {'enabled','manual_write','row','flow_mode','atomizer_type_id','nozzle_kind','manifold_id'}
 SINGLE_NOZZLE_PREVIEW_RESOLUTION = 400  # 2.78× the former 240² display cells
 
 
@@ -100,7 +102,7 @@ def _number(txt: str):
 
 
 def _dbl(value, low=-1e7, high=1e7, decimals=5, step=1.):
-    c = DecimalSpinBox()
+    c = QDoubleSpinBox()
     c.setDecimals(decimals)
     c.setRange(low,high)
     c.setSingleStep(step)
@@ -199,6 +201,9 @@ class CalcWorker(QObject):
         self.settings=settings;self.nozzles=nozzles
     def run(self):
         try:
+            if self.settings.quasistationary:
+                self.quasi_result=calculate_quasi(self.nozzles,self.settings,cancel=lambda:QThread.currentThread().isInterruptionRequested(),progress=self.progress.emit)
+                self.completed.emit(CalculationOutput([(p,self.quasi_result.smooth(i,0)) for i,p in enumerate(self.quasi_result.composites)],self.quasi_result));return
             result=[]
             for i,z in enumerate(self.settings.z_mm):
                 if QThread.currentThread().isInterruptionRequested():self.cancelled.emit();return
@@ -209,6 +214,7 @@ class CalcWorker(QObject):
                 result.append((plane,preview))
             if QThread.currentThread().isInterruptionRequested():self.cancelled.emit();return
             self.completed.emit(result)
+        except CalculationCancelled:self.cancelled.emit()
         except Exception:
             self.failed.emit(traceback.format_exc())
         finally:self.finished.emit()
@@ -224,11 +230,12 @@ class MainWindow(QMainWindow):
         for n in self.nozzles:n.geometry_overrides=[]
         self.results=[]
         self.smooth_fields=[]
+        self.quasi_result=None
+        self.time_timer=QTimer(self);self.time_timer.setSingleShot(True);self.time_timer.setInterval(16);self.time_timer.timeout.connect(self._update_time_field)
         self.sector_id=None
         self.project_file=None
         self.thread=None
         self._restoring=True
-        self._closing=False
         self._render_cache={}
         self._revision=0
         self.undo_stack=QUndoStack(self)
@@ -248,8 +255,6 @@ class MainWindow(QMainWindow):
         self._build_nozzles_tab()
         self._build_models_tab()
         self._build_results_tab()
-        self.measurement_panel=MeasurementPanel(self,PasteTable);self.tabs.addTab(self.measurement_panel,"05 · Измерительная сессия")
-        self.undo_stack.indexChanged.connect(self.measurement_panel.history_changed)
         self._build_menu()
         self.statusBar().showMessage('Начальные размеры и расход — демонстрационные/пустые. Задайте реальные значения перед расчётом.')
         self._fill_nozzles()
@@ -270,7 +275,7 @@ class MainWindow(QMainWindow):
             act=QAction(label,self)
             act.setShortcut(shortcut);act.triggered.connect(slot);menu.addAction(act)
         menu=self.menuBar().addMenu('Расчёт')
-        a=QAction('Рассчитать 4 сечения',self);a.setShortcut('F5');a.triggered.connect(self.run_calc);menu.addAction(a)
+        a=QAction('Рассчитать сечения',self);a.setShortcut('F5');a.triggered.connect(self.run_calc);menu.addAction(a)
         edit=self.menuBar().addMenu('Правка')
         undo=self.undo_stack.createUndoAction(self,'Отменить')
         undo.setShortcut('Ctrl+Z');edit.addAction(undo)
@@ -296,18 +301,14 @@ class MainWindow(QMainWindow):
             ('preview_resolution','Разрешение подробной карты (пикс./ось)',_integer(480,200,1000)),
             ('n_radial','Число радиальных уровней',_integer(6,1,40)),
             ('n_angular','Число окружных ячеек',_integer(140,8,1440)),
-            ('theta_zero_deg','Положение 0° от +X против ЧС, °',_dbl(0,-360,360,8,.001)),
-            ('theta_direction','Направление увеличения угла (обход гребёнки)',QComboBox()),
-            ('grid_start_deg','Смещение первого центра матрицы от нуля, °',_dbl(0,-360,360)),
+            ('grid_start_deg','Первый центр окружной матрицы: угол, °',_dbl(0,-360,360)),
             ('z_mm','Координаты сечений z, мм (1–50)',QLineEdit('0; 20; 40; 60')),
             ('radial_centers_mm','Радиусы центров уровней, мм (пусто = равномерно)',QLineEdit('')),
         ]
         for key,label,w in fields:
             self.geom_widgets[key]=w
             if isinstance(w,QLineEdit):w.setMinimumWidth(380)
-            if key=='theta_direction':w.addItem('Против часовой стрелки',1);w.addItem('По часовой стрелке',-1)
             form.addRow(label,w)
-        frame_note=QLabel('Ноль задан относительно неизменной физической оси +X. Смена отсчёта не перемещает форсунки; сетка и замеры привязываются к новому нулю. Сектора 1–36 форсунок сохраняют свой отсчёт против ЧС.');frame_note.setWordWrap(True);form.addRow(frame_note)
         sections=QPushButton("Редактор сечений: добавить / удалить / порядок");sections.clicked.connect(self.open_sections_editor);form.addRow(sections)
         btnrow=QHBoxLayout()
         btn=QPushButton('Применить позиции двух рядов к 140 форсункам')
@@ -337,6 +338,7 @@ class MainWindow(QMainWindow):
 
     def open_regression(self):
         self._record_edit()
+        if self.cfg.quasistationary:self._error('Идентификация v0.4.1 использует стационарное ядро. Для неё выберите стационарный режим; настройки квазистационарного режима сохранятся.');return
         existing=getattr(self,'regression_dialog',None)
         if existing is not None and existing.thread is not None:existing.show();existing.raise_();return
         self.regression_dialog=RegressionDialog(self,PasteTable);self.regression_dialog.show()
@@ -382,6 +384,23 @@ class MainWindow(QMainWindow):
         self.settings_page.raise_()
         self.settings_page.activateWindow()
 
+    def _quasi_toggled(self,enabled):
+        if self._restoring:return
+        self._record_edit(label='Режим расчёта')
+        if enabled and self.cfg.quasistationary:self.open_quasi_settings()
+
+    def open_quasi_settings(self):
+        self._record_edit()
+        existing=getattr(self,'quasi_dialog',None)
+        if existing is not None and existing.isVisible():existing.raise_();existing.activateWindow();return
+        self.quasi_dialog=QuasiDialog(self,PasteTable);self.quasi_dialog.show()
+
+    def apply_quasi_settings(self,raw,bindings=None):
+        self._record_edit();state=project_to_json(self.cfg,self.nozzles);state['settings']['quasi_settings']=deepcopy(raw)
+        for n in state['nozzles']:
+            if str(n['id']) in (bindings or {}):n['manifold_id']=bindings[str(n['id'])]
+        self.apply_project_state(state,'Настройки квазистационарного режима')
+
     def _build_nozzles_tab(self):
         page=QWidget();layout=QVBoxLayout(page);top=QHBoxLayout()
         for label,slot in [
@@ -409,6 +428,8 @@ class MainWindow(QMainWindow):
             ('flow_pressure_kgf_cm2','Δp измерения Gт, кгс/см²'),('sector_pressure_kgf_cm2','Δp секторов, кгс/см²'),
             ('allow_extrapolation','Экстраполяция'),('placement_mode','Расстановка')]:form.addRow(label,self.mode_widgets[key])
         settings.addLayout(form)
+        mode_row=QHBoxLayout();self.quasi_check=QCheckBox('Квазистационарный (без галочки — стационарный)');self.mode_widgets['quasistationary']=self.quasi_check;mode_row.addWidget(self.quasi_check)
+        self.quasi_settings_button=QPushButton('Настройки режима…');self.quasi_settings_button.clicked.connect(self.open_quasi_settings);mode_row.addWidget(self.quasi_settings_button);mode_row.addStretch();settings.addLayout(mode_row);self.quasi_check.toggled.connect(self._quasi_toggled)
         self.flow_notice=QLabel();self.flow_notice.setWordWrap(True);settings.addWidget(self.flow_notice)
         close=QPushButton('Закрыть настройки');close.clicked.connect(self.settings_page.close)
         settings.addWidget(close);settings.addStretch()
@@ -424,10 +445,13 @@ class MainWindow(QMainWindow):
         self.nozzle_table.setSelectionBehavior(QAbstractItemView.SelectItems)
         self.nozzle_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.nozzle_table.verticalHeader().setDefaultSectionSize(25)
-        header=self.nozzle_table.horizontalHeader();header.setSectionsClickable(True);header.setDefaultSectionSize(112);header.setMinimumSectionSize(65)
+        header=self.nozzle_table.horizontalHeader();header.setSectionsClickable(True);header.setDefaultSectionSize(112);header.setMinimumSectionSize(48)
         self.nozzle_table.setColumnWidth(INTCOL['id'],52)
-        for key,width in [('nozzle_kind',150),('atomizer_type_id',145),('manual_write',125),('effective_flow',200)]:
+        for key,width in [('nozzle_kind',130),('atomizer_type_id',145),('manual_write',125),('effective_flow',200)]:
             self.nozzle_table.setColumnWidth(INTCOL[key],width)
+        for key in ('manifold_id','z_tip_mm','theta_deg','radius_mm','flow_kg_h','flow_mode'):
+            self.nozzle_table.setColumnWidth(INTCOL[key],100)
+        for key in ('manifold_id','flow_mode'):self.nozzle_table.setColumnWidth(INTCOL[key],96)
         for key in ('nozzle_kind','atomizer_type_id','flow_mode'):
             self.nozzle_table.setItemDelegateForColumn(INTCOL[key],TypeDelegate(self,key))
         self.nozzle_table.currentCellChanged.connect(self._sector_selection)
@@ -571,7 +595,6 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.metric_equation.setStyleSheet("color:#67458b;font-size:15px;")
         self.metric_equation.setToolTip("ṁ — расход контрольной ячейки [кг/с]; S — площадь [м²]; ρ — плотность [кг/м³]; t — интервал [с]. Средние взвешены по площади.")
         representations.insertWidget(2,self.metric_equation)
-        axis_row=QHBoxLayout();self.x_axis=QComboBox();self.x_axis.addItem("Градусы: 0…360°","angle");self.x_axis.addItem("Номера окружных ячеек","cells");axis_row.addWidget(QLabel("Ось X эпюр:"));axis_row.addWidget(self.x_axis);axis_row.addStretch();lay.addLayout(axis_row)
         chart_controls=QHBoxLayout()
         self.plot_count=_integer(6,1,140);self.plot_columns=_integer(2,1,6)
         self.graph_selection=GraphSelection(self.plot_count);self.graph_selection.changed.connect(self._view_changed)
@@ -602,7 +625,10 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.figsmooth=Figure(figsize=(7,7),tight_layout=True)
         self.smoothcanvas=FigureCanvas(self.figsmooth)
         stack=QStackedWidget();stack.addWidget(self.smoothcanvas);self.plot_stacks.append(stack)
-        plots.addTab(stack,'Подробное суммарное поле')
+        field_page=QWidget();field_layout=QVBoxLayout(field_page);field_layout.setContentsMargins(0,0,0,0);field_layout.addWidget(stack,1)
+        self.time_controls=QWidget();time_layout=QVBoxLayout(self.time_controls);time_layout.setContentsMargins(4,2,4,2);self.time_label=QLabel();self.time_label.setWordWrap(True);self.time_label.setMinimumHeight(self.time_label.fontMetrics().lineSpacing()*3+8);time_layout.addWidget(self.time_label);self.time_slider=QSlider(Qt.Horizontal);self.time_slider.setSingleStep(1);self.time_slider.setPageStep(1);time_layout.addWidget(self.time_slider);field_layout.addWidget(self.time_controls);self.time_controls.hide()
+        self.time_slider.valueChanged.connect(self._schedule_time_field);self.time_slider.sliderReleased.connect(self._update_time_field)
+        plots.addTab(field_page,'Подробное суммарное поле')
         self.figroses=Figure(figsize=(7,7),tight_layout=True)
         self.rosescanvas=FigureCanvas(self.figroses)
         stack=QStackedWidget();stack.addWidget(self.rosescanvas);self.plot_stacks.append(stack)
@@ -626,9 +652,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             if isinstance(w,QLineEdit):
                 if key=='z_mm':w.setText('; '.join(f'{a:g}' for a in value))
                 elif key=='radial_centers_mm':w.setText('' if value is None else '; '.join(f'{x:g}' for x in value))
-            elif isinstance(w,QComboBox):w.setCurrentIndex(w.findData(value))
             else:w.setValue(value)
-        if hasattr(self,"x_axis"):self.x_axis.setCurrentIndex(self.x_axis.findData(self.cfg.display_x_axis))
         for key,w in self.model_widgets.items():
             val=getattr(self.cfg,key)
             if isinstance(w,QComboBox):w.setCurrentIndex(w.findData(val))
@@ -667,7 +691,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                         values=list(original)
                     setattr(cfg,key,values)
             else:
-                value=w.currentData() if isinstance(w,QComboBox) else w.value();original=getattr(self.cfg,key)
+                value=w.value();original=getattr(self.cfg,key)
                 if isinstance(w,QDoubleSpinBox) and value==round(original,w.decimals()):value=original
                 setattr(cfg,key,value)
         for key,w in self.model_widgets.items():
@@ -676,7 +700,6 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                       ('color_vmin',self.scale_min),('color_vmax',self.scale_max)):
             original=getattr(self.cfg,key);value=w.value()
             setattr(cfg,key,original if value==round(original,w.decimals()) else value)
-        cfg.display_x_axis=self.x_axis.currentData()
         cfg.color_scale_mode=self.scale_mode.currentData()
         cfg.color_out_of_range=self.scale_range.currentData()
         cfg.color_shared_z=self.scale_shared.isChecked()
@@ -704,10 +727,10 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                 label=f'{status.source}; Δp={status.pressure_kgf_cm2:g}; '+('оценка' if status.estimated else 'измерено')
                 if status.notices:label+='; '+'; '.join(status.notices)
             except ValueError as exc:calculated='—';label=str(exc)
+            if self.cfg.quasistationary:calculated='G(t): по шагам';label='Расход зависит от давления коллектора '+(n.manifold_id or 'по умолчанию')+'; значения по шагам — в отчёте 04.'
             for col,(key,_) in enumerate(FIELDS):
                 if key=='effective_flow':v=calculated
                 elif key=='flow_status':v=label
-                elif key=='theta_deg':v=float(from_global(n.theta_deg,self.cfg))
                 elif key=='flow_kg_h':v=flow_from_kg_h(n.flow_kg_h,unit,self.cfg.density_kg_m3)
                 elif key=='manual_write':v=bool(n.geometry_overrides)
                 elif key=='nozzle_kind':v=NOZZLE_KINDS[n.nozzle_kind]
@@ -739,6 +762,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                 if status.kg_s>0:notices.update(status.notices)
             except ValueError:invalid+=1
         text='Legacy: давление и η не пересчитываются.' if self.cfg.pressure_mode=='legacy' else f'Целевой перепад: {self.cfg.target_pressure_kgf_cm2:g} кгс/см².'
+        if self.cfg.quasistationary:text='Квазистационарный режим: используются перепады коллекторов на каждом шаге; целевой Δp выше относится к стационарному расчёту.'
         if invalid:text+=f' Требуют настройки: {invalid} форсунок.'
         if notices:text+=' '+ '; '.join(sorted(notices))+'.'
         self.flow_notice.setText(text)
@@ -768,7 +792,6 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                 val=item.text().strip()
                 if key in NUMERICS:
                     original=getattr(effective if key in GEOMETRY_KEYS else n,key)
-                    if key=='theta_deg':original=float(from_global(original,self.cfg))
                     if key=='flow_kg_h':original=flow_from_kg_h(original,self.cfg.display_flow_unit,self.cfg.density_kg_m3)
                     if key=='capture_efficiency' and val in ('','?','unknown'):
                         raw[key]=None;continue
@@ -781,9 +804,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                         if manual and not unchanged:geometry_changes[key]=value
                     elif key=='flow_kg_h':
                         raw[key]=n.flow_kg_h if unchanged else flow_to_kg_h(value,self.cfg.display_flow_unit,self.cfg.density_kg_m3)
-                    elif key=='theta_deg':raw[key]=n.theta_deg if unchanged else float(to_global(value,self.cfg))
                     else:raw[key]=value
-                    if key=='theta_deg' and raw[key]!=n.theta_deg:angle_edits[n.id]=raw[key]
+                    if key=='theta_deg' and value!=n.theta_deg:angle_edits[n.id]=value
                 else:
                     if key=='nozzle_kind':
                         raw[key]=next((k for k,label in NOZZLE_KINDS.items() if val.lower() in (k,label.lower())),val.lower())
@@ -794,6 +816,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                         elif val==old_name:raw[key]=n.atomizer_type_id
                         elif len(matches)>1:raise ValueError('Неоднозначное имя распылителя; выберите его из списка.')
                         else:raw[key]=matches[0] if matches else val
+                    elif key=='manifold_id':raw[key]=val.strip()
                     else:raw[key]=val.lower()
             if geometry_changes:
                 values={k:getattr(effective,k) for k in GEOMETRY_KEYS};values.update(geometry_changes)
@@ -862,7 +885,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             table.batchFinished.connect(lambda:self._record_edit(label='Вставка ячеек'))
         widgets=list(self.geom_widgets.values())+list(self.model_widgets.values())+list(self.mode_widgets.values())+[
             self.duration_spin,self.density_spin,self.scale_mode,self.scale_min,
-            self.scale_max,self.scale_range,self.scale_shared,self.x_axis]
+            self.scale_max,self.scale_range,self.scale_shared]
         for w in widgets:
             if isinstance(w,QComboBox):w.currentIndexChanged.connect(self._record_edit)
             elif isinstance(w,QCheckBox):w.toggled.connect(self._record_edit)
@@ -886,7 +909,6 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         before=self._edit_state
         physical_before=deepcopy(before);physical_after=deepcopy(state)
         for data in (physical_before,physical_after):
-            data.pop('measurement_session',None)
             for key in list(data['settings']):
                 if key.startswith(('color_','display_')):del data['settings'][key]
         self.cfg=cfg;self.nozzles=nozzles
@@ -895,13 +917,13 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self._fill_nozzles()
         self.undo_stack.push(ProjectEdit(self,before,state,label))
         if physical_before!=physical_after:self._invalidate_results()
-        else:self._invalidate_render();self._plot_result();self.comparison.draw()
+        else:self._invalidate_render();self._plot_result()
         self._queue_preview()
 
     def _restore_edit(self,state):
         # Undo preserves results for display-only changes, but invalidates physics edits.
         previous=deepcopy(self._edit_state)
-        physical=lambda data: {**{k:v for k,v in data.items() if k!='measurement_session'},'settings':{k:v for k,v in data['settings'].items()
+        physical=lambda data: {**data,'settings':{k:v for k,v in data['settings'].items()
                                                  if not k.startswith(('color_','display_'))}}
         self._restoring=True
         try:
@@ -910,7 +932,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             self._edit_state=deepcopy(state)
         finally:self._restoring=False
         if physical(previous)!=physical(state):self._invalidate_results()
-        else:self._invalidate_render();self._plot_result();self.comparison.draw()
+        else:self._invalidate_render();self._plot_result()
         self._queue_preview()
 
     def _invalidate_render(self):
@@ -927,6 +949,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                 figure_name,canvas_name=names[index];setattr(self,figure_name,canvas.figure);setattr(self,canvas_name,canvas)
 
     def _invalidate_results(self):
+        self.quasi_result=None;self.time_timer.stop();self.time_controls.hide()
         self._revision+=1
         self.results=[];self.smooth_fields=[]
         self._invalidate_render()
@@ -1130,6 +1153,9 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         cfg=self._read_controls()
         nozzles=self._read_nozzles(cfg)
         validate_nozzles(nozzles,cfg)
+        if cfg.quasistationary:
+            QuasiSettings.from_dict(cfg.quasi_settings).validate(cfg,nozzles)
+            return cfg,nozzles
         flowing=[n for n in nozzles if n.enabled and source_flow_kg_s(n,cfg)>0]
         if not flowing:
             raise ValueError('Нет ни одной установленной форсунки с положительным расходом. '
@@ -1175,6 +1201,9 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         if hasattr(self,'_invalidate_render'):self._invalidate_render()
         self.results=[v[0] for v in planes]
         self.smooth_fields=[v[1] for v in planes]
+        self.quasi_result=getattr(planes,'quasi_result',None)
+        if hasattr(self,'time_controls'):
+            self.time_controls.setVisible(self.quasi_result is not None);self.time_slider.blockSignals(True);self.time_slider.setRange(0,self.quasi_result.settings.n_steps-1 if self.quasi_result else 0);self.time_slider.setValue(0);self.time_slider.blockSignals(False)
         self.progress.setValue(len(planes))
         # The worker emits (PlaneResult, ContinuousField) pairs.
         # `self.results` already contains the unwrapped PlaneResult objects.
@@ -1189,7 +1218,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         finally:
             self.plane_select.blockSignals(False)
         self._plot_result()
-        count=sum(1 for n in self.nozzles if n.enabled and source_flow_kg_s(n,self.cfg)>0)
+        count=sum((self.quasi_result.flows>0).any(axis=0)) if self.quasi_result else sum(1 for n in self.nozzles if n.enabled and source_flow_kg_s(n,self.cfg)>0)
         self.statusBar().showMessage(f'Готово: {len(self.results)} '+('сечение' if len(self.results)%10==1 and len(self.results)%100!=11 else 'сечения' if len(self.results)%10 in (2,3,4) and len(self.results)%100 not in (12,13,14) else 'сечений')+f', {count} форсунок с расходом.',20000)
 
     def _failed(self,message):
@@ -1208,7 +1237,9 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         i=max(0,self.plane_select.currentIndex())
         p=self.results[i]
         total=p.injected_kg_s*3600
-        self.balance_label.setText(
+        if p.is_composite:
+            self.balance_label.setText(f'<b>Квазистационарное сечение {i+1}, z={p.z_mm:g} мм.</b> Накопленная матрица: один угловой столбец на временной шаг. Эпюры — из этой матрицы. Поле ниже — мгновенный снимок; единый мгновенный баланс накопленной матрицы не определён.')
+        else:self.balance_label.setText(
             f'<b>Сечение {i+1}, z={p.z_mm:g} мм.</b> '
             f'Через сопла перед сечением {total:.5g} кг/ч; в тракте {p.inside_kg_s*3600:.5g} кг/ч '
             f'({100*p.inside_kg_s/max(p.injected_kg_s,1e-15):.2f}%); '
@@ -1277,7 +1308,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
 
     def _render_view(self,view,i):
         key=(i,view,self.draw_outlines.isChecked(),self.draw_labels.isChecked(),
-             self.draw_rose_over_field.isChecked(),self.rose_scale.value(),self.metric.currentData(),self.volume_interval.value(),self.compare_radius.currentData(),self.plot_count.value(),self.plot_columns.value(),tuple(self.graph_selection.selected),self.x_axis.currentData())
+             self.draw_rose_over_field.isChecked(),self.rose_scale.value(),self.metric.currentData(),self.volume_interval.value(),self.compare_radius.currentData(),self.plot_count.value(),self.plot_columns.value(),tuple(self.graph_selection.selected))
         fig_name,canvas_name=[('figmap','mapcanvas'),('figsmooth','smoothcanvas'),
                               ('figroses','rosescanvas'),('figcurves','curvecanvas')][view]
         stack=self.plot_stacks[view]
@@ -1287,7 +1318,10 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             setattr(self,fig_name,fig);setattr(self,canvas_name,canvas)
             p=self.results[i]
             if view==0:self._draw_map(p)
-            elif view==1:self._draw_smooth(self.smooth_fields[i],p)
+            elif view==1:
+                if self.quasi_result:
+                    step=self.time_slider.value();self._draw_smooth(self.quasi_result.smooth(i,step),self.quasi_result.snapshot(i,step));canvas._quasi_step=step
+                else:self._draw_smooth(self.smooth_fields[i],p)
             elif view==2:self._draw_roses(p)
             else:
                 self._draw_curves(p);attach_interaction(canvas)
@@ -1296,6 +1330,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         canvas=self._render_cache[key]
         setattr(self,fig_name,canvas.figure);setattr(self,canvas_name,canvas)
         stack.setCurrentWidget(canvas)
+        if view==1 and self.quasi_result:self._update_time_field(canvas,i)
         if hasattr(self,"graph_links"):QTimer.singleShot(0,self.graph_links.refresh)
         return canvas.figure
 
@@ -1310,14 +1345,14 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.figmap.clear()
         ax=self.figmap.add_subplot(111,projection='polar')
         n=self.cfg.n_angular
-        theta_edge=np.deg2rad(grid_angles(self.cfg,edges=True))
+        theta_edge=np.deg2rad(self.cfg.grid_start_deg+(np.arange(n+1)-0.5)*360/n)
         th,r=np.meshgrid(theta_edge,p.radial_edges_mm)
         metric=self.metric.currentData()
         values=cell_values(p,metric,self.cfg.density_kg_m3,self.volume_interval.value())
         data,norm,cmap=color_scale(values,self.cfg,[cell_values(v,metric,self.cfg.density_kg_m3,self.volume_interval.value()) for v in self.results])
         pc=ax.pcolormesh(th,r,data,shading='flat',cmap=cmap,norm=norm)
         ax.set_theta_zero_location('E')
-        ax.set_theta_direction(1);polar_ticks(ax,self.cfg)
+        ax.set_theta_direction(1)
         ax.set_ylim(0,self.cfg.r_out_mm)
         ax.set_title(f'{METRICS[metric]} · z={p.z_mm:g} мм',pad=18,fontsize=11)
         self.figmap.colorbar(pc,ax=ax,pad=.14,shrink=.68,label=UNITS[metric])
@@ -1330,16 +1365,48 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                             labels=self.draw_labels.isChecked())
 
     def _draw_smooth(self, field, p):
-        draw_detailed_map(self.figsmooth,field,p,self.cfg,self.nozzles,
+        cfg=self.cfg
+        nozzles=self.nozzles
+        if self.quasi_result:
+            from dataclasses import replace
+            index=matching_index([op.z_mm for op in self.quasi_result.operators],p.z_mm);flows=self.quasi_result.flows[self.time_slider.value()]
+            nozzles=[replace(n,flow_mode='manual',flow_kg_h=float(g*3600)) for n,g in zip(self.quasi_result.nozzles,flows)]
+            cfg=deepcopy(cfg);cfg.pressure_mode='legacy'
+        if self.quasi_result and cfg.color_scale_mode=='auto':
+            cfg.color_scale_mode='manual';cfg.color_vmin=0.;cfg.color_vmax=self.quasi_result.color_max(index,cfg.color_shared_z)
+        ax=draw_detailed_map(self.figsmooth,field,p,cfg,nozzles,
                           outlines=self.draw_outlines.isChecked(),
                           labels=self.draw_labels.isChecked(),
                           roses=self.draw_rose_over_field.isChecked(),
                           rose_scale_mm=self.rose_scale.value(),
                           shared_values=[f.masked_flux_kg_m2_s for f in self.smooth_fields])
+        if self.quasi_result:
+            ax.set_title(f'Мгновенное поле · z={p.z_mm:g} мм; время — на ползунке',fontsize=10);self.smoothcanvas.quasi_animator=QuasiFieldAnimator(self.smoothcanvas,ax,cfg)
         self.smoothcanvas.draw_idle()
 
+    def _schedule_time_field(self,*args):
+        # Throttle while dragging: restarting on every move would postpone
+        # every frame until the user stops moving the handle.
+        if not self.time_timer.isActive():self.time_timer.start()
+
+    def _update_time_field(self,canvas=None,plane_index=None):
+        self.time_timer.stop()
+        if not self.quasi_result or not self.results:return
+        i=max(0,self.plane_select.currentIndex()) if plane_index is None else plane_index;step=self.time_slider.value();result=self.quasi_result;p=result.snapshot(i,step)
+        pressures='; '.join(f'{key}: Δp={values[step]:.7g} кгс/см²' for key,values in result.pressures.items())
+        self.time_label.setText(f'Шаг {step}/{result.settings.n_steps-1} · t={result.settings.times[step]:.8g} с · угол гребёнки {result.settings.angles[step]:.8g}° · {pressures}\nМгновенный баланс: подано {p.injected_kg_s*3600:.7g} кг/ч; внутри {p.inside_kg_s*3600:.7g}; за внутренней {p.inner_kg_s*3600:.7g}; за наружной {p.outer_kg_s*3600:.7g}; невязка {p.rel_balance_error:.3g}.')
+        if canvas is None:
+            if self.plots.currentIndex()!=1:return
+            canvas=self.plot_stacks[1].currentWidget()
+        if hasattr(canvas,'quasi_animator') and getattr(canvas,'_quasi_step',None)!=step:
+            field=result.smooth(i,step);canvas.quasi_animator.update(field);canvas._quasi_step=step
+
     def _draw_roses(self,p):
-        draw_polar_nozzles_map(self.figroses,p,self.cfg,self.nozzles,
+        cfg=self.cfg;nozzles=self.nozzles
+        if self.quasi_result:
+            from dataclasses import replace
+            cfg=deepcopy(cfg);cfg.pressure_mode='legacy';nozzles=[replace(n,flow_mode='manual',flow_kg_h=float(g*3600)) for n,g in zip(self.quasi_result.nozzles,self.quasi_result.flows[self.time_slider.value()])]
+        draw_polar_nozzles_map(self.figroses,p,cfg,nozzles,
                                outlines=self.draw_outlines.isChecked(),
                                labels=self.draw_labels.isChecked(),
                                rose_scale_mm=self.rose_scale.value())
@@ -1353,21 +1420,21 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         indices=[k for k in indices if k is not None];n=len(indices)
         cols=min(n,self.plot_columns.value())
         rows=int(np.ceil(n/cols))
-        mode=self.x_axis.currentData();angles=plot_x(p.theta_centers_deg,self.cfg,mode)
+        angles=p.theta_centers_deg
         order=np.argsort(angles)
-        x=angles[order];cycle=period(self.cfg,mode)
+        x=angles[order]
         for slot,k in enumerate(indices):
             ax=self.figcurves.add_subplot(rows,cols,slot+1)
             y=cell_values(p,self.metric.currentData(),self.cfg.density_kg_m3,self.volume_interval.value())[k][order]
-            ax.plot(np.r_[x,x[0]+cycle],np.r_[y,y[0]],lw=1.2)
+            ax.plot(np.r_[x,x[0]+360],np.r_[y,y[0]],lw=1.2)
             selected=self.compare_radius.currentData() is not None and np.isclose(p.radial_centers_mm[k],self.compare_radius.currentData(),rtol=0,atol=1e-7)
             ax.set_title(f'Уровень {k+1}: R={p.radial_centers_mm[k]:.2f} мм'+(' · сравнение' if selected else ''),fontsize=9,color='#734ca0' if selected else '#222222')
-            decorate_axes(ax,self.cfg,mode);ax._compare_y=UNITS[self.metric.currentData()]
-            ax.set_xlim(0,cycle)
+            ax._compare_x='angle_deg';ax._compare_y=UNITS[self.metric.currentData()]
+            ax.set_xlim(0,360)
             ax.grid(alpha=.24)
             ax.tick_params(labelsize=7)
             ax.set_ylabel(UNITS[self.metric.currentData()],fontsize=7)
-            ax.set_xlabel(x_label(self.cfg,mode),fontsize=7)
+            ax.set_xlabel('Окружной угол, °',fontsize=7)
         self.figcurves.suptitle(f'Окружные эпюры · z={p.z_mm:g} мм',fontsize=11)
         self.figcurves.subplots_adjust(hspace=.65,wspace=.35,top=.92,bottom=.06)
         self.curvecanvas.draw_idle()
@@ -1375,27 +1442,27 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
     def closeEvent(self,event):
         comparison=getattr(self,'comparison',None)
         regression=getattr(self,'regression_dialog',None)
-        measurement=getattr(self,'measurement_panel',None)
-        if measurement is not None and measurement.thread is not None:
-            self.statusBar().showMessage('Дождитесь завершения расчёта/импорта сессии или отмените его.',8000);event.ignore();return
         if self.thread is not None or comparison is not None and comparison.thread is not None or regression is not None and regression.thread is not None:
             self.statusBar().showMessage('Дождитесь завершения расчёта перед закрытием.',8000)
             event.ignore();return
-        self._closing=True
         super().closeEvent(event)
 
     def export_xlsx(self):
         if not self.results:self._error('Сначала рассчитайте сечения.');return
         path,_=QFileDialog.getSaveFileName(self,'Окружные эпюры всех сечений','epures.xlsx','Excel (*.xlsx)')
         if path:
-            try:write_epures_xlsx(path,self.results,self.cfg,self.metric.currentData(),self.volume_interval.value())
+            try:
+                if self.quasi_result:write_quasi_report(path,self.quasi_result,self.metric.currentData(),self.volume_interval.value())
+                else:write_epures_xlsx(path,self.results,self.cfg,self.metric.currentData(),self.volume_interval.value())
             except Exception as exc:self._error(exc)
 
     def export_results(self):
         if not self.results:self._error('Сначала выполните расчёт.');return
         path,_=QFileDialog.getSaveFileName(self,'Матрицы всех сечений','fuel_fields.csv','CSV (*.csv)')
         if path:
-            try:write_result_csv(path,self.results)
+            try:
+                if self.quasi_result:write_quasi_report(path,self.quasi_result)
+                else:write_result_csv(path,self.results)
             except Exception as exc:self._error(exc)
 
     def export_png(self):
@@ -1431,7 +1498,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         except Exception as exc:self._error(exc)
 
     def new_project(self):
-        if self.thread is not None or self.measurement_panel.thread is not None:self._error('Дождитесь завершения расчёта.');return
+        if self.thread is not None:self._error('Дождитесь завершения расчёта.');return
         reply=QMessageBox.question(self,'Новый проект','Сбросить все значения и эпюры?',QMessageBox.Yes|QMessageBox.No)
         if reply!=QMessageBox.Yes:return
         self._restoring=True
@@ -1452,6 +1519,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                 path,_=QFileDialog.getSaveFileName(self,'Сохранить проект','fuel_field_project.json','JSON (*.json)')
             if not path:return
             if not path.lower().endswith('.json'):path+='.json'
+            if path.lower().endswith('.quasi.json'):raise ValueError('Расширение .quasi.json предназначено для настроек режима. Сохраните проект с именем *_project.json.')
             with open(path,'w',encoding='utf-8') as f:
                 json.dump(project_to_json(cfg,nozzles),f,ensure_ascii=False,indent=2)
             self.project_file=path;self.cfg=cfg;self.nozzles=nozzles
@@ -1459,11 +1527,12 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         except Exception as exc:self._error(exc)
 
     def open_project(self):
-        if self.thread is not None or self.measurement_panel.thread is not None:self._error('Дождитесь завершения расчёта.');return
+        if self.thread is not None:self._error('Дождитесь завершения расчёта.');return
         path,_=QFileDialog.getOpenFileName(self,'Открыть проект','','JSON (*.json)')
         if not path:return
         try:
             with open(path,'r',encoding='utf-8') as f:data=json.load(f)
+            if data.get('format')=='fuel-quasistationary-settings':raise ValueError('Это настройки режима *.quasi.json. Загрузите их в окне настроек квазистационарного режима, а не как проект.')
             cfg,nozzles=project_from_json(data)
             self._restoring=True
             self.cfg,self.nozzles=cfg,nozzles
@@ -1475,12 +1544,14 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         except Exception as exc:self._error(exc)
 
     def _reset_history(self):
+        self.quasi_result=None;self.time_timer.stop();self.time_controls.hide()
+        existing=getattr(self,'quasi_dialog',None)
+        if existing is not None:existing.close()
         self.undo_stack.clear()
         self._edit_state=project_to_json(self.cfg,self.nozzles)
         self._restoring=False
         self._revision+=1
         self._invalidate_render()
-        self.measurement_panel.load_project(force=True)
         self._queue_preview()
 
 

@@ -1,5 +1,4 @@
 """Qt editors for measured/calculated atomizer characteristics and templates."""
-from .numeric_input import DecimalSpinBox
 from copy import deepcopy
 from pathlib import Path
 from PyQt5.QtCore import pyqtSignal
@@ -57,12 +56,12 @@ class CatalogEditor(QWidget):
         self.theory_table.horizontalHeader().setStretchLastSection(True)
         self.theory_table.setMinimumHeight(310)
         theory_layout.addWidget(self.theory_table)
-        self.plot_min=DecimalSpinBox();self.plot_max=DecimalSpinBox()
+        self.plot_min=QDoubleSpinBox();self.plot_max=QDoubleSpinBox()
         for spin,value in ((self.plot_min,2.5),(self.plot_max,30.)):
             spin.setDecimals(4);spin.setRange(.0001,100000.);spin.setValue(value)
         graph_form=QFormLayout();graph_form.addRow('График: Δp от, кгс/см²',self.plot_min)
         graph_form.addRow('График: Δp до, кгс/см²',self.plot_max);theory_layout.addLayout(graph_form)
-        self.diagnostic_pressure=DecimalSpinBox();self.diagnostic_pressure.setDecimals(5)
+        self.diagnostic_pressure=QDoubleSpinBox();self.diagnostic_pressure.setDecimals(5)
         self.diagnostic_pressure.setRange(.00001,100000.)
         self.diagnostic_pressure.setValue(owner.cfg.target_pressure_kgf_cm2)
         graph_form.addRow('Расчётные строки: Δp, кгс/см²',self.diagnostic_pressure)
