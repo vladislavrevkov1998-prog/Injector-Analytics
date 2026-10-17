@@ -177,6 +177,7 @@ class TestUserQt(unittest.TestCase):
 
     def test_selection_burst_defers_preview_and_same_source_reuses_it(self):
         from fuelfield import gui
+        self.w.tabs.setCurrentIndex(1)  # Preview work belongs to the visible nozzle tab.
         with patch.object(gui,'evaluate_continuous_field',wraps=evaluate_continuous_field) as evaluate:
             start=time.monotonic()
             for row in range(30):

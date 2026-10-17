@@ -270,6 +270,7 @@ class CatalogEditor(QWidget):
     def refresh_density(self):
         if self._density==self.owner.cfg.density_kg_m3:return
         if self.kind.currentData()=='theoretical':
+            self._density=self.owner.cfg.density_kg_m3
             self.preview();return
         try:curve=self.read_curve() if self.table.rowCount() else None
         except ValueError:

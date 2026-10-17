@@ -3,11 +3,12 @@ from pathlib import Path
 from dataclasses import replace
 from copy import deepcopy
 import numpy as np
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt,QTimer
 from PyQt5.QtWidgets import (QDialog,QVBoxLayout,QHBoxLayout,QFormLayout,QLabel,QLineEdit,QComboBox,QPushButton,
     QTableWidget,QTableWidgetItem,QCheckBox,QFileDialog,QTextBrowser,QDialogButtonBox,QStyledItemDelegate,QSplitter,QWidget)
 from .quasi import QuasiSettings,PressureChannel,PRESSURE_FACTORS,KINDS,finite
 from .quasi_io import read_pressure_tables,import_pressure_table,load_settings,save_settings
+from .pressure_charts import PressureCharts
 
 KIND_LABELS={'delta_p':'Перепад Δp','p_fuel_abs':'Абсолютное топливо − абсолютный газ','p_fuel_gauge':'Избыточное топливо − избыточный газ'}
 
@@ -56,7 +57,8 @@ class PressureImportDialog(QDialog):
 class QuasiDialog(QDialog):
     def __init__(self,owner,table_class):
         super().__init__(owner);self.owner=owner;self.table_class=table_class;self.pending_bindings={};self.metadata={};self.descriptors=[]
-        self.setWindowTitle('Настройки квазистационарного режима');self.resize(1080,760)
+        self.setWindowTitle('Настройки квазистационарного режима');self.resize(1280,820)
+        self.chart_timer=QTimer(self);self.chart_timer.setSingleShot(True);self.chart_timer.setInterval(120);self.chart_timer.timeout.connect(self.update_charts);self.charts_dirty=True
         layout=QVBoxLayout(self);top=QHBoxLayout();self.load_button=QPushButton('Загрузить *.quasi.json');self.load_button.clicked.connect(self.open_json);top.addWidget(self.load_button);self.save_button=QPushButton('Сохранить *.quasi.json');self.save_button.clicked.connect(self.save_json);top.addWidget(self.save_button)
         self.xlsx_button=QPushButton('Импорт XLSX / CSV');self.xlsx_button.clicked.connect(self.import_file);top.addWidget(self.xlsx_button);top.addStretch();self.guide_button=QPushButton('Инструкция');self.guide_button.clicked.connect(self.show_guide);top.addWidget(self.guide_button);layout.addLayout(top)
         note=QLabel('Матрица на 04 собирается по одному угловому столбцу за шаг; все радиальные ячейки — одновременно. Поле орошения показывает выбранное время. Температуры и давление воздуха на входе не нужны.');note.setWordWrap(True);layout.addWidget(note)
@@ -67,7 +69,9 @@ class QuasiDialog(QDialog):
         for col,choices in [(1,[(u,u) for u in PRESSURE_FACTORS]),(2,[(k,KIND_LABELS[k]) for k in KINDS]),(3,[(u,u) for u in PRESSURE_FACTORS])]:self.channels.setItemDelegateForColumn(col,ChoiceDelegate(choices,self.channels))
         layout.addWidget(self.channels);bar=QHBoxLayout()
         for label,slot in [('Добавить коллектор',self.add_channel),('Удалить выбранные',self.remove_channel),('Обновить колонки давления',self.rebuild)]:b=QPushButton(label);b.clicked.connect(slot);bar.addWidget(b)
-        bar.addStretch();layout.addLayout(bar);self.table=table_class(0,0);layout.addWidget(self.table,1)
+        bar.addStretch();layout.addLayout(bar);self.table=table_class(0,0);self.pressure_charts=PressureCharts(self)
+        self.pressure_splitter=QSplitter(Qt.Horizontal);self.pressure_splitter.addWidget(self.table);self.pressure_splitter.addWidget(self.pressure_charts);self.pressure_splitter.setChildrenCollapsible(False);self.pressure_splitter.setSizes([650,590]);layout.addWidget(self.pressure_splitter,1)
+        self.table.itemChanged.connect(self.queue_charts);self.table.batchFinished.connect(self.queue_charts);self.channels.itemChanged.connect(self.queue_charts)
         self.bindings_box=QCheckBox('Применить привязки форсунок из загруженного файла');self.bindings_box.hide();layout.addWidget(self.bindings_box)
         actions=QHBoxLayout();apply=QPushButton('Применить');apply.clicked.connect(self.apply);actions.addWidget(apply);close=QPushButton('Закрыть');close.clicked.connect(self.close);actions.addWidget(close);actions.addStretch();layout.addLayout(actions)
         self.status=QLabel('Примените настройки, затем выполните «Рассчитать сечения» на 04. Привязки форсунок редактируются на 02.');self.status.setWordWrap(True);layout.addWidget(self.status)
@@ -89,12 +93,14 @@ class QuasiDialog(QDialog):
         if raw and raw[0]==item.text():return raw[1]
         return finite(item.text().replace(',','.'),'Давление')
     def set_mode(self,mode):
+        self.channels.blockSignals(True)
         self.mode=mode;self.metadata=deepcopy(mode.metadata);self.n_label.setText(str(mode.n_steps)+' (как на 01)');self.start.setText(repr(mode.t_start_s));self.dt.setText(repr(mode.dt_s));self.first.setText(repr(mode.first_angle_deg));self.direction.setCurrentIndex(self.direction.findData(mode.direction));self.default.setText(mode.default_manifold)
         self.channels.setRowCount(len(mode.channels))
         for row,c in enumerate(mode.channels):
             for col,value in enumerate((c.id,c.unit,c.kind,c.gas_unit,c.reference_id)):self.item(self.channels,row,col,value)
-        self.channels.resizeColumnsToContents();self.fill_pressure(mode)
+        self.channels.resizeColumnsToContents();self.channels.blockSignals(False);self.fill_pressure(mode)
     def fill_pressure(self,mode):
+        self.table.blockSignals(True)
         self.descriptors=[];headers=['Шаг','t, с','Угол гребёнки, °']
         for i,c in enumerate(mode.channels):
             self.descriptors.append((i,'pressure'));headers.append(c.id+' · давление ['+c.unit+']')
@@ -104,15 +110,22 @@ class QuasiDialog(QDialog):
             for col,value in enumerate((row,float(mode.times[row]),float(mode.angles[row]))):self.item(self.table,row,col,value,True)
             for col,(index,key) in enumerate(self.descriptors,3):
                 values=getattr(mode.channels[index],key);self.item(self.table,row,col,values[row] if row<len(values) else None)
-        self.table.resizeColumnsToContents();self.table.horizontalHeader().setStretchLastSection(True)
-    def read_mode(self):
+        self.table.resizeColumnsToContents();self.table.horizontalHeader().setStretchLastSection(True);self.table.blockSignals(False);self.queue_charts()
+    def read_mode(self,tolerate_invalid=False):
         def text(r,c):return self.channels.item(r,c).text().strip() if self.channels.item(r,c) else ''
         channels=[]
         for row in range(self.channels.rowCount()):
             parts={}
             for key in ('pressure','gas_pressure'):
                 pair=(row,key)
-                parts[key]=tuple(self.value(self.table,r,self.descriptors.index(pair)+3) for r in range(self.mode.n_steps)) if pair in self.descriptors else (None,)*self.mode.n_steps
+                values=[]
+                if pair in self.descriptors:
+                    for r in range(self.mode.n_steps):
+                        try:values.append(self.value(self.table,r,self.descriptors.index(pair)+3))
+                        except ValueError:
+                            if not tolerate_invalid:raise
+                            values.append(None)
+                parts[key]=tuple(values) if pair in self.descriptors else (None,)*self.mode.n_steps
             if text(row,2)=='delta_p':parts['gas_pressure']=()
             channels.append(PressureChannel(text(row,0),parts['pressure'],text(row,1),text(row,2),parts['gas_pressure'],text(row,3),text(row,4)))
         return QuasiSettings(self.mode.n_steps,finite(self.dt.text().replace(',','.'),'Шаг времени'),finite(self.start.text().replace(',','.'),'Начало времени'),finite(self.first.text().replace(',','.'),'Первый угол'),self.direction.currentData(),self.default.text().strip(),tuple(channels),deepcopy(self.metadata))
@@ -121,9 +134,32 @@ class QuasiDialog(QDialog):
         try:
             mode=self.read_mode()
             if mode.dt_s<=0:raise ValueError('Шаг времени должен быть >0')
+            self.table.blockSignals(True)
             for row in range(mode.n_steps):
                 self.item(self.table,row,1,float(mode.times[row]),True);self.item(self.table,row,2,float(mode.angles[row]),True)
+            self.table.blockSignals(False);self.queue_charts()
         except ValueError as exc:self.status.setText(str(exc))
+
+    def queue_charts(self,*args):
+        self.charts_dirty=True
+        if self.isVisible() and not self.table.in_batch:self.chart_timer.start()
+
+    def update_charts(self):
+        self.chart_timer.stop()
+        if not self.isVisible():return
+        try:
+            mode=self.read_mode(tolerate_invalid=True)
+            if mode.dt_s<=0:raise ValueError('Шаг времени должен быть >0')
+            self.pressure_charts.set_mode(mode)
+        except (ValueError,TypeError) as exc:self.pressure_charts.show_error(exc)
+        self.charts_dirty=False
+
+    def showEvent(self,event):
+        super().showEvent(event)
+        if self.charts_dirty:self.chart_timer.start()
+
+    def hideEvent(self,event):
+        self.chart_timer.stop();super().hideEvent(event)
     def rebuild(self):
         try:mode=self.read_mode();self.fill_pressure(mode);self.status.setText('Колонки обновлены. Для каждого коллектора заполните все '+str(mode.n_steps)+' шагов.')
         except ValueError as exc:self.status.setText(str(exc))
