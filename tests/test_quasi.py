@@ -36,6 +36,11 @@ class TestQuasi(unittest.TestCase):
     np.testing.assert_allclose(out.composites[i].cell_mass_kg_s[:,step],mass[:,step],rtol=2e-13,atol=1e-14)
     np.testing.assert_allclose(out.snapshot(i,step).cell_mass_kg_s,mass,rtol=2e-13,atol=1e-14)
   self.assertEqual(out.composites[0].scan_times_s.tolist(),mode.times.tolist());self.assertIsNone(out.manifest()['composite_global_balance'])
+ def test_one_four_seven_axial_sections_match_constant_stationary_reference(self):
+  for count in (1,4,7):
+   with self.subTest(sections=count):
+    cfg,ns,mode=case(constant=True);cfg.z_mm=list(np.linspace(0,60,count));out=calculate_quasi(ns,cfg,preview=False);self.assertEqual(len(out.composites),count);self.assertEqual(len(out.balances),count*mode.n_steps)
+    for z,p in zip(cfg.z_mm,out.composites):np.testing.assert_allclose(p.cell_mass_kg_s,calculate_plane(ns,cfg,z).cell_mass_kg_s,rtol=3e-14,atol=1e-15)
  def test_clockwise_nonzero_start_maps_columns_without_reversing_nozzles(self):
   cfg,ns,mode=case();cfg.grid_start_deg=45.;mode=replace(mode,first_angle_deg=135.,direction=-1);cfg.quasi_settings=mode.to_dict();angles=[n.theta_deg for n in ns];out=calculate_quasi(ns,cfg,preview=False)
   self.assertEqual(mode.column_indices(cfg).tolist(),[2,1,0,7,6,5,4,3]);self.assertEqual([n.theta_deg for n in ns],angles)

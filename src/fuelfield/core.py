@@ -375,7 +375,7 @@ def _json_record(obj):
 
 
 def project_to_json(settings: Settings, nozzles: list[Nozzle]):
-    return {**settings._project_extra,'format':'fuel-field-pilot-v1','version':'0.4',
+    return {**settings._project_extra,'format':'fuel-field-pilot-v1','version':'0.5.2',
             'settings':_json_record(settings),
             'nozzles':[{**_json_record(n),'r_nozzle_mm':n.r_nozzle_mm} for n in nozzles]}
 

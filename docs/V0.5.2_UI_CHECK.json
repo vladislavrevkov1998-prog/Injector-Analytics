@@ -1,0 +1,40 @@
+[
+  {
+    "requested_width": 1280,
+    "actual_width": 1280,
+    "height": 930,
+    "canvas_width": 1254,
+    "canvas_height": 351,
+    "slider_width": 1246
+  },
+  {
+    "requested_width": 1480,
+    "actual_width": 1480,
+    "height": 930,
+    "canvas_width": 1454,
+    "canvas_height": 351,
+    "slider_width": 1446
+  },
+  {
+    "requested_width": 1920,
+    "actual_width": 1920,
+    "height": 930,
+    "canvas_width": 1894,
+    "canvas_height": 391,
+    "slider_width": 1886
+  },
+  {
+    "mode_dialog_width": 1080,
+    "height": 760,
+    "pressure_table_width": 1058,
+    "guide_button_visible": true
+  },
+  {
+    "actual_example_xlsx_rows": 140,
+    "collectors": [
+      "A",
+      "B"
+    ],
+    "dt_s": 0.5
+  }
+]

@@ -15,6 +15,7 @@ from .analysis import cell_values,matching_index,UNITS
 from .analytics_io import read_chart_tables
 from .plot_interaction import attach_interaction
 from .graph_selection import GraphSelection
+from .quasi import calculate_quasi,CalculationCancelled,CalculationOutput
 
 def x_unit(label):
     if label.strip().lower() in ('angle_deg','theta_deg','theta_center_deg'):return 'angle_deg'
@@ -28,13 +29,18 @@ class ProjectWorker(QObject):
     def __init__(self,cfg,nozzles,detailed=False):super().__init__();self.cfg=cfg;self.nozzles=nozzles;self.detailed=detailed;self.fields=[]
     def run(self):
         try:
+            if self.cfg.quasistationary:
+                self.quasi_result=calculate_quasi(self.nozzles,self.cfg,preview=self.detailed,cancel=lambda:QThread.currentThread().isInterruptionRequested())
+                if self.detailed:self.fields=[self.quasi_result.smooth(i,0) for i in range(len(self.cfg.z_mm))]
+                self.completed.emit(CalculationOutput(self.quasi_result.composites,self.quasi_result,self.fields));return
             planes=[]
             for z in self.cfg.z_mm:
                 if QThread.currentThread().isInterruptionRequested():return
                 planes.append(calculate_plane(self.nozzles,self.cfg,z))
                 if QThread.currentThread().isInterruptionRequested():return
                 if self.detailed:self.fields.append(evaluate_continuous_field(self.nozzles,self.cfg,z))
-            self.completed.emit(planes)
+            self.completed.emit(CalculationOutput(planes,fields=self.fields))
+        except CalculationCancelled:return
         except Exception as exc:self.failed.emit(str(exc))
         finally:self.finished.emit()
 
@@ -99,7 +105,8 @@ class ComparisonPanel(QWidget):
     def _populate(self,labels):
         self.plane.blockSignals(True);self.plane.clear();self.plane.addItems(labels);self.plane.blockSignals(False)
     def _project_done(self,planes):
-        self.planes=planes;self.cfg=self._loading_cfg;self.tables=[];self.fields=getattr(getattr(self,"worker",None),"fields",[]);self.nozzles=getattr(self,"_loading_ns",[]);self.view.setEnabled(True)
+        self.planes=planes;self.cfg=self._loading_cfg;self.tables=[];self.fields=list(getattr(planes,'fields',()));self.nozzles=getattr(self,"_loading_ns",[]);self.view.setEnabled(True)
+        self.quasi_result=getattr(planes,'quasi_result',None)
         self.table_controls.hide();self.radius.setEnabled(True);self.sync.setEnabled(True)
         self._populate([f'z={p.z_mm:g} мм' for p in planes]);self._plane_changed();self.sync_from_primary()
     def _failed(self,text):
@@ -167,6 +174,7 @@ class ComparisonPanel(QWidget):
             pc=ax.pcolormesh(th,r,data,cmap=cmap,norm=norm,shading='flat');ax.set_ylim(0,cfg.r_out_mm);ax.set_title(f'Матрица · z={p.z_mm:g} мм');self.figure.colorbar(pc,ax=ax,pad=.14,shrink=.68,label=UNITS[metric]);draw_nozzle_markers(ax,cfg,self.nozzles,polar=True,outlines=False,labels=False)
         elif i<len(self.fields):
             draw_detailed_map(self.figure,self.fields[i],p,cfg,self.nozzles,outlines=False,labels=False,shared_values=[f.masked_flux_kg_m2_s for f in self.fields])
+            if p.is_composite:self.figure.axes[0].set_title(f'Мгновенное поле сравнения: шаг 0, z={p.z_mm:g} мм',fontsize=10)
         else:self.figure.add_subplot(111).text(.1,.5,'Перезагрузите JSON для подробного поля')
         self._chart_key=self._state_key();self.interaction.axes=[];self.interaction.original={};self.canvas.draw_idle();self._refresh_links()
     def draw(self,*args):
