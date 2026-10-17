@@ -1,0 +1,34 @@
+{
+  "frame_zero": 90,
+  "direction": -1,
+  "x_axis": "cells",
+  "checks": [
+    {
+      "window_width": 1280,
+      "field_height": 315,
+      "slider_visible": true
+    },
+    {
+      "window_width": 1480,
+      "field_height": 315,
+      "slider_visible": true
+    },
+    {
+      "window_width": 1920,
+      "field_height": 355,
+      "slider_visible": true
+    },
+    {
+      "dialog_width": 1280,
+      "dialog_height": 820,
+      "direction_text": "Вперёд",
+      "direction_width": 99,
+      "graphs": 2,
+      "table_width": 657,
+      "chart_width": 597
+    }
+  ],
+  "physical_nozzles_unchanged": true,
+  "matrices_unchanged_by_display": true,
+  "source_unchanged": true
+}
