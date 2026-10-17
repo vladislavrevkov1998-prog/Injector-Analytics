@@ -142,17 +142,20 @@ def write_sector_csv(path: str, nozzles):
 
 
 def write_result_csv(path: str, planes):
+    import json
+    planes=list(planes)
+    composite=any(getattr(p,'is_composite',False) for p in planes)
     with open(path,'w',encoding='utf-8-sig',newline='') as f:
         out=csv.writer(f,delimiter=';')
         out.writerow(['z_mm','radial_level','theta_node','radius_center_mm',
-                      'theta_deg','cell_area_m2','mass_flow_kg_s','flux_kg_m2_s'])
+                      'theta_deg','cell_area_m2','mass_flow_kg_s','flux_kg_m2_s']+(['calculation_mode','scan_step','time_s','delta_p_kgf_cm2_json'] if composite else []))
         for p in planes:
             for i,r in enumerate(p.radial_centers_mm):
                 for j,th in enumerate(p.theta_centers_deg):
                     out.writerow([f'{p.z_mm:.8g}',i+1,j+1,f'{r:.8g}',f'{th:.8g}',
                                   f'{p.cell_area_m2[i,j]:.12g}',
                                   f'{p.cell_mass_kg_s[i,j]:.12g}',
-                                  f'{p.flux_kg_m2_s[i,j]:.12g}'])
+                                  f'{p.flux_kg_m2_s[i,j]:.12g}']+((['quasistationary',int(p.scan_steps[j]),float(p.scan_times_s[j]),json.dumps(p.scan_pressures[j],ensure_ascii=False)] if p.is_composite else ['stationary','','','']) if composite else []))
 
 
 def import_characteristic_file(path, unit='kg/h', density_kg_m3=800., sheet=None):
