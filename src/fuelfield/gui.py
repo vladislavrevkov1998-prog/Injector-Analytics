@@ -32,6 +32,8 @@ from .editors import CatalogEditor,PresetEditor
 from .analysis import METRICS,UNITS,EQUATIONS,cell_values,matching_index
 from .plot_interaction import attach_interaction
 from .numeric_delegate import NumericDelegate
+from .numeric_input import DecimalSpinBox
+from .coordinates import to_global,from_global,grid_angles,plot_x,period,x_label,decorate_axes,polar_ticks
 from .axes_settings import open_axes_settings
 from .analytics_io import write_epures_xlsx
 from .comparison import ComparisonPanel
@@ -46,10 +48,9 @@ from . import __version__
 
 FIELDS = [
     ('id','ID'),('enabled','Установлена'),('nozzle_kind','Тип форсунки'),
-    ('atomizer_type_id','Имя распылителя'),('row','Ряд'),('manual_write','Ручная запись'),
+    ('manifold_id','Коллектор'),('atomizer_type_id','Имя распылителя'),('row','Ряд'),('manual_write','Ручная запись'),
     ('z_tip_mm','z среза, мм'),('theta_deg','θ форс., °'),('radius_mm','R форс., мм'),
     ('flow_kg_h','Gт, кг/ч'),('flow_mode','Расход из'),('effective_flow','Расход в режиме, кг/ч'),
-    ('manifold_id','Коллектор'),
     ('alpha_deg','α, полный °'),('r_nozzle_mm','R_сопла, мм'),('h0_mm','h0, мм'),
     ('k_linear','k лин.'),('k_quadratic','k квадр.'),('power','p степ.'),
     ('z_ref_mm','z ref, мм'),('inner_angle_deg','α внутр., °'),
@@ -102,7 +103,7 @@ def _number(txt: str):
 
 
 def _dbl(value, low=-1e7, high=1e7, decimals=5, step=1.):
-    c = QDoubleSpinBox()
+    c = DecimalSpinBox()
     c.setDecimals(decimals)
     c.setRange(low,high)
     c.setSingleStep(step)
@@ -302,14 +303,18 @@ class MainWindow(QMainWindow):
             ('preview_resolution','Разрешение подробной карты (пикс./ось)',_integer(480,200,1000)),
             ('n_radial','Число радиальных уровней',_integer(6,1,40)),
             ('n_angular','Число окружных ячеек',_integer(140,8,1440)),
-            ('grid_start_deg','Первый центр окружной матрицы: угол, °',_dbl(0,-360,360)),
+            ('theta_zero_deg','Положение 0° от физической оси +X против ЧС, °',_dbl(0,-360,360,8,.001)),
+            ('theta_direction','Направление увеличения угла (движение гребёнки)',QComboBox()),
+            ('grid_start_deg','Смещение первого центра матрицы от нуля, °',_dbl(0,-360,360)),
             ('z_mm','Координаты сечений z, мм (1–50)',QLineEdit('0; 20; 40; 60')),
             ('radial_centers_mm','Радиусы центров уровней, мм (пусто = равномерно)',QLineEdit('')),
         ]
         for key,label,w in fields:
             self.geom_widgets[key]=w
             if isinstance(w,QLineEdit):w.setMinimumWidth(380)
+            if key=='theta_direction':w.addItem('Против часовой стрелки',1);w.addItem('По часовой стрелке',-1)
             form.addRow(label,w)
+        frame_note=QLabel('Смена нуля/направления меняет отсчёт углов и порядок ячеек, сохраняя физические положения форсунок. Сектора 1–36 каждой форсунки сохраняют прежний отсчёт против ЧС.');frame_note.setWordWrap(True);form.addRow(frame_note)
         sections=QPushButton("Редактор сечений: добавить / удалить / порядок");sections.clicked.connect(self.open_sections_editor);form.addRow(sections)
         btnrow=QHBoxLayout()
         btn=QPushButton('Применить позиции двух рядов к 140 форсункам')
@@ -456,7 +461,9 @@ class MainWindow(QMainWindow):
         for key in ('nozzle_kind','atomizer_type_id','flow_mode'):
             self.nozzle_table.setItemDelegateForColumn(INTCOL[key],TypeDelegate(self,key))
         self.nozzle_table.currentCellChanged.connect(self._sector_selection)
-        header.sectionClicked.connect(self._toggle_flow_unit);splitter.addWidget(self.nozzle_table)
+        # Opening on press also works when Qt scrolls a partly visible header
+        # section before release (which otherwise cancels sectionClicked).
+        header.sectionPressed.connect(self._toggle_flow_unit);splitter.addWidget(self.nozzle_table)
         box=QWidget();bottom=QVBoxLayout(box)
         self.sector_label=QLabel();self.sector_label.setWordWrap(True);bottom.addWidget(self.sector_label)
         self.sector_table=PasteTable(36,2);self.sector_table.setHorizontalHeaderLabels(['Сектор №','Объём, мл'])
@@ -596,6 +603,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.metric_equation.setStyleSheet("color:#67458b;font-size:15px;")
         self.metric_equation.setToolTip("ṁ — расход контрольной ячейки [кг/с]; S — площадь [м²]; ρ — плотность [кг/м³]; t — интервал [с]. Средние взвешены по площади.")
         representations.insertWidget(2,self.metric_equation)
+        axis_row=QHBoxLayout();self.x_axis=QComboBox();self.x_axis.addItem('Градусы: 0…360°','angle');self.x_axis.addItem('Окружные ячейки: 0…N','cells');axis_row.addWidget(QLabel('Ось X эпюр:'));axis_row.addWidget(self.x_axis);axis_row.addStretch();lay.addLayout(axis_row)
         chart_controls=QHBoxLayout()
         self.plot_count=_integer(6,1,140);self.plot_columns=_integer(2,1,6)
         self.graph_selection=GraphSelection(self.plot_count);self.graph_selection.changed.connect(self._view_changed)
@@ -653,7 +661,9 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             if isinstance(w,QLineEdit):
                 if key=='z_mm':w.setText('; '.join(f'{a:g}' for a in value))
                 elif key=='radial_centers_mm':w.setText('' if value is None else '; '.join(f'{x:g}' for x in value))
+            elif isinstance(w,QComboBox):w.setCurrentIndex(w.findData(value))
             else:w.setValue(value)
+        self.x_axis.setCurrentIndex(self.x_axis.findData(self.cfg.display_x_axis))
         for key,w in self.model_widgets.items():
             val=getattr(self.cfg,key)
             if isinstance(w,QComboBox):w.setCurrentIndex(w.findData(val))
@@ -692,7 +702,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                         values=list(original)
                     setattr(cfg,key,values)
             else:
-                value=w.value();original=getattr(self.cfg,key)
+                value=w.currentData() if isinstance(w,QComboBox) else w.value();original=getattr(self.cfg,key)
                 if isinstance(w,QDoubleSpinBox) and value==round(original,w.decimals()):value=original
                 setattr(cfg,key,value)
         for key,w in self.model_widgets.items():
@@ -701,6 +711,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                       ('color_vmin',self.scale_min),('color_vmax',self.scale_max)):
             original=getattr(self.cfg,key);value=w.value()
             setattr(cfg,key,original if value==round(original,w.decimals()) else value)
+        cfg.display_x_axis=self.x_axis.currentData()
         cfg.color_scale_mode=self.scale_mode.currentData()
         cfg.color_out_of_range=self.scale_range.currentData()
         cfg.color_shared_z=self.scale_shared.isChecked()
@@ -733,6 +744,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                 except ValueError as exc:calculated='—';label=str(exc)
             for col,(key,_) in enumerate(FIELDS):
                 if key=='effective_flow':v=calculated
+                elif key=='theta_deg':v=float(from_global(n.theta_deg,self.cfg))
                 elif key=='flow_status':v=label
                 elif key=='flow_kg_h':v=flow_from_kg_h(n.flow_kg_h,unit,self.cfg.density_kg_m3)
                 elif key=='manual_write':v=bool(n.geometry_overrides)
@@ -796,6 +808,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                 val=item.text().strip()
                 if key in NUMERICS:
                     original=getattr(effective if key in GEOMETRY_KEYS else n,key)
+                    if key=='theta_deg':original=float(from_global(original,self.cfg))
                     if key=='flow_kg_h':original=flow_from_kg_h(original,self.cfg.display_flow_unit,self.cfg.density_kg_m3)
                     if key=='capture_efficiency' and val in ('','?','unknown'):
                         raw[key]=None;continue
@@ -808,8 +821,9 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                         if manual and not unchanged:geometry_changes[key]=value
                     elif key=='flow_kg_h':
                         raw[key]=n.flow_kg_h if unchanged else flow_to_kg_h(value,self.cfg.display_flow_unit,self.cfg.density_kg_m3)
+                    elif key=='theta_deg':raw[key]=n.theta_deg if unchanged else float(to_global(value,self.cfg))
                     else:raw[key]=value
-                    if key=='theta_deg' and value!=n.theta_deg:angle_edits[n.id]=value
+                    if key=='theta_deg' and raw[key]!=n.theta_deg:angle_edits[n.id]=raw[key]
                 else:
                     if key=='nozzle_kind':
                         raw[key]=next((k for k,label in NOZZLE_KINDS.items() if val.lower() in (k,label.lower())),val.lower())
@@ -889,7 +903,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             table.batchFinished.connect(lambda:self._record_edit(label='Вставка ячеек'))
         widgets=list(self.geom_widgets.values())+list(self.model_widgets.values())+list(self.mode_widgets.values())+[
             self.duration_spin,self.density_spin,self.scale_mode,self.scale_min,
-            self.scale_max,self.scale_range,self.scale_shared]
+            self.scale_max,self.scale_range,self.scale_shared,self.x_axis]
         for w in widgets:
             if isinstance(w,QComboBox):w.currentIndexChanged.connect(self._control_edited)
             elif isinstance(w,QCheckBox):w.toggled.connect(self._control_edited)
@@ -925,7 +939,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self._fill_nozzles()
         self.undo_stack.push(ProjectEdit(self,before,state,label))
         if physical_before!=physical_after:self._invalidate_results()
-        else:self._invalidate_render();self._plot_result()
+        else:self._invalidate_render();self._plot_result();self.comparison.draw()
         self._queue_preview()
 
     def _restore_edit(self,state):
@@ -940,7 +954,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             self._edit_state=deepcopy(state)
         finally:self._restoring=False
         if physical(previous)!=physical(state):self._invalidate_results()
-        else:self._invalidate_render();self._plot_result()
+        else:self._invalidate_render();self._plot_result();self.comparison.draw()
         self._queue_preview()
 
     def _invalidate_render(self):
@@ -1326,7 +1340,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
 
     def _render_view(self,view,i):
         key=(i,view,self.draw_outlines.isChecked(),self.draw_labels.isChecked(),
-             self.draw_rose_over_field.isChecked(),self.rose_scale.value(),self.metric.currentData(),self.volume_interval.value(),self.compare_radius.currentData(),self.plot_count.value(),self.plot_columns.value(),tuple(self.graph_selection.selected))
+             self.draw_rose_over_field.isChecked(),self.rose_scale.value(),self.metric.currentData(),self.volume_interval.value(),self.compare_radius.currentData(),self.plot_count.value(),self.plot_columns.value(),tuple(self.graph_selection.selected),self.x_axis.currentData())
         fig_name,canvas_name=[('figmap','mapcanvas'),('figsmooth','smoothcanvas'),
                               ('figroses','rosescanvas'),('figcurves','curvecanvas')][view]
         stack=self.plot_stacks[view]
@@ -1363,14 +1377,14 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.figmap.clear()
         ax=self.figmap.add_subplot(111,projection='polar')
         n=self.cfg.n_angular
-        theta_edge=np.deg2rad(self.cfg.grid_start_deg+(np.arange(n+1)-0.5)*360/n)
+        theta_edge=np.deg2rad(grid_angles(self.cfg,edges=True))
         th,r=np.meshgrid(theta_edge,p.radial_edges_mm)
         metric=self.metric.currentData()
         values=cell_values(p,metric,self.cfg.density_kg_m3,self.volume_interval.value())
         data,norm,cmap=color_scale(values,self.cfg,[cell_values(v,metric,self.cfg.density_kg_m3,self.volume_interval.value()) for v in self.results])
         pc=ax.pcolormesh(th,r,data,shading='flat',cmap=cmap,norm=norm)
         ax.set_theta_zero_location('E')
-        ax.set_theta_direction(1)
+        ax.set_theta_direction(1);polar_ticks(ax,self.cfg)
         ax.set_ylim(0,self.cfg.r_out_mm)
         ax.set_title(f'{METRICS[metric]} · z={p.z_mm:g} мм',pad=18,fontsize=11)
         self.figmap.colorbar(pc,ax=ax,pad=.14,shrink=.68,label=UNITS[metric])
@@ -1413,6 +1427,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         i=max(0,self.plane_select.currentIndex()) if plane_index is None else plane_index;step=self.time_slider.value();result=self.quasi_result
         balance=result.balances[i*result.settings.n_steps+step]
         pressures='; '.join(f'{key}: Δp={values[step]:.7g} кгс/см²' for key,values in result.pressures.items())
+        self.time_slider.setToolTip(f'Угол в системе 01: {result.settings.angles[step]:.8g}°; физический угол от +X против ЧС: {result.settings.global_angles(result.cfg)[step]:.8g}°. Изменяется интенсивность мгновенного поля; накопленная матрица сохраняется.')
         reference=result.balances[i*result.settings.n_steps]['injected_kg_s'];delta=f'{(balance["injected_kg_s"]/reference-1)*100:+.3f}%' if reference else '—'
         self.time_label.setText(
             f'Шаг {step}/{result.settings.n_steps-1} · t={result.settings.times[step]:.8g} с · угол гребёнки {result.settings.angles[step]:.8g}° · {pressures}\n'
@@ -1444,21 +1459,21 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         indices=[k for k in indices if k is not None];n=len(indices)
         cols=min(n,self.plot_columns.value())
         rows=int(np.ceil(n/cols))
-        angles=p.theta_centers_deg
+        mode=self.x_axis.currentData();angles=plot_x(p.theta_centers_deg,self.cfg,mode);cycle=period(self.cfg,mode)
         order=np.argsort(angles)
         x=angles[order]
         for slot,k in enumerate(indices):
             ax=self.figcurves.add_subplot(rows,cols,slot+1)
             y=cell_values(p,self.metric.currentData(),self.cfg.density_kg_m3,self.volume_interval.value())[k][order]
-            ax.plot(np.r_[x,x[0]+360],np.r_[y,y[0]],lw=1.2)
+            ax.plot(np.r_[x,x[0]+cycle],np.r_[y,y[0]],lw=1.2)
             selected=self.compare_radius.currentData() is not None and np.isclose(p.radial_centers_mm[k],self.compare_radius.currentData(),rtol=0,atol=1e-7)
             ax.set_title(f'Уровень {k+1}: R={p.radial_centers_mm[k]:.2f} мм'+(' · сравнение' if selected else ''),fontsize=9,color='#734ca0' if selected else '#222222')
-            ax._compare_x='angle_deg';ax._compare_y=UNITS[self.metric.currentData()]
-            ax.set_xlim(0,360)
+            decorate_axes(ax,self.cfg,mode);ax._compare_y=UNITS[self.metric.currentData()]
+            ax.set_xlim(0,cycle)
             ax.grid(alpha=.24)
             ax.tick_params(labelsize=7)
             ax.set_ylabel(UNITS[self.metric.currentData()],fontsize=7)
-            ax.set_xlabel('Окружной угол, °',fontsize=7)
+            ax.set_xlabel(x_label(self.cfg,mode),fontsize=7)
         self.figcurves.suptitle(f'Окружные эпюры · z={p.z_mm:g} мм',fontsize=11)
         self.figcurves.subplots_adjust(hspace=.65,wspace=.35,top=.92,bottom=.06)
         self.curvecanvas.draw_idle()

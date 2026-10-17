@@ -16,8 +16,10 @@ from .analytics_io import read_chart_tables
 from .plot_interaction import attach_interaction
 from .graph_selection import GraphSelection
 from .quasi import calculate_quasi,CalculationCancelled,CalculationOutput
+from .coordinates import grid_angles,polar_ticks,plot_x,x_label,decorate_axes,from_global
 
 def x_unit(label):
+    if label.strip().lower() in ('cell_index','measurement_index','номер ячейки'):return 'cell_index'
     if label.strip().lower() in ('angle_deg','theta_deg','theta_center_deg'):return 'angle_deg'
     unit=label[label.find('[')+1:label.find(']')].strip() if '[' in label and ']' in label else None
     return 'angle_deg' if unit and unit.lower() in ('°','deg','degrees','град','град.') else unit
@@ -64,7 +66,8 @@ class ComparisonPanel(QWidget):
         table_controls=QHBoxLayout();self.x=QComboBox();self.y=QComboBox();self.y2=QComboBox()
         for label,widget in [('X',self.x),('Y',self.y),('Y₂',self.y2)]:table_controls.addWidget(QLabel(label));table_controls.addWidget(widget)
         table_controls.addStretch()
-        self.table_controls=QWidget();self.table_controls.setLayout(table_controls);layout.addWidget(self.table_controls);self.table_controls.hide()
+        self.table_controls=QWidget();box=QVBoxLayout();box.addLayout(table_controls);self.x_reference=QComboBox();self.x_reference.addItem('Абсолютный: +X, против ЧС','global');self.x_reference.addItem('В системе отсчёта проекта','local')
+        reference=QHBoxLayout();reference.addWidget(QLabel('Отсчёт X в файле:'));reference.addWidget(self.x_reference);reference.addStretch();box.addLayout(reference);self.table_controls.setLayout(box);layout.addWidget(self.table_controls);self.table_controls.hide();self.x_reference.currentIndexChanged.connect(self.draw)
         self.notice=QLabel('Загрузите второй проект или таблицу с заголовками и числовыми столбцами.');self.notice.setWordWrap(True);layout.addWidget(self.notice)
         grid_controls=QHBoxLayout();self.plot_count=QSpinBox();self.plot_count.setRange(1,140)
         self.graph_selection=GraphSelection(self.plot_count);self.graph_selection.changed.connect(self.draw)
@@ -150,6 +153,15 @@ class ComparisonPanel(QWidget):
         elif not self.owner.results:self.notice.setText('Второй проект рассчитан. Рассчитайте основной проект для синхронизации.')
         else:self.notice.setText('Независимый выбор сечения и радиуса.')
         self.draw()
+    def _table_x(self,raw,label):
+        unit=x_unit(label);cfg=self.owner.cfg;mode=self.owner.x_axis.currentData();order=np.arange(len(raw))
+        if unit not in ('angle_deg','cell_index'):return raw,order,label,unit
+        angles=np.asarray(raw)*360/cfg.n_angular if unit=='cell_index' else np.asarray(raw)
+        if self.x_reference.currentData()=='global' and (cfg.theta_zero_deg%360!=0 or cfg.theta_direction!=1):
+            angles=from_global(angles,cfg);order=np.argsort(angles,kind='stable');angles=angles[order]
+        values=angles*cfg.n_angular/360 if mode=='cells' else angles
+        return values,order,x_label(cfg,mode),'cell_index' if mode=='cells' else 'angle_deg'
+
     def _series(self,ax,x,y,label,color=None):
         if self.kind.currentIndex()==1:ax.scatter(x,y,s=12,label=label,color=color)
         elif self.kind.currentIndex()==2:ax.bar(x,y,label=label,color=color)
@@ -159,7 +171,7 @@ class ComparisonPanel(QWidget):
         if self.tables:source=('table',id(self.tables),i,self.x.currentData(),self.y.currentData(),self.y2.currentData())
         elif self.planes:source=('project',id(self.planes[i]),self.cfg.density_kg_m3,self.owner.metric.currentData(),self.owner.volume_interval.value(),self.radius.currentData())
         else:source=('empty',)
-        return source+(self.view.currentIndex(),self.kind.currentIndex(),self.plot_count.value(),self.plot_columns.value(),tuple(self.graph_selection.selected))
+        return source+(self.view.currentIndex(),self.owner.cfg.theta_zero_deg,self.owner.cfg.theta_direction,self.owner.x_axis.currentData(),self.x_reference.currentData(),self.kind.currentIndex(),self.plot_count.value(),self.plot_columns.value(),tuple(self.graph_selection.selected))
 
     def open_axes(self):
         if self.view.currentIndex()==0:self.axes_dialog=open_axes_settings(self.canvas,self)
@@ -169,9 +181,9 @@ class ComparisonPanel(QWidget):
         p=self.planes[i];cfg=self.cfg;metric=self.owner.metric.currentData()
         if self.view.currentIndex()==1:
             ax=self.figure.add_subplot(111,projection='polar');n=cfg.n_angular
-            theta=np.deg2rad(cfg.grid_start_deg+(np.arange(n+1)-.5)*360/n);th,r=np.meshgrid(theta,p.radial_edges_mm)
+            theta=np.deg2rad(grid_angles(cfg,edges=True));th,r=np.meshgrid(theta,p.radial_edges_mm)
             values=cell_values(p,metric,cfg.density_kg_m3,self.owner.volume_interval.value());data,norm,cmap=color_scale(values,cfg,[cell_values(v,metric,cfg.density_kg_m3,self.owner.volume_interval.value()) for v in self.planes])
-            pc=ax.pcolormesh(th,r,data,cmap=cmap,norm=norm,shading='flat');ax.set_ylim(0,cfg.r_out_mm);ax.set_title(f'Матрица · z={p.z_mm:g} мм');self.figure.colorbar(pc,ax=ax,pad=.14,shrink=.68,label=UNITS[metric]);draw_nozzle_markers(ax,cfg,self.nozzles,polar=True,outlines=False,labels=False)
+            pc=ax.pcolormesh(th,r,data,cmap=cmap,norm=norm,shading='flat');ax.set_ylim(0,cfg.r_out_mm);ax.set_title(f'Матрица · z={p.z_mm:g} мм');polar_ticks(ax,cfg);self.figure.colorbar(pc,ax=ax,pad=.14,shrink=.68,label=UNITS[metric]);draw_nozzle_markers(ax,cfg,self.nozzles,polar=True,outlines=False,labels=False)
         elif i<len(self.fields):
             draw_detailed_map(self.figure,self.fields[i],p,cfg,self.nozzles,outlines=False,labels=False,shared_values=[f.masked_flux_kg_m2_s for f in self.fields])
             if p.is_composite:self.figure.axes[0].set_title(f'Мгновенное поле сравнения: шаг 0, z={p.z_mm:g} мм',fontsize=10)
@@ -205,15 +217,16 @@ class ComparisonPanel(QWidget):
             choices=[yc]+[k for k in data if k not in (xc,yc,secondary)]
             maximum=len(choices)
             for key in self.graph_selection.selected:
-                series.append((data[xc],data[key],headers[xc],headers[key],name+' · '+headers[key]))
+                tx,table_order,tx_label,tx_unit=self._table_x(data[xc],headers[xc])
+                series.append((tx,data[key][table_order],tx_label,headers[key],name+' · '+headers[key]))
             self.notice.setText('Исходные точки без сглаживания; единицы берутся из заголовков таблицы.')
         elif self.planes:
             p=self.planes[i];start=max(0,self.radius.currentIndex());metric=self.owner.metric.currentData()
             values=cell_values(p,metric,self.cfg.density_kg_m3,self.owner.volume_interval.value())
-            maximum=len(p.radial_centers_mm);order=np.argsort(p.theta_centers_deg)
+            maximum=len(p.radial_centers_mm);display=plot_x(p.theta_centers_deg,self.owner.cfg,self.owner.x_axis.currentData());order=np.argsort(display)
             for radius in self.graph_selection.selected:
                 k=matching_index(p.radial_centers_mm,radius)
-                series.append((p.theta_centers_deg[order],values[k,order],'Окружной угол, °',UNITS[metric],f'z={p.z_mm:g} мм; R={p.radial_centers_mm[k]:g} мм'))
+                series.append((display[order],values[k,order],x_label(self.owner.cfg,self.owner.x_axis.currentData()),UNITS[metric],f'z={p.z_mm:g} мм; R={p.radial_centers_mm[k]:g} мм'))
         else:maximum=1
         self.plot_count.blockSignals(True);self.plot_count.setMaximum(maximum);self.plot_count.blockSignals(False)
         count=max(1,len(series));cols=min(count,self.plot_columns.value());rows=int(np.ceil(count/cols))
@@ -221,11 +234,12 @@ class ComparisonPanel(QWidget):
         for slot,(x,y,xlabel,ylabel,title) in enumerate(series,1):
             ax=self.figure.add_subplot(rows,cols,slot);self._series(ax,x,y,ylabel)
             ax.set_xlabel(textwrap.fill(xlabel,28),fontsize=8);ax.set_ylabel(textwrap.fill(ylabel,18),fontsize=8);ax.set_title(title,fontsize=9);ax.grid(alpha=.25);ax.tick_params(labelsize=7)
-            ax._compare_x='angle_deg' if not self.tables else x_unit(xlabel)
+            ax._compare_x=tx_unit if self.tables else None
+            if not self.tables or tx_unit in ('angle_deg','cell_index'):decorate_axes(ax,self.owner.cfg,self.owner.x_axis.currentData())
             ax._compare_y=UNITS[metric] if not self.tables else ylabel[ylabel.find('[')+1:ylabel.find(']')] if '[' in ylabel and ']' in ylabel else ylabel
             if self.tables and secondary in data:
-                other=ax.twinx();self._series(other,data[xc],data[secondary],headers[secondary],color='#ad4e21')
-                other._compare_x=ax._compare_x;other._compare_y=headers[secondary][headers[secondary].find('[')+1:headers[secondary].find(']')] if '[' in headers[secondary] and ']' in headers[secondary] else headers[secondary]
+                other=ax.twinx();self._series(other,tx,data[secondary][table_order],headers[secondary],color='#ad4e21')
+                other._compare_x=ax._compare_x;other._compare_frame=getattr(ax,'_compare_frame',None);other._compare_y=headers[secondary][headers[secondary].find('[')+1:headers[secondary].find(']')] if '[' in headers[secondary] and ']' in headers[secondary] else headers[secondary]
                 other.set_ylabel(textwrap.fill(headers[secondary],18),fontsize=8);other.tick_params(axis='y',colors='#ad4e21',labelsize=7)
         self._chart_key=self._state_key()
         self.interaction.reset_axes();self.canvas.draw_idle();self._refresh_links()
