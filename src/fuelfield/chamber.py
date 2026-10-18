@@ -119,6 +119,8 @@ class Chamber:
             if a<self.base or b>self.outlet:continue
             self._certify_gap(self.primitive_at('inner',(a+b)/2),self.primitive_at('outer',(a+b)/2),a,b)
         self.sections=deepcopy(raw.get('sections',[]));self._validate_sections()
+        types=raw.get('types',{})
+        if not isinstance(types,dict) or any(not isinstance(k,str) or not k.strip() or not isinstance(v,dict) for k,v in types.items()):raise ValueError('Пользовательские типы: словарь имён и определений')
         self.objects=deepcopy(raw.get('objects',[]));self.groups=deepcopy(raw.get('groups',[]));self._validate_objects()
         self.variable=any(p.kind=='arc' or abs(p.start[1]-p.end[1])>TOL for p in self.primitives if p.wall in self.profiles and p.kind!='point')
 
@@ -164,6 +166,7 @@ class Chamber:
         for section in self.sections:
             if not isinstance(section,dict) or not isinstance(section.get('id'),str) or not section['id']:raise ValueError('Нужен ID сечения')
             ids.append(section['id']);z=number(section.get('z_mm'),'Сечение');self.bounds(z);positions.append(z)
+            if not isinstance(section.get('is_outlet',False),bool):raise ValueError('Признак выходного сечения должен быть логическим')
             if section.get('is_outlet',False):outlets.append(z)
         if len(set(ids))!=len(ids) or any(abs(a-b)<=TOL for i,a in enumerate(positions) for b in positions[:i]):raise ValueError('Повторный ID/координата сечения')
         if len(outlets)!=1 or abs(outlets[0]-self.outlet)>TOL:raise ValueError('Обязательно ровно одно выходное сечение ЖТ')
@@ -191,6 +194,7 @@ class Chamber:
             wall=obj.get('wall','free')
             if wall not in ('inner','outer','free'):raise ValueError('Стенка объекта: inner/outer/free')
             bound=obj.get('primitive_id','')
+            if not isinstance(bound,str):raise ValueError('Привязка к примитиву: строка ID или пустая строка')
             if bound and (bound not in primitives or primitives[bound].wall!=wall):raise ValueError('Не найдена согласованная привязка объекта к примитиву')
             if bound and obj['type']!='nozzle':primitives[bound].at(obj['z_mm'])
             for key in ('parameters','units','provenance'):
@@ -206,7 +210,7 @@ class Chamber:
             if not isinstance(group,dict):raise ValueError('Группа должна быть объектом JSON')
             group_ids.append(group.get('id'));members=group.get('members',[])
             if not isinstance(group.get('id'),str) or not group['id']:raise ValueError('Нужен ID группы')
-            if not isinstance(members,list) or not members or len(members)!=len(set(members)):raise ValueError('Нужны уникальные участники группы')
+            if not isinstance(members,list) or not members or any(not isinstance(m,str) or not m for m in members) or len(members)!=len(set(members)):raise ValueError('Нужны уникальные строковые ID участников группы')
             if not set(members).issubset(ids):raise ValueError('Группа ссылается на отсутствующие объекты')
             if owners.intersection(members):raise ValueError('Объект не может принадлежать двум угловым группам')
             owners.update(members);group_angles(group)
@@ -217,12 +221,29 @@ class Chamber:
             n=next(n for n in nozzles if n.id==obj['nozzle_id'])
             from .v02 import effective_nozzle
             n=effective_nozzle(n,cfg) if cfg is not None else n
-            return n.z_tip_mm,n.radius_mm,n.theta_deg
-        z=obj['z_mm'];radius=obj['radius_mm'];wall=obj.get('wall','free')
+            z,radius,theta=n.z_tip_mm,n.radius_mm,n.theta_deg
+        else:z,radius,theta=obj['z_mm'],obj['radius_mm'],obj.get('theta_deg',0)
+        wall=obj.get('wall','free')
         if wall!='free':
             p=next((p for p in self.primitives if p.id==obj.get('primitive_id')),None) or self.primitive_at(wall,z)
             radius=float(p.at(z))+number(obj.get('radial_offset_mm',0))
-        return z,radius,obj.get('theta_deg',0)
+        return z,radius,theta
+
+    def resolve_nozzle_anchors(self,nozzles,cfg):
+        updated=deepcopy(nozzles);lookup={n.id:n for n in updated}
+        for obj in self.objects:
+            if obj['type']=='nozzle' and obj['nozzle_id'] in lookup and obj.get('wall','free')!='free':
+                _,radius,_=self.object_position(obj,updated,cfg)
+                if radius<=0:raise ValueError(obj['id']+': привязка даёт неположительный радиус')
+                lookup[obj['nozzle_id']].radius_mm=radius
+        return updated
+
+    def validate_nozzle_anchors(self,nozzles,cfg):
+        lookup={n.id:n for n in nozzles}
+        for obj in self.objects:
+            if obj['type']=='nozzle' and obj['nozzle_id'] in lookup and obj.get('wall','free')!='free':
+                _,radius,_=self.object_position(obj,nozzles,cfg)
+                if radius<=0 or abs(lookup[obj['nozzle_id']].radius_mm-radius)>TOL:raise ValueError(obj['id']+': координата форсунки не согласована с привязкой к стенке')
 
 
 def group_angles(group):
@@ -286,3 +307,17 @@ def sync_groups(raw,nozzles):
         if not np.allclose((physical-group_angles(group)+180)%360-180,0,rtol=0,atol=1e-7):
             group['mode']='individual';group['angles_deg']=((physical-number(group.get('phase_deg',0))-number(group.get('row_offset_deg',0)))*group.get('direction',-1)%360).tolist()
     return data
+
+
+def sync_anchors(raw,nozzles,cfg,previous):
+    """Explicit source-R edit changes offset; wall/z edit moves its anchor."""
+    data=deepcopy(raw)
+    if not data:return data,nozzles
+    model=Chamber(data);old={n.id:n for n in previous};lookup={n.id:n for n in nozzles}
+    for obj in data.get('objects',[]):
+        if obj['type']!='nozzle' or obj.get('wall','free')=='free':continue
+        n=lookup[obj['nozzle_id']]
+        if n.radius_mm!=old[n.id].radius_mm:
+            _,expected,_=model.object_position(obj,nozzles,cfg)
+            obj['radial_offset_mm']=number(obj.get('radial_offset_mm',0))+n.radius_mm-expected
+    return data,Chamber(data).resolve_nozzle_anchors(nozzles,cfg)

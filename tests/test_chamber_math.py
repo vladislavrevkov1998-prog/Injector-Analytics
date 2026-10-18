@@ -1,5 +1,6 @@
 """Independent analytic geometry checks; assertions follow geometry, not UI output."""
 from copy import deepcopy
+from dataclasses import replace
 import json
 import math
 from pathlib import Path
@@ -11,7 +12,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 from fuelfield.chamber import Chamber, Primitive, group_angles, legacy_geometry
-from fuelfield.core import Settings, calculate_plane, default_nozzles, source_flow_kg_s
+from fuelfield.core import (Settings, calculate_plane, default_nozzles,
+                            source_flow_kg_s, evaluate_continuous_field)
 from fuelfield.quasi import PressureChannel, QuasiSettings, build_influence, calculate_quasi
 
 
@@ -496,6 +498,92 @@ class TestGeometryFuelAccounting(unittest.TestCase):
                                    balance['outer_kg_s']+balance['wall_bound_kg_s'],
                                    balance['injected_kg_s'], places=14)
         self.assertIsNone(result.manifest()['composite_global_balance'])
+
+    def pressure_case(self):
+        cfg, nozzles = self.case()
+        cfg.theta_zero_deg = 67.5
+        cfg.theta_direction = -1
+        cfg.grid_start_deg = 22.5
+        cfg.preview_resolution = 200
+        cfg.pressure_mode = 'calibrated'
+        cfg.flow_pressure_kgf_cm2 = cfg.sector_pressure_kgf_cm2 = 10.
+        cfg.target_pressure_kgf_cm2 = 10.
+        cfg.atomizer_types = [dict(id='audit-curve', name='Synthetic math audit',
+                                  kind='experimental', points=[[5., 10.], [10., 30.],
+                                                               [20., 50.], [30., 100.]])]
+        for n in nozzles:
+            n.atomizer_type_id = 'audit-curve'
+            n.flow_pressure_kgf_cm2 = n.sector_pressure_kgf_cm2 = 10.
+            n.manifold_id = 'A' if n.row == 'outer' else 'B'
+        mode = QuasiSettings(n_steps=8, dt_s=.25, t_start_s=3., first_angle_deg=112.5,
+                             direction=-1, channels=(
+                                 PressureChannel('A', tuple(np.linspace(10., 30., 8))),
+                                 PressureChannel('B', tuple(np.linspace(25., 5., 8)))))
+        cfg.quasistationary = True
+        cfg.quasi_settings = mode.to_dict()
+        return cfg, nozzles, mode
+
+    def test_variable_pressure_columns_use_local_geometry_and_nondefault_frame(self):
+        cfg, nozzles, mode = self.pressure_case()
+        positions = [(n.id, n.theta_deg, n.radius_mm, n.z_tip_mm) for n in nozzles]
+        result = calculate_quasi(nozzles, cfg, preview=False)
+        expected_columns = [2, 1, 0, 7, 6, 5, 4, 3]
+        np.testing.assert_array_equal(mode.column_indices(cfg), expected_columns)
+        np.testing.assert_allclose(mode.global_angles(cfg), (67.5-mode.angles) % 360)
+        for i, z in enumerate(cfg.z_mm):
+            composite = result.composites[i]
+            rin, rout = cfg.bounds_at(z)
+            self.assertEqual(composite.radial_edges_mm[0], rin)
+            self.assertEqual(composite.radial_edges_mm[-1], rout)
+            self.assertTrue(math.isnan(composite.rel_balance_error))
+            self.assertTrue(math.isnan(composite.wall_bound_kg_s))
+            for step, column in enumerate(expected_columns):
+                reference = [calculate_plane(
+                    [n for n in nozzles if n.manifold_id == channel.id],
+                    replace(cfg, target_pressure_kgf_cm2=channel.pressure[step]), z)
+                    for channel in mode.channels]
+                mass = sum((p.cell_mass_kg_s for p in reference),
+                           np.zeros((cfg.n_radial, cfg.n_angular)))
+                np.testing.assert_allclose(composite.cell_mass_kg_s[:, column], mass[:, column],
+                                           atol=1e-16, rtol=2e-13)
+                snapshot = result.snapshot(i, step)
+                np.testing.assert_allclose(snapshot.cell_mass_kg_s, mass, atol=1e-16, rtol=2e-13)
+                self.assertAlmostEqual(snapshot.wall_bound_kg_s,
+                                       sum(p.wall_bound_kg_s for p in reference), places=14)
+                self.assertEqual(snapshot.inner_kg_s, 0.)
+                self.assertEqual(snapshot.outer_kg_s, 0.)
+                self.assertEqual(composite.scan_steps[column], step)
+                self.assertEqual(composite.scan_times_s[column], mode.times[step])
+                self.assertEqual(composite.scan_pressures[column],
+                                 {c.id: c.pressure[step] for c in mode.channels})
+                self.assertLess(abs(snapshot.rel_balance_error), 1e-13)
+        self.assertEqual(positions, [(n.id, n.theta_deg, n.radius_mm, n.z_tip_mm) for n in nozzles])
+
+    def test_snapshot_preview_uses_physical_local_bounds_and_pressure_without_renormalizing(self):
+        cfg, nozzles, mode = self.pressure_case()
+        result = calculate_quasi(nozzles, cfg, preview=True)
+        self.assertNotEqual(cfg.bounds_at(0.), cfg.bounds_at(100.))
+        for i, z in enumerate(cfg.z_mm):
+            rin, rout = cfg.bounds_at(z)
+            first = result.smooth(i, 0)
+            self.assertEqual(first.x_mm[0], -rout)
+            self.assertEqual(first.x_mm[-1], rout)
+            xx, yy = np.meshgrid(first.x_mm, first.y_mm)
+            radial = np.hypot(xx, yy)
+            expected_mask = (radial < rin) | (radial > rout)
+            np.testing.assert_array_equal(np.ma.getmaskarray(first.masked_flux_kg_m2_s), expected_mask)
+            for step in (0, 3, 7):
+                reference = [evaluate_continuous_field(
+                    [n for n in nozzles if n.manifold_id == channel.id],
+                    replace(cfg, target_pressure_kgf_cm2=channel.pressure[step]), z)
+                    for channel in mode.channels]
+                actual = result.smooth(i, step)
+                expected = reference[0].flux_kg_m2_s+reference[1].flux_kg_m2_s
+                np.testing.assert_allclose(actual.flux_kg_m2_s, expected, atol=1e-12, rtol=2e-13)
+                np.testing.assert_array_equal(np.ma.getmaskarray(actual.masked_flux_kg_m2_s),
+                                              expected_mask)
+            self.assertFalse(np.allclose(first.flux_kg_m2_s,
+                                         result.smooth(i, 7).flux_kg_m2_s))
 
 
 if __name__ == '__main__':

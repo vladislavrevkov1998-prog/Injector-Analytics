@@ -11,6 +11,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -192,6 +193,27 @@ class TestV06Migration(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     project_from_json(json.loads((ROOT / filename).read_text()))
 
+    def test_malformed_nested_geometry_records_are_diagnosed(self):
+        raw = decorate_project()
+        changes = (
+            ('non-object primitive', lambda g: g['primitives'].__setitem__(0, None)),
+            ('non-object custom object', lambda g: g['objects'].__setitem__(-1, [])),
+            ('non-object group', lambda g: g['groups'].__setitem__(0, None)),
+            ('missing object binding', lambda g: g['objects'][-1].__setitem__('primitive_id', 'absent')),
+            ('invalid object parameters', lambda g: g['objects'][-1].__setitem__('parameters', [])),
+            ('group missing member', lambda g: g['groups'][0].__setitem__('members', ['absent'])),
+            ('negative group step', lambda g: g['groups'][0].__setitem__('steps_deg', [-10., 200., 170.])),
+            ('future geometry schema', lambda g: g.__setitem__('schema_version', 2)),
+            ('boolean geometry schema', lambda g: g.__setitem__('schema_version', True)),
+            ('invalid user type catalog', lambda g: g.__setitem__('types', [])),
+        )
+        for title, change in changes:
+            with self.subTest(case=title):
+                invalid = deepcopy(raw)
+                change(invalid['settings']['geometry'])
+                with self.assertRaises(ValueError):
+                    project_from_json(invalid)
+
     def test_empty_disabled_and_constant_geometry_are_numerically_identical(self):
         for custom in (False, True):
             with self.subTest(custom_radii=custom):
@@ -281,6 +303,19 @@ class TestV06Migration(unittest.TestCase):
         self.assertEqual(model.object_position(obj, nozzles, cfg),
                          (2.75, 271.125, 357.125))
 
+    def test_bound_nozzle_json_requires_consistent_canonical_position(self):
+        raw = decorate_project()
+        obj = raw['settings']['geometry']['objects'][0]
+        obj.update(wall='outer', primitive_id='outer-1', radial_offset_mm=-2.)
+        with self.assertRaises(ValueError):
+            project_from_json(raw)
+        raw['nozzles'][0]['radius_mm'] = 298.
+        cfg, nozzles = project_from_json(raw)
+        restored = Chamber(cfg.geometry)
+        self.assertEqual(restored.object_position(restored.objects[0], nozzles, cfg),
+                         (0., 298., nozzles[0].theta_deg))
+        self.assertEqual(project_to_json(cfg, nozzles), raw)
+
     def test_bound_custom_objects_and_irregular_groups_preserve_metadata(self):
         cfg, nozzles = numeric_case()
         raw = decorated_geometry(cfg, nozzles, variable=True)
@@ -352,6 +387,150 @@ class TestV06MigrationQt(unittest.TestCase):
     def setUpClass(cls):
         from PyQt5.QtWidgets import QApplication
         cls.app = QApplication.instance() or QApplication([])
+
+    def make_window(self):
+        from fuelfield.gui import MainWindow
+        window = MainWindow()
+        raw = decorate_project()
+        window._restoring = True
+        window.cfg, window.nozzles = project_from_json(raw)
+        window._fill_controls()
+        window._fill_nozzles()
+        window._reset_history()
+        return window
+
+    def close_window(self, window):
+        window.close()
+        window.deleteLater()
+        self.app.processEvents()
+
+    def test_catalog_apply_keeps_unknown_metadata_and_project_geometry(self):
+        window = self.make_window()
+        try:
+            ident = window.cfg.atomizer_types[0]['id']
+            window.cfg.atomizer_types[0]['future_catalog'] = {'keep': [1, None, {'unit': 'custom'}]}
+            window._fill_controls()
+            editor = window.catalog_editor
+            editor.selector.setCurrentIndex(editor.selector.findData(ident))
+            before = deepcopy(window.cfg.geometry)
+            editor.name.setText('Синтетическое переименование для проверки миграции')
+            editor.apply()
+            entry = next(item for item in window.cfg.atomizer_types if item['id'] == ident)
+            self.assertEqual(entry['name'], 'Синтетическое переименование для проверки миграции')
+            self.assertEqual(entry['future_catalog'], {'keep': [1, None, {'unit': 'custom'}]})
+            self.assertEqual(window.cfg.geometry, before)
+        finally:
+            self.close_window(window)
+
+    def test_02_edits_survive_next_geometry_commit_and_native_save_open(self):
+        from fuelfield.gui import INTCOL
+        from fuelfield.characteristics import flow_to_kg_h
+        from PyQt5.QtCore import Qt
+        window = self.make_window()
+        try:
+            editor = window.geometry_editor
+            editor.rebuild()
+            table = window.nozzle_table
+            table.item(0, INTCOL['theta_deg']).setText('123.125')
+            table.item(0, INTCOL['flow_kg_h']).setText('9.875')
+            table.item(0, INTCOL['manifold_id']).setText('test-new-manifold')
+            table.item(0, INTCOL['enabled']).setCheckState(Qt.Unchecked)
+            window.sector_table.item(0, 1).setText('12.345')
+            latest = deepcopy(window.nozzles[0])
+            self.assertEqual(latest.theta_deg, 123.125)
+            self.assertEqual(latest.flow_kg_h, flow_to_kg_h(
+                9.875, window.cfg.display_flow_unit, window.cfg.density_kg_m3))
+            self.assertEqual(latest.manifold_id, 'test-new-manifold')
+            self.assertFalse(latest.enabled)
+            self.assertEqual(latest.sector_ml[0], 12.345)
+            # A harmless geometry setting edit must not replace newer tab02 data.
+            editor.raw['chord_error_mm'] = .02
+            self.assertTrue(editor.commit('Independent migration inter-editor check'))
+            self.assertEqual(vars(window.nozzles[0]), vars(latest))
+            expected = project_to_json(window.cfg, window.nozzles)
+            with tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / 'native_geometry_project.json'
+                window.project_file = str(path)
+                window.save_project()
+                self.assertEqual(json.loads(path.read_text(encoding='utf-8')), expected)
+                with patch('fuelfield.gui.QFileDialog.getOpenFileName',
+                           return_value=(str(path), 'JSON')):
+                    window.open_project()
+                self.assertEqual(project_to_json(window.cfg, window.nozzles), expected)
+                restored = Chamber(window.cfg.geometry)
+                obj = next(obj for obj in restored.objects if obj.get('nozzle_id') == 1)
+                self.assertEqual(restored.object_position(obj, window.nozzles, window.cfg),
+                                 (latest.z_tip_mm, latest.radius_mm, latest.theta_deg))
+        finally:
+            self.close_window(window)
+
+    def test_main_default_positions_keep_group_angles_consistent(self):
+        from fuelfield.chamber import group_angles
+        window = self.make_window()
+        try:
+            before = deepcopy(window.cfg.geometry['groups'][0]['custom_group'])
+            window.update_positions()
+            group = window.cfg.geometry['groups'][0]
+            self.assertEqual(group['custom_group'], before)
+            self.assertEqual(group['mode'], 'individual')
+            lookup = {n.id: n for n in window.nozzles}
+            objects = {obj['id']: obj for obj in window.cfg.geometry['objects']}
+            expected = [lookup[objects[identity]['nozzle_id']].theta_deg
+                        for identity in group['members']]
+            np.testing.assert_allclose(group_angles(group), expected, rtol=0, atol=1e-12)
+            self.assertEqual(window.geometry_editor.raw, window.cfg.geometry)
+        finally:
+            self.close_window(window)
+
+    def test_metadata_only_nozzle_object_edit_keeps_inheritance_unchanged(self):
+        window = self.make_window()
+        try:
+            editor = window.geometry_editor
+            editor.rebuild()
+            previous = deepcopy(vars(window.nozzles[0]))
+            row = next(i for i, obj in enumerate(editor.raw['objects'])
+                       if obj.get('nozzle_id') == 1)
+            editor.object_table.item(row, 10).setText(
+                json.dumps({'source': 'independent synthetic metadata edit',
+                            'future': {'keep': [1, None]}}))
+            self.assertEqual(vars(window.nozzles[0]), previous)
+            obj = next(obj for obj in window.cfg.geometry['objects']
+                       if obj.get('nozzle_id') == 1)
+            self.assertEqual(obj['provenance']['future'], {'keep': [1, None]})
+        finally:
+            self.close_window(window)
+
+    def test_explicit_nozzle_wall_anchor_moves_only_bound_nozzle_and_preserves_offsets(self):
+        from fuelfield.gui import INTCOL
+        window = self.make_window()
+        try:
+            editor = window.geometry_editor
+            editor.rebuild()
+            original = deepcopy(window.nozzles)
+            obj = next(obj for obj in editor.raw['objects'] if obj.get('nozzle_id') == 1)
+            obj.update(wall='outer', primitive_id='outer-1', radial_offset_mm=-2.)
+            self.assertTrue(editor.commit('Explicit synthetic nozzle anchor'))
+            self.assertEqual(window.nozzles[0].radius_mm, 298.)
+            self.assertEqual(window.nozzles[0].geometry_overrides, original[0].geometry_overrides)
+            wall = next(p for p in editor.raw['primitives'] if p['id'] == 'outer-1')
+            for point in ('start', 'end', 'center'):
+                wall[point][1] += 1.
+            self.assertTrue(editor.commit('Move explicitly attached wall'))
+            self.assertEqual(window.nozzles[0].radius_mm, 299.)
+            for previous, current in zip(original[1:], window.nozzles[1:]):
+                self.assertEqual(vars(current), vars(previous))
+            # A deliberate numeric edit on02 adjusts the local anchor offset.
+            window.nozzle_table.item(0, INTCOL['radius_mm']).setText('300.125')
+            self.assertEqual(window.nozzles[0].radius_mm, 300.125)
+            anchor = window.cfg.geometry['objects'][0]
+            self.assertEqual(anchor['radial_offset_mm'], -.875)
+            self.assertEqual(anchor['custom_nozzle_object'],
+                             {'keep': 'stable linked object'})
+            self.assertEqual(project_to_json(*project_from_json(
+                project_to_json(window.cfg, window.nozzles))),
+                project_to_json(window.cfg, window.nozzles))
+        finally:
+            self.close_window(window)
 
     def test_geometry_unknowns_survive_project_edit_undo_redo_and_snapshot(self):
         from fuelfield.gui import MainWindow

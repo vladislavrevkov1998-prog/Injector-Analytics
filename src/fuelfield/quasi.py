@@ -224,6 +224,8 @@ class QuasiResult:
 
 def calculate_quasi(nozzles,cfg,*,preview=True,cancel=None,progress=None):
     started=time.perf_counter();cfg=deepcopy(cfg);nozzles=tuple(sorted(deepcopy(nozzles),key=lambda n:n.id));cfg.validate();validate_nozzles(nozzles,cfg)
+    model=chamber(cfg)
+    if model:model.validate_nozzle_anchors(nozzles,cfg)
     if len(nozzles)!=140 or {n.id for n in nozzles}!=set(range(1,141)):raise ValueError('Нужны 140 фиксированных позиций форсунок')
     settings=QuasiSettings.from_dict(cfg.quasi_settings).validate(cfg,nozzles);check_cancel(cancel);pressures=settings.pressures();flow=FlowEvaluator(cfg);g=np.zeros((settings.n_steps,len(nozzles)))
     for j,n in enumerate(nozzles):

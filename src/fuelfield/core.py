@@ -358,6 +358,7 @@ def calculate_plane(nozzles: list[Nozzle], cfg: Settings, z_mm: float) -> PlaneR
     cfg.validate()
     centers, edges = cfg.radial_centers_and_edges(z_mm)
     model=chamber(cfg);variable=bool(model and model.variable)
+    if model:model.validate_nozzle_anchors(nozzles,cfg)
     nrad, nang = cfg.n_radial, cfg.n_angular
     mass = np.zeros((nrad,nang))
     inner = outer = injected = 0.0
@@ -428,6 +429,8 @@ def project_from_json(data):
     cfg.validate()
     if len(nozzles)!=140 or set(n.id for n in nozzles)!=set(range(1,141)):raise ValueError('Проект должен содержать 140 уникальных форсунок')
     validate_nozzles(nozzles,cfg)
+    model=chamber(cfg)
+    if model:model.validate_nozzle_anchors(nozzles,cfg)
     return cfg,nozzles
 
 
