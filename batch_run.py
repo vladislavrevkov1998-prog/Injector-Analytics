@@ -50,7 +50,7 @@ def main():
         data,norm,cmap=color_scale(plane.flux_kg_m2_s,cfg,[p.flux_kg_m2_s for p in planes])
         m=ax.pcolormesh(th,r,data,shading='flat',cmap=cmap,norm=norm)
         ax.set_theta_zero_location('E');ax.set_theta_direction(1);polar_ticks(ax,cfg)
-        ax.set_ylim(0,cfg.r_out_mm)
+        ax.set_ylim(0,plane.radial_edges_mm[-1])
         ax.set_title(f'Section {i+1}, z={z:g} mm'+(' · accumulated matrix' if quasi else ''))
         draw_nozzle_markers(ax,cfg,nozzles,polar=True)
         fig.colorbar(m,ax=ax,shrink=.8,label='kg/(m² s)')
@@ -81,7 +81,7 @@ def main():
             snap=quasi.snapshot(i,args.step);print(f'Section {i+1} z={z:g} mm | accumulated matrix; field step={args.step} t={quasi.settings.times[args.step]:g} s | instantaneous balance={snap.rel_balance_error:+.3e}')
         else:print(f'Section {i+1} z={z:g} mm | total={plane.injected_kg_s*3600:.5f} kg/h | '
               f'in={plane.inside_kg_s*3600:.5f}, inner={plane.inner_kg_s*3600:.5f}, '
-              f'outer={plane.outer_kg_s*3600:.5f}; balance error={plane.rel_balance_error:+.3e}')
+              f'outer={plane.outer_kg_s*3600:.5f}, wall-bound={plane.wall_bound_kg_s*3600:.5f}; balance error={plane.rel_balance_error:+.3e}')
     if quasi:
         from fuelfield.quasi_io import write_report
         write_report(out/'fuel_fields.csv',quasi);write_report(out/'epures.xlsx',quasi)

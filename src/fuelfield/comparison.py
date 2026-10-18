@@ -183,7 +183,7 @@ class ComparisonPanel(QWidget):
             ax=self.figure.add_subplot(111,projection='polar');n=cfg.n_angular
             theta=np.deg2rad(grid_angles(cfg,edges=True));th,r=np.meshgrid(theta,p.radial_edges_mm)
             values=cell_values(p,metric,cfg.density_kg_m3,self.owner.volume_interval.value());data,norm,cmap=color_scale(values,cfg,[cell_values(v,metric,cfg.density_kg_m3,self.owner.volume_interval.value()) for v in self.planes])
-            pc=ax.pcolormesh(th,r,data,cmap=cmap,norm=norm,shading='flat');ax.set_ylim(0,cfg.r_out_mm);ax.set_title(f'Матрица · z={p.z_mm:g} мм');polar_ticks(ax,cfg);self.figure.colorbar(pc,ax=ax,pad=.14,shrink=.68,label=UNITS[metric]);draw_nozzle_markers(ax,cfg,self.nozzles,polar=True,outlines=False,labels=False)
+            pc=ax.pcolormesh(th,r,data,cmap=cmap,norm=norm,shading='flat');ax.set_ylim(0,p.radial_edges_mm[-1]);ax.set_title(f'Матрица · z={p.z_mm:g} мм');polar_ticks(ax,cfg);self.figure.colorbar(pc,ax=ax,pad=.14,shrink=.68,label=UNITS[metric]);draw_nozzle_markers(ax,cfg,self.nozzles,polar=True,outlines=False,labels=False)
         elif i<len(self.fields):
             draw_detailed_map(self.figure,self.fields[i],p,cfg,self.nozzles,outlines=False,labels=False,shared_values=[f.masked_flux_kg_m2_s for f in self.fields])
             if p.is_composite:self.figure.axes[0].set_title(f'Мгновенное поле сравнения: шаг 0, z={p.z_mm:g} мм',fontsize=10)

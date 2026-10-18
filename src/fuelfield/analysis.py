@@ -6,6 +6,14 @@ METRICS = {'flux':'Плотность расхода, кг/(м²·с)', 'kg_h':'
            'ring':'Индекс относительно кольца', 'track':'Индекс относительно тракта'}
 UNITS = {'flux':'кг/(м²·с)', 'kg_h':'кг/ч', 'l_min':'л/мин', 'volume':'мл', 'ring':'1', 'track':'1'}
 
+def balance_rows(planes):
+    columns=['z_mm','injected_kg_s','inside_kg_s','inner_kg_s','outer_kg_s','wall_bound_kg_s','wall_inner_kg_s','wall_outer_kg_s']
+    rows=[columns+['relative_error','geometry_notice']]
+    for p in planes:
+        values=[getattr(p,key) for key in columns]
+        rows.append([float(v) if np.isfinite(v) else None for v in values]+[None if p.is_composite else p.rel_balance_error,p.geometry_notice])
+    return rows
+
 def cell_values(plane, metric='flux', density=800., interval=180.):
     if metric not in METRICS:raise ValueError('Неизвестное представление')
     if not np.isfinite(density) or density<=0:raise ValueError('Плотность должна быть положительной')

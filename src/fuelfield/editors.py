@@ -296,7 +296,7 @@ class CatalogEditor(QWidget):
             catalog=deepcopy(self.owner.cfg.atomizer_types)
             index=next((i for i,a in enumerate(catalog) if a['id']==entry['id']),None)
             if index is None:catalog.append(entry)
-            else:catalog[index]=entry
+            else:catalog[index]={**catalog[index],**entry}
             validate_catalog(catalog,self.owner.cfg.nozzle_presets)
             self.changed.emit(catalog)
         except ValueError as exc:QMessageBox.warning(self,'Характеристика',str(exc))

@@ -8,6 +8,7 @@ from .core import sample_kernel,PlaneResult,SmoothField,evaluate_continuous_fiel
 from .v02 import flow_status,curve_for,bench_pressure,effective_nozzle,validate_nozzles
 from .characteristics import ExtrapolationWarning
 from .coordinates import angular_indices,grid_angles,to_global
+from .chamber import chamber,WALL_BOUND_NOTICE
 
 FORMAT='fuel-quasistationary-settings'
 PRESSURE_FACTORS={'kgf/cm2':1.,'кгс/см²':1.,'bar':1e5/98066.5,'Pa':1/98066.5,'kPa':1000/98066.5,'MPa':1e6/98066.5}
@@ -151,20 +152,25 @@ class Influence:
     radii: np.ndarray
     edges: np.ndarray
     angles: np.ndarray
+    wall_inner: object=None
+    wall_outer: object=None
     preview_weights: object=None
     preview_axis: object=None
     preview_mask: object=None
     upper_field: object=None
     def plane(self,flows):
         mass=(self.weights@flows).reshape(self.area.shape)
-        return PlaneResult(self.z_mm,mass,self.area,mass/self.area,self.radii,self.edges,self.angles,float(self.reached@flows),float(mass.sum()),float(self.inner@flows),float(self.outer@flows))
+        wi=float(self.wall_inner@flows) if self.wall_inner is not None else 0.;wo=float(self.wall_outer@flows) if self.wall_outer is not None else 0.
+        return PlaneResult(self.z_mm,mass,self.area,mass/self.area,self.radii,self.edges,self.angles,float(self.reached@flows),float(mass.sum()),float(self.inner@flows),float(self.outer@flows),
+            wall_bound_kg_s=wi+wo,wall_inner_kg_s=wi,wall_outer_kg_s=wo,geometry_notice=WALL_BOUND_NOTICE if self.wall_inner is not None else '')
     def smooth(self,flows):
         if self.preview_weights is None:raise ValueError('Подробное поле не было подготовлено')
         dim=len(self.preview_axis);values=(self.preview_weights@flows).reshape(dim,dim)
         return SmoothField(self.preview_axis,self.preview_axis,values,np.ma.masked_where(self.preview_mask,values),self.z_mm)
 
 def build_influence(nozzles,cfg,z,flows,preview=True,cancel=None):
-    radii,edges=cfg.radial_centers_and_edges();weights=np.zeros((cfg.n_radial*cfg.n_angular,len(nozzles)));inner=np.zeros(len(nozzles));outer=inner.copy();reached=inner.copy()
+    radii,edges=cfg.radial_centers_and_edges(z);weights=np.zeros((cfg.n_radial*cfg.n_angular,len(nozzles)));inner=np.zeros(len(nozzles));outer=inner.copy();reached=inner.copy()
+    model=chamber(cfg);variable=bool(model and model.variable)
     for j,n in enumerate(nozzles):
         check_cancel(cancel)
         if not n.enabled or z<effective_nozzle(n,cfg).z_tip_mm:continue
@@ -175,6 +181,7 @@ def build_influence(nozzles,cfg,z,flows,preview=True,cancel=None):
     if np.max(np.abs(weights.sum(axis=0)+inner+outer-reached))>1e-12:raise ValueError('Не замкнута нормировка единичных пространственных влияний')
     area=np.repeat((np.pi/cfg.n_angular*np.diff((edges*.001)**2))[:,None],cfg.n_angular,axis=1)
     op=Influence(deepcopy(cfg),float(z),weights,inner,outer,reached,area,radii,edges,grid_angles(cfg))
+    if variable:op.wall_inner=inner.copy();op.wall_outer=outer.copy();op.inner=np.zeros_like(inner);op.outer=np.zeros_like(outer)
     if preview:
         dim=int(cfg.preview_resolution);columns=[];data=[];pointers=[0]
         for j,n in enumerate(nozzles):
@@ -185,7 +192,7 @@ def build_influence(nozzles,cfg,z,flows,preview=True,cancel=None):
             else:pointers.append(pointers[-1])
         indices=np.concatenate(columns) if columns else np.array([],dtype=np.int32);values=np.concatenate(data) if data else np.array([],dtype=float)
         op.preview_weights=csc_matrix((values,indices,np.array(pointers)),shape=(dim*dim,len(nozzles))).tocsr()
-        op.preview_axis=np.linspace(-cfg.r_out_mm,cfg.r_out_mm,dim);x,y=np.meshgrid(op.preview_axis,op.preview_axis);r=np.hypot(x,y);op.preview_mask=(r<cfg.r_in_mm)|(r>cfg.r_out_mm)
+        rin,rout=cfg.bounds_at(z);op.preview_axis=np.linspace(-rout,rout,dim);x,y=np.meshgrid(op.preview_axis,op.preview_axis);r=np.hypot(x,y);op.preview_mask=(r<rin)|(r>rout)
         op.upper_field=op.smooth(np.max(flows,axis=0)).masked_flux_kg_m2_s
     return op
 
@@ -213,7 +220,7 @@ class QuasiResult:
         return dict(format='fuel-quasistationary-result',version=1,project_sha256=hashlib.sha256(self.project_payload.encode()).hexdigest(),settings=self.settings.to_dict(),
             composite='One angular column per uniform timestamp; all radial cells simultaneously; density kg/(m2 s), not accumulated mass',
             composite_global_balance=None,maximum_instantaneous_balance_error=self.maximum_balance_error,spatial_model='fixed unit conservative kernels; no pressure-dependent shape; tau=0',
-            preview='analytic per-source kernels; sparse cached linear superposition at selected timestamp',color_auto='fixed across time; upper envelope from per-nozzle maximum flows',notices=list(self.notices),elapsed_s=self.elapsed_s)
+            preview='analytic per-source kernels; sparse cached linear superposition at selected timestamp',wall_bound=WALL_BOUND_NOTICE if chamber(self.cfg) and chamber(self.cfg).variable else None,color_auto='fixed across time; upper envelope from per-nozzle maximum flows',notices=list(self.notices),elapsed_s=self.elapsed_s)
 
 def calculate_quasi(nozzles,cfg,*,preview=True,cancel=None,progress=None):
     started=time.perf_counter();cfg=deepcopy(cfg);nozzles=tuple(sorted(deepcopy(nozzles),key=lambda n:n.id));cfg.validate();validate_nozzles(nozzles,cfg)
@@ -237,8 +244,9 @@ def calculate_quasi(nozzles,cfg,*,preview=True,cancel=None,progress=None):
             times[col]=settings.times[step];steps[col]=step;pcolumns[col]={key:float(v[step]) for key,v in pressures.items()}
             snapshot=op.plane(g[step]);error=snapshot.rel_balance_error
             if abs(error)>1e-11:raise ValueError('Не замкнут баланс мгновенного сечения')
-            balances.append(dict(z_mm=float(z),step=step,t_s=float(settings.times[step]),injected_kg_s=snapshot.injected_kg_s,inside_kg_s=snapshot.inside_kg_s,inner_kg_s=snapshot.inner_kg_s,outer_kg_s=snapshot.outer_kg_s,relative_error=error))
-        planes.append(PlaneResult(float(z),mass,op.area,mass/op.area,op.radii,op.edges,op.angles,float('nan'),float(mass.sum()),float('nan'),float('nan'),True,times,steps,tuple(pcolumns)))
+            balances.append(dict(z_mm=float(z),step=step,t_s=float(settings.times[step]),injected_kg_s=snapshot.injected_kg_s,inside_kg_s=snapshot.inside_kg_s,inner_kg_s=snapshot.inner_kg_s,outer_kg_s=snapshot.outer_kg_s,wall_bound_kg_s=snapshot.wall_bound_kg_s,wall_inner_kg_s=snapshot.wall_inner_kg_s,wall_outer_kg_s=snapshot.wall_outer_kg_s,relative_error=error))
+        planes.append(PlaneResult(float(z),mass,op.area,mass/op.area,op.radii,op.edges,op.angles,float('nan'),float(mass.sum()),float('nan'),float('nan'),True,times,steps,tuple(pcolumns),
+            wall_bound_kg_s=float('nan'),geometry_notice=WALL_BOUND_NOTICE if op.wall_inner is not None else ''))
     notices=set(flow.notices);notices.add('Накопленная матрица содержит разные времена; единый мгновенный глобальный баланс не определён.');notices.add('Фиксированная форма ядер, τ=0; температура и воздух не являются входными данными.')
     payload=json.dumps(project_to_json(cfg,list(nozzles)),ensure_ascii=False,sort_keys=True,allow_nan=False)
     return QuasiResult(cfg,nozzles,settings,g,pressures,tuple(operators),tuple(planes),tuple(balances),tuple(sorted(notices)),time.perf_counter()-started,payload)

@@ -4,7 +4,7 @@ from copy import deepcopy
 import hashlib,json,time
 import numpy as np
 from scipy.optimize import least_squares
-from .core import project_from_json,project_to_json,calculate_plane,geometry_at,source_flow_kg_s
+from .core import Settings,project_from_json,project_to_json,calculate_plane,geometry_at,source_flow_kg_s,_load_record
 from .coordinates import grid_angles
 from .v02 import GEOMETRY_KEYS,NOZZLE_KINDS,effective_nozzle,validate_nozzles
 from .analysis import cell_values,matching_index
@@ -59,17 +59,21 @@ class RegressionTarget:
         if not np.all(np.isfinite(weights)) or np.any(weights<0):raise ValueError('Веса должны быть конечными и неотрицательными')
         if not set(split).issubset({'train','holdout','test'}):raise ValueError('Роль наблюдения: train / holdout / test')
         if not np.all(np.isfinite(np.asarray(self.y)[mask])) or np.any(np.asarray(self.y)[mask]<0):raise ValueError('Используемые топливные значения должны быть конечными и неотрицательными')
-        radii,edges=cfg.radial_centers_and_edges();angles=grid_angles(cfg)
+        angles=grid_angles(cfg)
         source_grid=self.metadata.get('model_settings')
         if source_grid:
-            for key in ('r_in_mm','r_out_mm','n_radial','n_angular'):
+            for key in ('n_radial','n_angular'):
                 if source_grid.get(key)!=getattr(cfg,key):raise ValueError('Контрольные области эталона и проекта различаются: '+key)
-            source_r=source_grid.get('radial_centers_mm')
-            if source_r is None:source_r=source_grid['r_in_mm']+(np.arange(source_grid['n_radial'])+.5)*(source_grid['r_out_mm']-source_grid['r_in_mm'])/source_grid['n_radial']
-            if not np.allclose(source_r,radii,rtol=0,atol=1e-7):raise ValueError('Радиальные контрольные области различаются')
-        seen=set();mapping=[]
+            source_cfg=_load_record(Settings,deepcopy(source_grid))
+        seen=set();mapping=[];grids={}
         for i,(z,r,theta) in enumerate(zip(self.z_mm,self.radius_mm,self.theta_deg)):
             if not all(np.isfinite(v) for v in (z,r,theta)) or z<0:raise ValueError('Неверные физические координаты эталона')
+            if z not in grids:
+                grids[z]=cfg.radial_centers_and_edges(z)
+                if source_grid:
+                    source_r,source_edges=source_cfg.radial_centers_and_edges(z)
+                    if not np.allclose(source_r,grids[z][0],rtol=0,atol=1e-7) or not np.allclose(source_edges,grids[z][1],rtol=0,atol=1e-7):raise ValueError('Радиальные контрольные области различаются')
+            radii,edges=grids[z]
             ri=matching_index(radii,r);ai=matching_index(angles,theta%360)
             if ri is None or ai is None:raise ValueError(f'Наблюдение {i+1}: z/R/θ должны соответствовать физическим центрам контрольной сетки; интерполяция не подставляется.')
             key=(round(z,7),ri,ai)
