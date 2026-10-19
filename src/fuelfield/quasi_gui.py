@@ -1,5 +1,6 @@
 """Pressure-only configuration window; drafts apply to the main project atomically."""
 from pathlib import Path
+from .help_text import read_help
 from dataclasses import replace
 from copy import deepcopy
 import numpy as np
@@ -206,7 +207,5 @@ class QuasiDialog(QDialog):
             except Exception as exc:self.status.setText(str(exc))
     def show_guide(self):
         if hasattr(self,'guide_dialog'):self.guide_dialog.show();self.guide_dialog.raise_();return
-        path=Path(__file__).resolve().parents[2]/'docs/QUASISTATIONARY_GUIDE.md'
-        try:content=path.read_text(encoding='utf-8')
-        except OSError as exc:self.status.setText(str(exc));return
+        content=read_help('QUASISTATIONARY_GUIDE.md')
         self.guide_dialog=QDialog(self);self.guide_dialog.setWindowTitle('Квазистационарный расчёт — инструкция');self.guide_dialog.resize(950,700);layout=QVBoxLayout(self.guide_dialog);browser=QTextBrowser();browser.setMarkdown(content);layout.addWidget(browser);close=QDialogButtonBox(QDialogButtonBox.Close);close.button(QDialogButtonBox.Close).setText('Закрыть');close.rejected.connect(self.guide_dialog.close);layout.addWidget(close);self.guide_dialog.show()

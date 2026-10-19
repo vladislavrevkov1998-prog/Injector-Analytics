@@ -79,7 +79,7 @@ class ComparisonPanel(QWidget):
         reset=QPushButton("Исходный масштаб");reset.clicked.connect(lambda:self.interaction.reset_zoom());grid_controls.addWidget(reset)
         self.axes_button=QPushButton("Оси…");self.axes_button.clicked.connect(self.open_axes);grid_controls.addWidget(self.axes_button);grid_controls.addStretch()
         layout.addLayout(grid_controls)
-        self.figure=Figure(figsize=(6,5),tight_layout=True);self.canvas=FigureCanvasQTAgg(self.figure);self.canvas.setMinimumSize(160,120);layout.addWidget(self.canvas,1);self.interaction=attach_interaction(self.canvas)
+        self.figure=Figure(figsize=(6,5),tight_layout=True);self.canvas=FigureCanvasQTAgg(self.figure);self.canvas.setMinimumSize(160,0);layout.addWidget(self.canvas,1);self.interaction=attach_interaction(self.canvas)
         self.plane.currentIndexChanged.connect(self._plane_changed)
         for w in (self.radius,self.kind,self.x,self.y,self.y2):w.currentIndexChanged.connect(self.draw)
         self.plot_count.valueChanged.connect(self.draw);self.plot_columns.valueChanged.connect(self.draw)

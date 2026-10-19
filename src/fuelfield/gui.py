@@ -4,7 +4,7 @@ import json, os, sys, traceback
 from copy import deepcopy
 from pathlib import Path
 import numpy as np
-from PyQt5.QtCore import Qt, QThread, QObject, pyqtSignal, QTimer
+from PyQt5.QtCore import Qt, QThread, QObject, pyqtSignal, QTimer, QSize
 from PyQt5.QtGui import QKeySequence, QFont, QPolygon, QColor, QTextDocument
 from PyQt5.QtCore import QPoint
 from PyQt5.QtWidgets import (
@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
     QSpinBox, QDoubleSpinBox, QLineEdit, QFileDialog, QMessageBox, QSplitter,
     QGroupBox, QScrollArea, QPlainTextEdit, QHeaderView, QAbstractItemView,
     QStatusBar, QProgressBar, QMenu, QAction, QInputDialog, QCheckBox,
-    QUndoStack, QUndoCommand, QStackedWidget, QStyledItemDelegate, QDialog, QToolButton, QSlider
+    QUndoStack, QUndoCommand, QStackedWidget, QStyledItemDelegate, QDialog, QToolButton, QSlider, QSizePolicy
 )
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -222,6 +222,12 @@ class CalcWorker(QObject):
         except Exception:
             self.failed.emit(traceback.format_exc())
         finally:self.finished.emit()
+
+
+class PlotStack(QStackedWidget):
+    """Cached figure sizes must not push the result panel up on first display."""
+    def sizeHint(self):return QSize(400,240)
+    def minimumSizeHint(self):return QSize(0,0)
 
 
 class MainWindow(QMainWindow):
@@ -659,27 +665,27 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.plot_stacks=[]
         self.figmap=Figure(figsize=(6,6),tight_layout=True)
         self.mapcanvas=FigureCanvas(self.figmap)
-        stack=QStackedWidget();stack.addWidget(self.mapcanvas);self.plot_stacks.append(stack)
+        stack=PlotStack();stack.addWidget(self.mapcanvas);self.plot_stacks.append(stack)
         plots.addTab(stack,'Матрица (консервативная)')
         self.figsmooth=Figure(figsize=(7,7),tight_layout=True)
         self.smoothcanvas=FigureCanvas(self.figsmooth)
-        stack=QStackedWidget();stack.addWidget(self.smoothcanvas);self.plot_stacks.append(stack)
+        stack=PlotStack();stack.addWidget(self.smoothcanvas);self.plot_stacks.append(stack)
         field_page=QWidget();field_layout=QVBoxLayout(field_page);field_layout.setContentsMargins(0,0,0,0);field_layout.addWidget(stack,1)
         self.time_controls=QWidget();time_layout=QVBoxLayout(self.time_controls);time_layout.setContentsMargins(4,2,4,2);self.time_label=QLabel();self.time_label.setWordWrap(True);self.time_label.setMinimumHeight(self.time_label.fontMetrics().lineSpacing()*3+8);time_layout.addWidget(self.time_label);self.time_slider=QSlider(Qt.Horizontal);self.time_slider.setSingleStep(1);self.time_slider.setPageStep(1);time_layout.addWidget(self.time_slider);field_layout.addWidget(self.time_controls);self.time_controls.hide()
         self.time_slider.valueChanged.connect(self._schedule_time_field);self.time_slider.sliderReleased.connect(self._update_time_field)
         plots.addTab(field_page,'Подробное суммарное поле')
         self.figroses=Figure(figsize=(7,7),tight_layout=True)
         self.rosescanvas=FigureCanvas(self.figroses)
-        stack=QStackedWidget();stack.addWidget(self.rosescanvas);self.plot_stacks.append(stack)
+        stack=PlotStack();stack.addWidget(self.rosescanvas);self.plot_stacks.append(stack)
         plots.addTab(stack,'140 полярных эпюр на общей схеме')
         self.figcurves=Figure(figsize=(10,7),tight_layout=True)
         self.curvecanvas=FigureCanvas(self.figcurves)
-        stack=QStackedWidget();stack.addWidget(self.curvecanvas);self.plot_stacks.append(stack)
+        stack=PlotStack();stack.addWidget(self.curvecanvas);self.plot_stacks.append(stack)
         plots.addTab(stack,'Окружные эпюры радиальных уровней')
         plots.currentChanged.connect(self._plot_result)
         panels=QSplitter(Qt.Horizontal);self.result_panels=panels;panels.setChildrenCollapsible(False);panels.addWidget(plots)
         self.comparison=ComparisonPanel(self);panels.addWidget(self.comparison)
-        self.comparison.hide();panels.setSizes([1400,0]);lay.addWidget(panels)
+        self.comparison.hide();panels.setSizes([1400,0]);panels.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Expanding);lay.addWidget(panels,1)
         self.compare_radius.currentIndexChanged.connect(self._comparison_radius_changed)
         self.tabs.addTab(page,'04 · Поля и эпюры')
         self.graph_links=GraphLinks(self)
