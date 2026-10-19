@@ -5,7 +5,7 @@ from copy import deepcopy
 from pathlib import Path
 import numpy as np
 from PyQt5.QtCore import Qt, QThread, QObject, pyqtSignal, QTimer
-from PyQt5.QtGui import QKeySequence, QFont, QPolygon, QColor
+from PyQt5.QtGui import QKeySequence, QFont, QPolygon, QColor, QTextDocument
 from PyQt5.QtCore import QPoint
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
@@ -44,6 +44,9 @@ from .quasi import calculate_quasi,QuasiSettings,CalculationCancelled,Calculatio
 from .quasi_gui import QuasiDialog
 from .quasi_plotting import QuasiFieldAnimator
 from .quasi_io import write_report as write_quasi_report
+from .chamber import chamber,sync_groups,sync_anchors,WALL_BOUND_NOTICE
+from .chamber_gui import GeometryEditor
+from .chamber_plotting import LongitudinalDialog
 from . import __version__
 
 FIELDS = [
@@ -339,8 +342,13 @@ class MainWindow(QMainWindow):
         editors.addTab(self.catalog_editor,'Типы распылителей и расходные характеристики')
         editors.addTab(self.preset_editor,'Шаблоны форсунок')
         form.addRow(editors)
-        layout.addWidget(scroll)
+        self.geometry_pages=QTabWidget();self.geometry_pages.addTab(scroll,'Сетка, измерительный отсчёт и распылители')
+        self.geometry_editor=GeometryEditor(self,PasteTable);self.geometry_pages.addTab(self.geometry_editor,'Профили ЖТ: Sketcher и таблицы')
+        layout.addWidget(self.geometry_pages)
         self.tabs.addTab(page,'01 · Геометрия и сетка')
+
+    def open_longitudinal(self):
+        self.longitudinal_dialog=LongitudinalDialog(self);self.longitudinal_dialog.show()
 
     def open_regression(self):
         self._record_edit()
@@ -356,7 +364,28 @@ class MainWindow(QMainWindow):
         finally:self._restoring=False
         self._record_edit(label=label)
 
+    def apply_geometry_state(self,state,label):
+        """A validated geometry edit needs neither a 140-row read-back nor
+        rebuilding hidden hydraulic plots. It shares the same Undo snapshots.
+        """
+        cfg,nozzles=project_from_json(state);after=project_to_json(cfg,nozzles);before=self._edit_state
+        if after==before:return
+        previous_nozzles=self.nozzles;self._restoring=True
+        try:
+            self.cfg=cfg;self.nozzles=nozzles;self._edit_state=deepcopy(after)
+            self.geom_widgets['z_mm'].setText('; '.join(f'{z:g}' for z in cfg.z_mm))
+            self.mode_widgets['placement_mode'].setCurrentIndex(self.mode_widgets['placement_mode'].findData(cfg.placement_mode))
+            active=bool(chamber(cfg))
+            for key in ('r_in_mm','r_out_mm','z_mm'):
+                self.geom_widgets[key].setEnabled(not active);self.geom_widgets[key].setToolTip('Задаётся в «Профили ЖТ: Sketcher и таблицы»' if active else '')
+            if nozzles!=previous_nozzles:self._fill_nozzles()
+            self.geometry_editor.load(cfg,nozzles)
+        finally:self._restoring=False
+        self.undo_stack.push(ProjectEdit(self,before,after,label));self._invalidate_results();self._queue_preview()
+
     def open_sections_editor(self):
+        if chamber(self.cfg):
+            self.tabs.setCurrentIndex(0);self.geometry_pages.setCurrentIndex(1);self.geometry_editor.pages.setCurrentIndex(3);return
         dialog=QDialog(self);dialog.setWindowTitle('Осевые сечения: 1–50');layout=QVBoxLayout(dialog)
         layout.addWidget(QLabel('Глобальные координаты от начала ФУ, мм. Больше сечений — дольше расчёт.'))
         table=PasteTable(len(self.cfg.z_mm),1);table.setHorizontalHeaderLabels(['z, мм'])
@@ -603,7 +632,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.metric_equation.setStyleSheet("color:#67458b;font-size:15px;")
         self.metric_equation.setToolTip("ṁ — расход контрольной ячейки [кг/с]; S — площадь [м²]; ρ — плотность [кг/м³]; t — интервал [с]. Средние взвешены по площади.")
         representations.insertWidget(2,self.metric_equation)
-        axis_row=QHBoxLayout();self.x_axis=QComboBox();self.x_axis.addItem('Градусы: 0…360°','angle');self.x_axis.addItem('Окружные ячейки: 0…N','cells');axis_row.addWidget(QLabel('Ось X эпюр:'));axis_row.addWidget(self.x_axis);axis_row.addStretch();lay.addLayout(axis_row)
+        axis_row=QHBoxLayout();self.x_axis=QComboBox();self.x_axis.addItem('Градусы: 0…360°','angle');self.x_axis.addItem('Окружные ячейки: 0…N','cells');axis_row.addWidget(QLabel('Ось X эпюр:'));axis_row.addWidget(self.x_axis)
+        self.longitudinal_button=QPushButton('Продольный вид ЖТ');self.longitudinal_button.clicked.connect(self.open_longitudinal);axis_row.addWidget(self.longitudinal_button);axis_row.addStretch();lay.addLayout(axis_row)
         chart_controls=QHBoxLayout()
         self.plot_count=_integer(6,1,140);self.plot_columns=_integer(2,1,6)
         self.graph_selection=GraphSelection(self.plot_count);self.graph_selection.changed.connect(self._view_changed)
@@ -682,6 +712,11 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             elif isinstance(w,QCheckBox):w.setChecked(value)
             else:w.setValue(value)
         self.catalog_editor.load(self.cfg.atomizer_types);self.preset_editor.load()
+        self.geometry_editor.load(self.cfg,self.nozzles,force=True)
+        active=bool(chamber(self.cfg))
+        for key in ('r_in_mm','r_out_mm','z_mm'):
+            self.geom_widgets[key].setEnabled(not active)
+            self.geom_widgets[key].setToolTip('Задаётся в «Профили ЖТ: Sketcher и таблицы»' if active else '')
         selected=self.assign_type_selector.currentData()
         self.assign_type_selector.clear();self.assign_type_selector.addItem('Без типа распылителя','')
         for a in self.cfg.atomizer_types:self.assign_type_selector.addItem(a['name'],a['id'])
@@ -846,6 +881,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         if cfg.placement_mode=='auto_follow' and angle_edits:
             for new,old in zip(nozzles,self.nozzles):new.theta_deg=old.theta_deg
             for ident,theta in sorted(angle_edits.items()):follow_row(nozzles,ident,theta)
+        if angle_edits and cfg.geometry:cfg.geometry=sync_groups(cfg.geometry,nozzles)
         return nozzles
 
     def _sync_nozzles(self):
@@ -922,6 +958,10 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             cfg=self._read_controls()
             if control_only and cfg==self.cfg:return
             nozzles=self._read_nozzles(cfg)
+            if cfg.geometry:
+                if chamber(cfg):cfg.geometry,nozzles=sync_anchors(cfg.geometry,nozzles,cfg,self.nozzles)
+                previous_angles={n['id']:n['theta_deg'] for n in self._edit_state['nozzles']}
+                if any(n.theta_deg!=previous_angles.get(n.id) for n in nozzles):cfg.geometry=sync_groups(cfg.geometry,nozzles)
             state=project_to_json(cfg,nozzles)
         except (ValueError,TypeError) as exc:
             self._restore_edit(self._edit_state)
@@ -938,6 +978,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self._edit_state=deepcopy(state)
         self._fill_nozzles()
         self.undo_stack.push(ProjectEdit(self,before,state,label))
+        self.geometry_editor.load(self.cfg,self.nozzles)
         if physical_before!=physical_after:self._invalidate_results()
         else:self._invalidate_render();self._plot_result();self.comparison.draw()
         self._queue_preview()
@@ -1263,22 +1304,49 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.worker=None
         self.calc_btn.setEnabled(True);self.cancel_calc_btn.setEnabled(False)
 
-    def _plot_result(self,*args):
-        for widget in (self.plot_count,self.plot_columns,self.reset_plot_button,self.axes_button):widget.setEnabled(self.plots.currentIndex()==3)
-        if not self.results:return
-        i=max(0,self.plane_select.currentIndex())
-        p=self.results[i]
+    @staticmethod
+    def _balance_text(p,i):
         total=p.injected_kg_s*3600
         if p.is_composite:
-            self.balance_label.setText(f'<b>Квазистационарное сечение {i+1}, z={p.z_mm:g} мм.</b> Накопленная матрица: один угловой столбец на временной шаг. Эпюры — из этой матрицы. Поле ниже — мгновенный снимок; единый мгновенный баланс накопленной матрицы не определён.')
-        else:self.balance_label.setText(
+            text=f'<b>Квазистационарное сечение {i+1}, z={p.z_mm:g} мм.</b> Накопленная матрица: один угловой столбец на временной шаг. Эпюры — из этой матрицы. Поле ниже — мгновенный снимок; единый мгновенный баланс накопленной матрицы не определён.'
+        else:text=(
             f'<b>Сечение {i+1}, z={p.z_mm:g} мм.</b> '
             f'Через сопла перед сечением {total:.5g} кг/ч; в тракте {p.inside_kg_s*3600:.5g} кг/ч '
             f'({100*p.inside_kg_s/max(p.injected_kg_s,1e-15):.2f}%); '
             f'за внутренней границей {p.inner_kg_s*3600:.5g} кг/ч; '
             f'за наружной {p.outer_kg_s*3600:.5g} кг/ч; '
+            f'wall-bound {p.wall_bound_kg_s*3600:.5g} кг/ч; '
             f'невязка баланса {100*p.rel_balance_error:.3g}%.'
         )
+        if p.geometry_notice:text+='<br>wall-bound: неразрешённое распределение вне стенок; перенос и плёнка не моделируются.'
+        return text
+
+    def _reserve_balance_height(self):
+        # Different line wrapping must not resize and redraw cached Matplotlib
+        # canvases every time a short (e.g. empty inlet) balance is selected.
+        if not self.results:return
+        width=max(1,self.balance_label.contentsRect().width()-2*self.balance_label.margin())
+        key=(id(self.results),width,self.balance_label.font().toString())
+        if key==getattr(self,'_balance_layout_key',None):return
+        self._balance_layout_key=key
+        document=QTextDocument();document.setDocumentMargin(0);document.setDefaultFont(self.balance_label.font());document.setTextWidth(width)
+        height=0.
+        for i,p in enumerate(self.results):
+            document.setHtml(self._balance_text(p,i));height=max(height,document.size().height())
+        self.balance_label.setMinimumHeight(int(np.ceil(height))+4)
+
+    def resizeEvent(self,event):
+        super().resizeEvent(event)
+        if hasattr(self,'balance_label'):QTimer.singleShot(0,self._reserve_balance_height)
+
+    def _plot_result(self,*args):
+        for widget in (self.plot_count,self.plot_columns,self.reset_plot_button,self.axes_button):widget.setEnabled(self.plots.currentIndex()==3)
+        if not self.results:return
+        i=max(0,self.plane_select.currentIndex());p=self.results[i]
+        self._reserve_balance_height();self.balance_label.setText(self._balance_text(p,i))
+        if p.geometry_notice:
+            self.balance_label.setToolTip(p.geometry_notice)
+        else:self.balance_label.setToolTip('')
         self.plot_count.blockSignals(True);self.plot_count.setMaximum(len(p.radial_centers_mm));self.plot_count.blockSignals(False)
         previous=self.compare_radius.currentData()
         self.compare_radius.blockSignals(True);self.compare_radius.clear()
@@ -1385,7 +1453,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         pc=ax.pcolormesh(th,r,data,shading='flat',cmap=cmap,norm=norm)
         ax.set_theta_zero_location('E')
         ax.set_theta_direction(1);polar_ticks(ax,self.cfg)
-        ax.set_ylim(0,self.cfg.r_out_mm)
+        ax.set_ylim(0,p.radial_edges_mm[-1])
         ax.set_title(f'{METRICS[metric]} · z={p.z_mm:g} мм',pad=18,fontsize=11)
         self.figmap.colorbar(pc,ax=ax,pad=.14,shrink=.68,label=UNITS[metric])
         self._draw_nozzle_markers(ax,polar=True)
@@ -1433,7 +1501,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             f'Шаг {step}/{result.settings.n_steps-1} · t={result.settings.times[step]:.8g} с · угол гребёнки {result.settings.angles[step]:.8g}° · {pressures}\n'
             f'Мгновенный баланс: подано {balance["injected_kg_s"]*3600:.7g} кг/ч ({delta} к шагу 0); '
             f'внутри {balance["inside_kg_s"]*3600:.7g}; за внутренней {balance["inner_kg_s"]*3600:.7g}; '
-            f'за наружной {balance["outer_kg_s"]*3600:.7g}; невязка {balance["relative_error"]:.3g}.')
+            f'за наружной {balance["outer_kg_s"]*3600:.7g}; wall-bound {balance.get("wall_bound_kg_s",0)*3600:.7g}; невязка {balance["relative_error"]:.3g}.')
         if canvas is None:
             if self.plots.currentIndex()!=1:return
             canvas=self.plot_stacks[1].currentWidget()

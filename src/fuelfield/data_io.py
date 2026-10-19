@@ -156,6 +156,10 @@ def write_result_csv(path: str, planes):
                                   f'{p.cell_area_m2[i,j]:.12g}',
                                   f'{p.cell_mass_kg_s[i,j]:.12g}',
                                   f'{p.flux_kg_m2_s[i,j]:.12g}']+((['quasistationary',int(p.scan_steps[j]),float(p.scan_times_s[j]),json.dumps(p.scan_pressures[j],ensure_ascii=False)] if p.is_composite else ['stationary','','','']) if composite else []))
+    if not composite and any(p.geometry_notice for p in planes):
+        from .analysis import balance_rows
+        target=Path(path).with_name(Path(path).stem+'_balances.csv')
+        with target.open('w',encoding='utf-8-sig',newline='') as file:csv.writer(file).writerows(balance_rows(planes))
 
 
 def import_characteristic_file(path, unit='kg/h', density_kg_m3=800., sheet=None):

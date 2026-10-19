@@ -80,11 +80,11 @@ def draw_detailed_map(fig, field, plane, cfg, nozzles, *, outlines=True,
                       labels=True, roses=False, rose_scale_mm=8.0, shared_values=None):
     fig.clear()
     ax=fig.add_subplot(111)
-    lim=cfg.r_out_mm
+    rin,lim=plane.radial_edges_mm[[0,-1]]
     data,norm,cmap=color_scale(field.masked_flux_kg_m2_s,cfg,shared_values)
     im=ax.imshow(data,origin='lower',interpolation='nearest',
                  extent=[-lim,lim,-lim,lim],cmap=cmap,norm=norm,aspect='equal')
-    for radius in (cfg.r_in_mm,cfg.r_out_mm):
+    for radius in (rin,lim):
         ax.add_patch(Circle((0,0),radius,fill=False,lw=1.,edgecolor='#cbd5e1',zorder=9))
     if roses:
         draw_polar_nozzle_profiles(ax,cfg,nozzles,plane.z_mm,rose_scale_mm)
@@ -100,8 +100,8 @@ def draw_polar_nozzles_map(fig, plane, cfg, nozzles, *, outlines=True,labels=Tru
                            rose_scale_mm=8.0):
     fig.clear()
     ax=fig.add_subplot(111)
-    lim=cfg.r_out_mm
-    for radius in (cfg.r_in_mm,cfg.r_out_mm):
+    rin,lim=plane.radial_edges_mm[[0,-1]]
+    for radius in (rin,lim):
         ax.add_patch(Circle((0,0),radius,fill=False,edgecolor='#7c8491',lw=1))
     draw_polar_nozzle_profiles(ax,cfg,nozzles,plane.z_mm,rose_scale_mm,fill=True)
     draw_nozzle_markers(ax,cfg,nozzles,polar=False,outlines=outlines,labels=labels)

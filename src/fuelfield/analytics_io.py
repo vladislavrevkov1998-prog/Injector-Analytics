@@ -5,7 +5,7 @@ from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 from xml.etree import ElementTree as ET
 import numpy as np
-from .analysis import cell_values, UNITS
+from .analysis import cell_values, UNITS,balance_rows
 from .data_io import _xlsx_sheets
 from .core import project_to_json
 
@@ -47,6 +47,24 @@ def _col(i):
 def write_epures_xlsx(path, planes, cfg, metric='flux', interval=180.):
     if not 1<=len(planes)<=50:raise ValueError('Экспорт требует 1–50 рассчитанных сечений')
     metadata=json.dumps(project_to_json(cfg,[])['settings'],ensure_ascii=False,separators=(',',':'))
+    if len(metadata)>16000 or cfg.geometry:
+        pointer=json.dumps(dict(metadata_sheet='Metadata',record='settings'),ensure_ascii=False)
+        tables=[]
+        for index,p in enumerate(planes,1):
+            values=cell_values(p,metric,cfg.density_kg_m3,interval)
+            headers=['angle_deg']
+            for r in p.radial_centers_mm:headers.extend([f'R={r:.12g} мм [{UNITS[metric]}]',f'x R={r:.12g} [мм]',f'y R={r:.12g} [мм]'])
+            headers+=['z_mm','units','pressure_mode','target_pressure_kgf_cm2','density_kg_m3','interval_s','settings_json']
+            rows=[headers]
+            for j,angle in enumerate(p.theta_centers_deg):
+                row=[float(angle)]
+                for k,r in enumerate(p.radial_centers_mm):
+                    v=values[k,j];row.extend([None if np.ma.is_masked(v) else float(v),float(r*np.cos(np.deg2rad(angle))),float(r*np.sin(np.deg2rad(angle)))])
+                rows.append(row+[p.z_mm,UNITS[metric],cfg.pressure_mode,cfg.target_pressure_kgf_cm2,cfg.density_kg_m3,interval,pointer])
+            tables.append((f'z{index} {p.z_mm:g} мм'[:31],rows))
+        tables.append(('Metadata',[['record','part','json']]+[['settings',i//16000,metadata[i:i+16000]] for i in range(0,len(metadata),16000)]))
+        tables.append(('Balances',balance_rows(planes)))
+        write_workbook(path,tables);return
     sheets=[]
     for p in planes:
         values=cell_values(p,metric,cfg.density_kg_m3,interval)

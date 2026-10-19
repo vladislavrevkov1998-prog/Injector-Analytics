@@ -1,0 +1,73 @@
+{
+  "method": "Linux Qt offscreen; QTest mouse/slider, actual paint events, no disabled timers; warmups excluded; original fixture hash checked",
+  "project": "demo_project_v06_geometry.json",
+  "source_gui_sha256": "82fd218a851f58b81fcf796c0b3fc1baec6430ae70c18a423c5d2f87dd62caeb",
+  "source_project_sha256": "929419a83a2e602d4e05ac77ff65f77e75a2cceba0dc575b4628f87ec179552c",
+  "geometry_cold_open_ms": 161.321,
+  "table_edit_ms": {
+    "samples": 15,
+    "median_ms": 277.099,
+    "p95_ms": 338.22,
+    "max_ms": 367.446
+  },
+  "drag_frame_ms": {
+    "samples": 40,
+    "median_ms": 0.24,
+    "p95_ms": 0.314,
+    "max_ms": 0.403
+  },
+  "drag_release_commit_ms": 319.679,
+  "one_drag_one_undo": true,
+  "layouts": [
+    {
+      "width": 1280,
+      "sketch_width": 510,
+      "table_width": 700,
+      "splitter": [
+        510,
+        722
+      ]
+    },
+    {
+      "width": 1480,
+      "sketch_width": 593,
+      "table_width": 817,
+      "splitter": [
+        593,
+        839
+      ]
+    },
+    {
+      "width": 1920,
+      "sketch_width": 775,
+      "table_width": 1075,
+      "splitter": [
+        775,
+        1097
+      ]
+    }
+  ],
+  "stationary_worker_and_render_ms": 2274.481,
+  "six_section_switch_ms": {
+    "samples": 24,
+    "median_ms": 11.053,
+    "p95_ms": 304.427,
+    "max_ms": 409.86
+  },
+  "quasi_worker_and_render_ms": 4786.29,
+  "variable_field_slider_ms": {
+    "samples": 40,
+    "median_ms": 26.241,
+    "p95_ms": 29.403,
+    "max_ms": 30.016
+  },
+  "native_changed_pixels": 8752,
+  "quasi_maximum_relative_balance_error": 8.940159425269132e-16,
+  "large_objects": {
+    "nozzles": 140,
+    "other_objects": 1021,
+    "new_group_members": 1000,
+    "one_commit_and_first_render_ms": 857.632
+  },
+  "navigation_preserves_matrices": true
+}

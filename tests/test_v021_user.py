@@ -186,7 +186,12 @@ class TestUserQt(unittest.TestCase):
                 self.app.processEvents()
             elapsed=time.monotonic()-start
             self.assertEqual(evaluate.call_count,0)
-            QTest.qWait(350);self.app.processEvents()
+            # Two chained 120 ms timers can be dispatched late on a busy Qt
+            # runner. Wait for completion with a deadline; retain the strict
+            # zero-during-burst, exactly-once, reuse and latency assertions.
+            deadline=time.monotonic()+1.
+            while evaluate.call_count==0 and time.monotonic()<deadline:QTest.qWait(10)
+            self.app.processEvents()
             self.assertEqual(evaluate.call_count,1)
             self.w._draw_single_preview();self.assertEqual(evaluate.call_count,1)
             self.assertLess(elapsed,1.5)

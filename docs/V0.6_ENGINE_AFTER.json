@@ -1,0 +1,12 @@
+{
+  "source_root": "/workspace/Injector-Analytics",
+  "method": "pure quasi engine, 4 z,140nozzles,140timestamps,720\u00b2; one warmup then3measured; sequential processes, OPENBLAS_NUM_THREADS=1",
+  "samples_ms": [
+    3325.9094199893298,
+    3585.4600580059923,
+    3611.0973530012416
+  ],
+  "median_ms": 3585.4600580059923,
+  "maximum_error": 1.7161081670761277e-13,
+  "composite_arrays_sha256": "0fd2efaa3f5022e32160fc62de65d8d185a405f1378f0397149dc9777d6b6b2d"
+}

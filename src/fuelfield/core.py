@@ -6,8 +6,10 @@ It is an engineering quadrature, not a DPM or interaction model.
 from __future__ import annotations
 from dataclasses import dataclass, field, asdict, fields
 from typing import Optional
+from copy import deepcopy
 import numpy as np
 from .coordinates import grid_angles,angular_indices
+from .chamber import chamber,WALL_BOUND_NOTICE
 from .v02 import (GEOMETRY_KEYS, default_presets, validate_catalog, effective_nozzle,
                   flow_status, validate_nozzles)
 
@@ -110,6 +112,7 @@ class Settings:
     sector_pressure_kgf_cm2: Optional[float] = None
     quasistationary: bool = False
     quasi_settings: dict = field(default_factory=dict)
+    geometry: dict = field(default_factory=dict)
 
     _extra: dict = field(default_factory=dict,repr=False)
     _project_extra: dict = field(default_factory=dict,repr=False)
@@ -165,22 +168,29 @@ class Settings:
                                    (self.radial_model, RADIAL_MODELS, 'радиальный профиль')):
             if value not in pool:
                 raise ValueError(f'Неизвестная модель «{label}»: {value}')
+        model=chamber(self)
+        if model:model.check_section_list(self.z_mm)
         self.radial_centers_and_edges()
 
-    def radial_centers_and_edges(self):
+    def bounds_at(self,z_mm=None):
+        model=chamber(self)
+        return model.bounds(model.base if z_mm is None else z_mm) if model else (self.r_in_mm,self.r_out_mm)
+
+    def radial_centers_and_edges(self,z_mm=None):
+        model=chamber(self)
+        rin,rout=self.bounds_at(z_mm)
+        if model and model.variable:return model.grid(model.base if z_mm is None else z_mm,self.n_radial)
         if self.radial_centers_mm is None:
-            centers = self.r_in_mm + (np.arange(self.n_radial) + 0.5) * (
-                (self.r_out_mm - self.r_in_mm) / self.n_radial)
+            centers = rin + (np.arange(self.n_radial) + 0.5) * ((rout-rin) / self.n_radial)
         else:
             centers = np.asarray(self.radial_centers_mm, dtype=float)
             if len(centers) != self.n_radial:
                 raise ValueError('Число заданных радиусов должно равняться числу радиальных уровней.')
             if (not np.all(np.isfinite(centers)) or
-                np.any(centers <= self.r_in_mm) or np.any(centers >= self.r_out_mm) or
+                np.any(centers <= rin) or np.any(centers >= rout) or
                 np.any(np.diff(centers) <= 0)):
                 raise ValueError('Радиальные уровни должны возрастать и находиться строго внутри тракта.')
-        edges = np.concatenate(([self.r_in_mm], (centers[:-1] + centers[1:]) / 2,
-                                [self.r_out_mm]))
+        edges = np.concatenate(([rin], (centers[:-1] + centers[1:]) / 2,[rout]))
         return centers, edges
 
 
@@ -332,17 +342,23 @@ class PlaneResult:
     scan_times_s: object = None
     scan_steps: object = None
     scan_pressures: object = None
+    wall_bound_kg_s: float = 0.
+    wall_inner_kg_s: float = 0.
+    wall_outer_kg_s: float = 0.
+    geometry_notice: str = ''
 
     @property
     def rel_balance_error(self):
         if self.is_composite:return float('nan')
         denominator = max(self.injected_kg_s, 1e-15)
-        return (self.inside_kg_s+self.inner_kg_s+self.outer_kg_s-self.injected_kg_s)/denominator
+        return (self.inside_kg_s+self.inner_kg_s+self.outer_kg_s+self.wall_bound_kg_s-self.injected_kg_s)/denominator
 
 
 def calculate_plane(nozzles: list[Nozzle], cfg: Settings, z_mm: float) -> PlaneResult:
     cfg.validate()
-    centers, edges = cfg.radial_centers_and_edges()
+    centers, edges = cfg.radial_centers_and_edges(z_mm)
+    model=chamber(cfg);variable=bool(model and model.variable)
+    if model:model.validate_nozzle_anchors(nozzles,cfg)
     nrad, nang = cfg.n_radial, cfg.n_angular
     mass = np.zeros((nrad,nang))
     inner = outer = injected = 0.0
@@ -369,7 +385,10 @@ def calculate_plane(nozzles: list[Nozzle], cfg: Settings, z_mm: float) -> PlaneR
     flux = mass/area
     th_centers = grid_angles(cfg)
     return PlaneResult(float(z_mm),mass,area,flux,centers,edges,th_centers,
-                       injected,float(mass.sum()),inner,outer)
+                       injected,float(mass.sum()),0. if variable else inner,0. if variable else outer,
+                       wall_bound_kg_s=inner+outer if variable else 0.,
+                       wall_inner_kg_s=inner if variable else 0.,wall_outer_kg_s=outer if variable else 0.,
+                       geometry_notice=WALL_BOUND_NOTICE if variable else '')
 
 
 def _json_record(obj):
@@ -378,7 +397,7 @@ def _json_record(obj):
 
 
 def project_to_json(settings: Settings, nozzles: list[Nozzle]):
-    return {**settings._project_extra,'format':'fuel-field-pilot-v1','version':'0.5.2',
+    return {**deepcopy(settings._project_extra),'format':'fuel-field-pilot-v1','version':'0.6.0','schema_version':2,
             'settings':_json_record(settings),
             'nozzles':[{**_json_record(n),'r_nozzle_mm':n.r_nozzle_mm} for n in nozzles]}
 
@@ -390,9 +409,15 @@ def _load_record(cls,data):
 
 
 def project_from_json(data):
+    from copy import deepcopy
+    if not isinstance(data,dict):raise ValueError('Проект должен быть объектом JSON')
+    data=deepcopy(data)
     if data.get('format') != 'fuel-field-pilot-v1':raise ValueError('Неподдерживаемый формат проекта')
+    schema=data.get('schema_version',1)
+    if isinstance(schema,bool) or not isinstance(schema,int) or schema not in (1,2):raise ValueError('Неподдерживаемая версия схемы проекта')
+    if not isinstance(data.get('settings'),dict) or not isinstance(data.get('nozzles'),list):raise ValueError('Нужны settings-объект и список nozzles')
     cfg=_load_record(Settings,data['settings'])
-    cfg._project_extra={k:v for k,v in data.items() if k not in ('format','version','settings','nozzles')}
+    cfg._project_extra={k:v for k,v in data.items() if k not in ('format','version','schema_version','settings','nozzles')}
     nozzles=[]
     for item in data['nozzles']:
         raw=dict(item);radius=raw.pop('r_nozzle_mm',None)
@@ -404,6 +429,8 @@ def project_from_json(data):
     cfg.validate()
     if len(nozzles)!=140 or set(n.id for n in nozzles)!=set(range(1,141)):raise ValueError('Проект должен содержать 140 уникальных форсунок')
     validate_nozzles(nozzles,cfg)
+    model=chamber(cfg)
+    if model:model.validate_nozzle_anchors(nozzles,cfg)
     return cfg,nozzles
 
 
@@ -452,7 +479,8 @@ def evaluate_continuous_field(nozzles: list[Nozzle], cfg: Settings,
     dim = int(cfg.preview_resolution if resolution is None else resolution)
     if not 64 <= dim <= 1200:
         raise ValueError('Неверное разрешение карты.')
-    extent = float(cfg.r_out_mm)
+    rin,rout=cfg.bounds_at(z_mm)
+    extent = float(rout)
     if bounds_xy is None:bounds_xy=(-extent,extent,-extent,extent)
     xmin,xmax,ymin,ymax=bounds_xy
     if not all(np.isfinite(v) for v in bounds_xy) or xmin>=xmax or ymin>=ymax:
@@ -507,7 +535,7 @@ def evaluate_continuous_field(nozzles: list[Nozzle], cfg: Settings,
         flux[iy0:iy1,ix0:ix1] += (m_dot*1e6/(2*np.pi*integral))*radial*ang
     if mask_track:
         xx,yy = np.meshgrid(axis,y_axis);r_global = np.hypot(xx,yy)
-        valid = (r_global >= cfg.r_in_mm)&(r_global <= cfg.r_out_mm)
+        valid = (r_global >= rin)&(r_global <= rout)
     else:valid = np.ones_like(flux,dtype=bool)
     return SmoothField(axis,y_axis,flux,np.ma.masked_where(~valid,flux),float(z_mm))
 

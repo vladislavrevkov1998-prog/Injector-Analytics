@@ -1,0 +1,12 @@
+{
+  "source_root": "/tmp/injector-v06-baseline-source",
+  "method": "pure quasi engine, 4 z,140nozzles,140timestamps,720\u00b2; one warmup then3measured; sequential processes, OPENBLAS_NUM_THREADS=1",
+  "samples_ms": [
+    4069.080072993529,
+    3373.9683989988407,
+    3515.1328740030294
+  ],
+  "median_ms": 3515.1328740030294,
+  "maximum_error": 1.7161081670761277e-13,
+  "composite_arrays_sha256": "0fd2efaa3f5022e32160fc62de65d8d185a405f1378f0397149dc9777d6b6b2d"
+}

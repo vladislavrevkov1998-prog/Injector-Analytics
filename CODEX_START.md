@@ -1,5 +1,9 @@
 # Codex — старт автономной реализации Injector Analytics v0.6
 
+> Реализация находится в `codex/v0.6`, версия 0.6.0 на базе `dfac6cd`.
+> См. `docs/V0.6_GUIDE.md` и `docs/V0.6_VALIDATION.md`. Ниже сохранён выполненный
+> стартовый план; новую физику v0.7–v0.8 без команды пользователя не начинать.
+
 > Актуальная задача после принятия документационного PR. Исторический план v0.4–v0.5 в прежней версии файла заменён; историю см. в docs/ROADMAP_v0.4-v0.5.md.
 
 1. Прочитай AGENTS.md, docs/ROADMAP_v0.6-v0.8.md, docs/QUASISTATIONARY_GUIDE.md, docs/REGRESSION_SPEC.md, docs/MEASUREMENT_DATA_CONTRACT.md и фактический код main.
