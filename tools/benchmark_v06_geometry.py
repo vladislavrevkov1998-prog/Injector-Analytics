@@ -52,10 +52,12 @@ for width in (1280,1480,1920):
     layouts.append(dict(width=width,sketch_width=e.sketch.width(),table_width=e.primitive_table.width(),splitter=e.splitter.sizes()))
 w.resize(1480,930);w.geometry_pages.setCurrentIndex(0);w.tabs.setCurrentIndex(3);start=time.perf_counter();w.run_calc();wait(lambda:w.thread is None);static_ms=(time.perf_counter()-start)*1000
 assert len(w.results)==6;assert all(abs(p.rel_balance_error)<1e-12 for p in w.results);assert any(p.wall_bound_kg_s>0 for p in w.results)
-switch=[]
+switch=[];first_visits=[]
 for i in range(30):
     start=time.perf_counter();w.plane_select.setCurrentIndex((w.plane_select.currentIndex()+1)%6);app.processEvents()
-    if i>=6:switch.append((time.perf_counter()-start)*1000)
+    elapsed=(time.perf_counter()-start)*1000
+    if i>=6:switch.append(elapsed)
+    else:first_visits.append(elapsed)
 w.plane_select.setCurrentIndex(3);app.processEvents();w.grab().save(str(images/'variable_matrix.png'));w.open_longitudinal();ld=w.longitudinal_dialog;ld.canvas.draw();ld.grab().save(str(images/'longitudinal.png'));ld.close()
 w.quasi_check.setChecked(True);d=w.quasi_dialog;d.close();start=time.perf_counter();w.run_calc();wait(lambda:w.thread is None);quasi_ms=(time.perf_counter()-start)*1000;assert w.quasi_result is not None
 w.plane_select.setCurrentIndex(3);w.plots.setCurrentIndex(1);app.processEvents();w.smoothcanvas.draw();QTest.qWait(30)
@@ -76,6 +78,6 @@ start=time.perf_counter();w.apply_project_state(state,'Large geometry benchmark'
 assert hashlib.sha256(project.read_bytes()).hexdigest()==digest
 report=dict(method='Linux Qt offscreen; QTest mouse/slider, actual paint events, no disabled timers; warmups excluded; original fixture hash checked',project=project.name,source_gui_sha256=hashlib.sha256((root/'src/fuelfield/chamber_gui.py').read_bytes()).hexdigest(),source_project_sha256=digest,
     geometry_cold_open_ms=round(cold_ms,3),table_edit_ms=stats(timings),drag_frame_ms=stats(frames),drag_release_commit_ms=round(release_ms,3),one_drag_one_undo=True,layouts=layouts,
-    stationary_worker_and_render_ms=round(static_ms,3),six_section_switch_ms=stats(switch),quasi_worker_and_render_ms=round(quasi_ms,3),variable_field_slider_ms=stats(slider),native_changed_pixels=changed,quasi_maximum_relative_balance_error=quasi_error,
+    stationary_worker_and_render_ms=round(static_ms,3),first_six_section_visits_ms=first_visits,six_section_switch_ms=stats(switch),quasi_worker_and_render_ms=round(quasi_ms,3),variable_field_slider_ms=stats(slider),native_changed_pixels=changed,quasi_maximum_relative_balance_error=quasi_error,
     large_objects=dict(nozzles=140,other_objects=1021,new_group_members=1000,one_commit_and_first_render_ms=round(large_ms,3)),navigation_preserves_matrices=True)
 args.out.write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n');print(json.dumps(report,indent=2));w.close();w.deleteLater();app.processEvents()
