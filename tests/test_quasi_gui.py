@@ -29,6 +29,12 @@ class TestQuasiGUI(unittest.TestCase):
  def tearDown(self):
   self.wait(self.w);self.wait(self.w.comparison);self.w.close();self.w.deleteLater();self.app.processEvents()
  def calculate(self):self.w.run_calc();self.wait(self.w);self.assertFalse(self.errors,self.errors);self.assertIsNotNone(self.w.quasi_result)
+ def wait_chart_update(self,charts,previous):
+  # Wait through the real 120 ms debounce and any earlier Qt paint events.
+  # Keep the exact update count assertion; do not bypass the production timer.
+  deadline=time.monotonic()+1.
+  while charts.update_count<=previous and time.monotonic()<deadline:QTest.qWait(5)
+  self.assertEqual(charts.update_count,previous+1)
  def test_checkbox_opens_settings_toggle_preserves_config_and_four_tabs(self):
   self.assertEqual(self.w.tabs.count(),4);before=deepcopy(self.w.cfg.quasi_settings);self.w.open_settings();self.w.quasi_check.setChecked(False);self.assertFalse(self.w.cfg.quasistationary);QTest.mouseClick(self.w.quasi_check,Qt.LeftButton);self.app.processEvents();self.assertTrue(self.w.cfg.quasistationary);self.assertTrue(self.w.quasi_dialog.isVisible());self.assertEqual(self.w.cfg.quasi_settings,before)
   self.w.quasi_check.setChecked(False);self.assertEqual(self.w.cfg.quasi_settings,before);self.w.undo_stack.undo();self.assertTrue(self.w.cfg.quasistationary)
@@ -66,12 +72,7 @@ class TestQuasiGUI(unittest.TestCase):
   with tempfile.TemporaryDirectory() as folder:
    path=Path(folder)/'compare.json';path.write_text(json.dumps(project_to_json(self.w.cfg,self.w.nozzles)));self.w.split_button.setChecked(True);self.w.comparison.load_path(path);self.wait(self.w.comparison);self.assertTrue(self.w.comparison.planes[0].is_composite);np.testing.assert_allclose(self.w.comparison.planes[0].cell_mass_kg_s,self.w.results[0].cell_mass_kg_s);self.w.comparison.view.setCurrentIndex(2);self.app.processEvents();self.assertIn('шаг 0',self.w.comparison.figure.axes[0].get_title())
  def test_pressure_charts_are_right_of_table_live_and_one_per_collector(self):
-  def updated(charts,previous):
-   # The 120 ms debounce runs through the real Qt queue; earlier pending paints
-   # may exceed a fixed 160 ms sleep in the full suite. Wait for its result.
-   deadline=time.monotonic()+1.
-   while charts.update_count<=previous and time.monotonic()<deadline:QTest.qWait(5)
-   self.assertEqual(charts.update_count,previous+1)
+  updated=self.wait_chart_update
   self.w.open_quasi_settings();d=self.w.quasi_dialog;charts=d.pressure_charts
   if not charts.axes:updated(charts,charts.update_count)
   self.assertEqual(len(charts.axes),2);self.assertGreater(charts.mapTo(d,charts.rect().topLeft()).x(),d.table.mapTo(d,d.table.rect().topLeft()).x()+d.table.width())
@@ -79,12 +80,16 @@ class TestQuasiGUI(unittest.TestCase):
   before=deepcopy(self.w.cfg.quasi_settings);count=charts.update_count;d.table.item(2,3).setText('27,5');updated(charts,count);self.assertEqual(charts.lines[0][0].get_ydata()[2],27.5);self.assertEqual(before,self.w.cfg.quasi_settings)
   count=charts.update_count;d.add_channel();updated(charts,count);self.assertEqual(len(charts.axes),3);self.assertTrue(np.isnan(charts.lines[2][0].get_ydata()).all());d.channels.selectRow(2);count=charts.update_count;d.remove_channel();updated(charts,count);self.assertEqual(len(charts.axes),2)
  def test_pressure_charts_paste_once_gaps_and_physical_pressure_units(self):
-  self.w.open_quasi_settings();d=self.w.quasi_dialog;QTest.qWait(160);charts=d.pressure_charts;count=charts.update_count;d.table.setCurrentCell(0,3);d.table.paste_text('\n'.join(str(i+10) for i in range(8)));QTest.qWait(160);self.assertEqual(charts.update_count,count+1);np.testing.assert_array_equal(charts.lines[0][0].get_ydata(),np.arange(8)+10)
-  d.table.item(3,3).setText('unfinished');QTest.qWait(160);self.assertTrue(np.isnan(charts.lines[0][0].get_ydata()[3]));self.assertEqual(charts.lines[0][0].get_ydata()[2],12)
+  self.w.open_quasi_settings();d=self.w.quasi_dialog;charts=d.pressure_charts
+  if not charts.axes:self.wait_chart_update(charts,charts.update_count)
+  count=charts.update_count;d.table.setCurrentCell(0,3);d.table.paste_text('\n'.join(str(i+10) for i in range(8)));self.wait_chart_update(charts,count);np.testing.assert_array_equal(charts.lines[0][0].get_ydata(),np.arange(8)+10)
+  count=charts.update_count;d.table.item(3,3).setText('unfinished');self.wait_chart_update(charts,count);self.assertTrue(np.isnan(charts.lines[0][0].get_ydata()[3]));self.assertEqual(charts.lines[0][0].get_ydata()[2],12)
   from dataclasses import replace
-  mode=replace(self.mode,channels=(PressureChannel('A',(70.,)*8,'bar','p_fuel_abs',(1e5,)*8,'Pa'),));d.set_mode(mode);QTest.qWait(160);self.assertEqual(len(charts.axes),1);np.testing.assert_allclose(charts.lines[0][1].get_ydata(),1);np.testing.assert_allclose(charts.lines[0][2].get_ydata(),69)
+  mode=replace(self.mode,channels=(PressureChannel('A',(70.,)*8,'bar','p_fuel_abs',(1e5,)*8,'Pa'),));count=charts.update_count;d.set_mode(mode);self.wait_chart_update(charts,count);self.assertEqual(len(charts.axes),1);np.testing.assert_allclose(charts.lines[0][1].get_ydata(),1);np.testing.assert_allclose(charts.lines[0][2].get_ydata(),69)
  def test_closed_pressure_dialog_does_not_redraw_hidden_charts(self):
-  self.w.open_quasi_settings();d=self.w.quasi_dialog;QTest.qWait(160);count=d.pressure_charts.update_count;d.table.item(0,3).setText('24');d.close();QTest.qWait(160);self.assertEqual(d.pressure_charts.update_count,count);d.show();QTest.qWait(160);self.assertEqual(d.pressure_charts.lines[0][0].get_ydata()[0],24)
+  self.w.open_quasi_settings();d=self.w.quasi_dialog;charts=d.pressure_charts
+  if not charts.axes:self.wait_chart_update(charts,charts.update_count)
+  count=charts.update_count;d.table.item(0,3).setText('24');d.close();QTest.qWait(160);self.assertEqual(charts.update_count,count);d.show();self.wait_chart_update(charts,count);self.assertEqual(charts.lines[0][0].get_ydata()[0],24)
  def test_native_widget_pixels_change_and_survive_resize_and_tab_roundtrip(self):
   def pixels(canvas):
    image=canvas.grab().toImage().convertToFormat(QImage.Format_RGBA8888);data=image.bits();data.setsize(image.byteCount());return np.frombuffer(data,dtype=np.uint8).reshape(image.height(),image.bytesPerLine()//4,4)[:,:image.width()].copy()
