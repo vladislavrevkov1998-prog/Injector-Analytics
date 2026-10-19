@@ -2,6 +2,7 @@
 from .numeric_input import DecimalSpinBox
 import json
 from pathlib import Path
+from .help_text import read_help
 from dataclasses import replace
 from .coordinates import from_global,plot_x,x_label
 from copy import deepcopy
@@ -77,8 +78,7 @@ class RegressionDialog(QDialog):
     def show_guide(self):
         self.guide_dialog=QDialog(self);self.guide_dialog.setWindowTitle('Как пользоваться идентификацией');self.guide_dialog.resize(820,650)
         layout=QVBoxLayout(self.guide_dialog);browser=QTextBrowser();browser.setOpenExternalLinks(True)
-        path=Path(__file__).resolve().parents[2]/'docs/V0.4.1_IDENTIFICATION_GUIDE.md'
-        browser.setMarkdown(path.read_text(encoding='utf-8'));layout.addWidget(browser)
+        browser.setMarkdown(read_help('V0.4.1_IDENTIFICATION_GUIDE.md'));layout.addWidget(browser)
         close=QDialogButtonBox(QDialogButtonBox.Close);close.rejected.connect(self.guide_dialog.close);layout.addWidget(close);self.guide_dialog.show()
     def open_target(self):
         path,_=QFileDialog.getOpenFileName(self,'Топливный эталон','','Топливные данные (*.json *.csv *.xlsx)')

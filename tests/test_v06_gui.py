@@ -255,8 +255,11 @@ class TestV06GeometryUI(unittest.TestCase):
         before = project_to_json(self.w.cfg, self.w.nozzles)
         self.drag('reference-point', [18., 251.])
         actual = self.record('reference-point')['start']
-        self.assertAlmostEqual(actual[0], 18., delta=.3)
-        self.assertAlmostEqual(actual[1], 251., delta=.3)
+        # Native mouse coordinates are integer pixels; scene precision varies
+        # with the viewport size and the fitted geometry, not the data model.
+        pixel = 1. / self.e.sketch.transform().m11()
+        self.assertAlmostEqual(actual[0], 18., delta=pixel)
+        self.assertAlmostEqual(actual[1], 251., delta=pixel)
         row = self.row(self.e.primitive_table, 'reference-point')
         self.assertAlmostEqual(float(self.e.primitive_table.item(row, 3).text()), actual[0])
         self.assertAlmostEqual(float(self.e.primitive_table.item(row, 4).text()), actual[1])
@@ -292,8 +295,9 @@ class TestV06GeometryUI(unittest.TestCase):
         arc = Primitive(record)
         self.assertAlmostEqual(np.linalg.norm(arc.start - arc.center),
                                np.linalg.norm(arc.end - arc.center), places=10)
-        self.assertEqual(record['start'], original['start'])
-        self.assertEqual(record['end'], original['end'])
+        delta=np.array(record['center'])-original['center']
+        np.testing.assert_allclose(np.array(record['start'])-original['start'],delta,atol=1e-10)
+        np.testing.assert_allclose(np.array(record['end'])-original['end'],delta,atol=1e-10)
         row = self.row(self.e.primitive_table, 'reference-arc')
         self.assertAlmostEqual(float(self.e.primitive_table.item(row, 8).text()),
                                record['center'][1], places=7)

@@ -1,0 +1,87 @@
+{
+  "project": "demo_project_user_field.json",
+  "sha256": "0589843dc9b8b6939cddba22dd0b0d93927da27323b69bb5c131ae01cb59bc4c",
+  "method": "Linux Qt offscreen, real first-click press/move/release and repaint, 20 gestures, 500 measured frames after warmup, 140 nozzles, no timers disabled",
+  "arcs": {
+    "start": {
+      "frame_ms": {
+        "samples": 125,
+        "median_ms": 4.717,
+        "p95_ms": 7.013,
+        "max_ms": 10.454
+      },
+      "release_ms": {
+        "samples": 5,
+        "median_ms": 46.082,
+        "p95_ms": 55.911,
+        "max_ms": 56.401
+      }
+    },
+    "end": {
+      "frame_ms": {
+        "samples": 125,
+        "median_ms": 4.657,
+        "p95_ms": 5.934,
+        "max_ms": 6.947
+      },
+      "release_ms": {
+        "samples": 5,
+        "median_ms": 53.649,
+        "p95_ms": 58.495,
+        "max_ms": 59.079
+      }
+    },
+    "center": {
+      "frame_ms": {
+        "samples": 125,
+        "median_ms": 4.85,
+        "p95_ms": 6.781,
+        "max_ms": 10.38
+      },
+      "release_ms": {
+        "samples": 5,
+        "median_ms": 54.511,
+        "p95_ms": 91.422,
+        "max_ms": 98.191
+      }
+    },
+    "body": {
+      "frame_ms": {
+        "samples": 125,
+        "median_ms": 5.032,
+        "p95_ms": 8.553,
+        "max_ms": 97.921
+      },
+      "release_ms": {
+        "samples": 5,
+        "median_ms": 71.585,
+        "p95_ms": 98.82,
+        "max_ms": 105.332
+      }
+    }
+  },
+  "layouts": [
+    {
+      "font_size": 10,
+      "window_width": 1280,
+      "window_height": 800,
+      "minimum_width": 1268,
+      "split": [
+        565,
+        667
+      ]
+    },
+    {
+      "font_size": 13,
+      "window_width": 1280,
+      "window_height": 800,
+      "minimum_width": 1117,
+      "split": [
+        565,
+        667
+      ]
+    }
+  ],
+  "one_gesture_one_undo": true,
+  "original_project_unchanged": true
+}

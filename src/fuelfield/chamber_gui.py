@@ -4,19 +4,22 @@ The editable draft may temporarily have an open joint; it never enters a
 calculation until validated. Dragging commits once, at mouse release.
 """
 from copy import deepcopy
-import json,math,uuid
+import json,math
 from pathlib import Path
 import numpy as np
 from PyQt5.QtCore import Qt,QPointF,QRectF
-from PyQt5.QtGui import QColor,QPen,QBrush,QPainterPath,QPainter
+from PyQt5.QtGui import QColor,QPen,QBrush,QPainterPath,QPainter,QPainterPathStroker
 from PyQt5.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QSplitter,QTabWidget,
     QTableWidgetItem,QPushButton,QLabel,QComboBox,QCheckBox,QGraphicsView,
     QGraphicsScene,QGraphicsPathItem,QGraphicsEllipseItem,QGraphicsItem,
-    QStyledItemDelegate,QInputDialog,QDoubleSpinBox,QDialog,QTextBrowser,QDialogButtonBox)
+    QStyledItemDelegate,QInputDialog,QDoubleSpinBox,QDialog,QTextBrowser,QDialogButtonBox,QFileDialog)
 from .chamber import Chamber,Primitive,legacy_geometry,apply_groups,sync_groups,group_angles,UNITS,TOL,WALL_BOUND_NOTICE
 from .core import project_to_json
 from .numeric_input import DecimalSpinBox
 from .numeric_delegate import NumericDelegate
+from .chamber_editing import next_id,WALL_PREFIX,move_endpoint,translate,resize_arc,preview
+from .chamber_import_gui import PointImportDialog
+from .help_text import read_help
 
 WALLS={'inner':'Внутренняя','outer':'Наружная','reference':'Опорная','free':'Свободно'}
 KINDS={'point':'Точка','line':'Отрезок','arc':'Дуга'}
@@ -36,39 +39,113 @@ class Choices(QStyledItemDelegate):
     def setModelData(self,editor,model,index):model.setData(index,editor.currentText())
 
 
-class Handle(QGraphicsEllipseItem):
-    def __init__(self,editor,identity,role,point,color,object_handle=False):
-        super().__init__(-4,-4,8,8);self.editor=editor;self.identity=identity;self.role=role;self.object_handle=object_handle
-        self.setBrush(QBrush(QColor(color)));self.setPen(QPen(QColor('#ffffff'),1));self.setZValue(8)
-        self.setFlags(QGraphicsItem.ItemIsMovable|QGraphicsItem.ItemIsSelectable|QGraphicsItem.ItemIgnoresTransformations)
-        self.setPos(QPointF(*point));self.setData(0,identity);self.setToolTip(identity+' · '+role)
+class DragGesture:
     def mousePressEvent(self,event):
+        if event.button()!=Qt.LeftButton:event.ignore();return
         self.before=deepcopy(self.editor.raw);self.before_nozzles=deepcopy(self.editor.working_nozzles)
-        self.editor.select(self.identity,self.object_handle);super().mousePressEvent(event)
+        self.press_position=event.scenePos();self.moved=False
+        self.anchor=self.pos() if self.role!='body' else event.scenePos()
+        self.editor.select(self.identity,self.object_handle);event.accept()
     def mouseMoveEvent(self,event):
-        super().mouseMoveEvent(event)
-        self.editor.preview_drag(self.identity,self.role,self.pos(),self.object_handle)
+        self.moved=True
+        self.editor.preview_drag(self.identity,self.role,self.anchor+event.scenePos()-self.press_position,
+            self.object_handle,self.before,self.before_nozzles,self.anchor)
+        event.accept()
     def mouseReleaseEvent(self,event):
-        super().mouseReleaseEvent(event)
-        self.editor.finish_drag(self.identity,self.role,self.pos(),self.object_handle,self.before,self.before_nozzles)
+        if getattr(self,'moved',False):
+            self.editor.preview_drag(self.identity,self.role,self.anchor+event.scenePos()-self.press_position,
+                self.object_handle,self.before,self.before_nozzles,self.anchor)
+            self.editor.finish_drag(self.identity,self.role,self.pos(),self.object_handle,self.before,self.before_nozzles)
+        event.accept()
+
+
+class Handle(DragGesture,QGraphicsEllipseItem):
+    def __init__(self,editor,identity,role,point,color,object_handle=False):
+        super().__init__(-5,-5,10,10);self.editor=editor;self.identity=identity;self.role=role;self.object_handle=object_handle
+        self.setBrush(QBrush(QColor(color)));self.setPen(QPen(QColor('#ffffff'),1));self.setZValue(8)
+        self.setFlags(QGraphicsItem.ItemIsSelectable|QGraphicsItem.ItemIgnoresTransformations)
+        self.setPos(QPointF(*point));self.setData(0,identity);self.setToolTip(identity+' · '+{'start':'начало: переместить точку','end':'конец: переместить точку','center':'центр: перенести дугу целиком','position':'положение объекта'}.get(role,role))
+        self.setCursor(Qt.SizeAllCursor)
+    def boundingRect(self):return QRectF(-9,-9,18,18)
+    def shape(self):
+        path=QPainterPath();path.addEllipse(self.boundingRect());return path
+    def paint(self,painter,option,widget=None):
+        color=self.brush().color();painter.setRenderHint(QPainter.Antialiasing)
+        if self.isSelected():
+            glow=QColor(color);glow.setAlpha(45);painter.setPen(Qt.NoPen);painter.setBrush(glow);painter.drawEllipse(QRectF(-9,-9,18,18))
+        painter.setPen(QPen(color,1.7));painter.setBrush(QColor('white'))
+        if self.role=='center':
+            painter.drawRect(QRectF(-4,-4,8,8));painter.drawLine(QPointF(-7,0),QPointF(7,0));painter.drawLine(QPointF(0,-7),QPointF(0,7))
+        else:
+            if self.object_handle:painter.setBrush(color)
+            painter.drawEllipse(QRectF(-4,-4,8,8))
+
+
+class PrimitivePath(DragGesture,QGraphicsPathItem):
+    def __init__(self,editor,identity,path):
+        super().__init__(path);self.editor=editor;self.identity=identity;self.role='body';self.object_handle=False
+        self.setCursor(Qt.SizeAllCursor);self.setToolTip(identity+' · перетащите линию для переноса целиком')
+    def shape(self):
+        stroker=QPainterPathStroker();stroker.setWidth(12/max(self.editor.sketch.transform().m11(),1e-9))
+        return stroker.createStroke(self.path())
+    def boundingRect(self):return self.shape().boundingRect()
 
 
 class Sketch(QGraphicsView):
     def __init__(self,editor):
         super().__init__(QGraphicsScene(editor),editor);self.editor=editor;self.setRenderHint(QPainter.Antialiasing)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse);self.setMinimumSize(220,220)
-        self._pan=None;self.setBackgroundBrush(QColor('#fafbfe'))
-    def wheelEvent(self,event):self.scale(1.18 if event.angleDelta().y()>0 else 1/1.18,1.18 if event.angleDelta().y()>0 else 1/1.18);event.accept()
+        self._pan=None;self.pointer=None;self.setMouseTracking(True);self.setBackgroundBrush(QColor('#fafbfe'))
+        self.setStyleSheet('QGraphicsView { border:1px solid #d9dfeb; border-radius:4px; }')
+    def wheelEvent(self,event):
+        factor=1.18 if event.angleDelta().y()>0 else 1/1.18
+        if 1e-4<self.transform().m11()*factor<1e6:self.scale(factor,factor)
+        for item in self.editor.paths.values():item.prepareGeometryChange()
+        event.accept()
+    def grid_step(self):
+        target=65/max(self.transform().m11(),1e-9);power=10**math.floor(math.log10(target))
+        return next(v*power for v in (1,2,5,10) if v*power>=target)
+    def drawBackground(self,painter,rect):
+        super().drawBackground(painter,rect)
+        if not self.editor.grid.isChecked():return
+        step=self.grid_step();pen=QPen(QColor('#e3e8f1'),0);painter.setPen(pen)
+        for axis in (0,1):
+            low,high=(rect.left(),rect.right()) if axis==0 else (rect.top(),rect.bottom())
+            for i in range(math.ceil(low/step),math.floor(high/step)+1):
+                v=i*step
+                painter.drawLine(QPointF(v,rect.top()),QPointF(v,rect.bottom())) if axis==0 else painter.drawLine(QPointF(rect.left(),v),QPointF(rect.right(),v))
     def drawForeground(self,painter,rect):
-        painter.save();painter.resetTransform();painter.setPen(QColor('#334155'))
-        painter.drawText(QPointF(8,18),'X/Y [мм], θ от +X против ЧС' if self.editor.angular.isChecked() else 'z=x → [мм]     R ↑ [мм]');painter.restore()
+        painter.save();painter.resetTransform();painter.setPen(QColor('#64748b'));width=self.viewport().width();height=self.viewport().height()
+        if self.editor.grid.isChecked():
+            step=self.grid_step();visible=self.mapToScene(self.viewport().rect()).boundingRect()
+            for i in range(math.ceil(visible.left()/step),math.floor(visible.right()/step)+1):
+                x=self.mapFromScene(QPointF(i*step,0)).x()
+                if 55<x<width-35:painter.drawText(QPointF(x+3,height-28),format(i*step,'.6g'))
+            for i in range(math.ceil(visible.top()/step),math.floor(visible.bottom()/step)+1):
+                y=self.mapFromScene(QPointF(0,i*step)).y()
+                if 45<y<height-45:painter.drawText(QPointF(6,y-3),format(-i*step,'.6g'))
+        painter.fillRect(QRectF(0,0,width,26),QColor(250,251,254,235));painter.setPen(QColor('#334155'))
+        painter.drawText(QPointF(9,18),'X/Y [мм] · θ против ЧС' if self.editor.angular.isChecked() else 'z → [мм]     R ↑ [мм]')
+        if self.editor.selected:
+            text=self.editor.selected;painter.drawText(QPointF(max(170,width-painter.fontMetrics().horizontalAdvance(text)-12),18),text)
+        if self.pointer is not None:
+            p=self.pointer;painter.fillRect(QRectF(0,height-23,width,23),QColor(250,251,254,235))
+            painter.drawText(QPointF(9,height-7),f'{"X" if self.editor.angular.isChecked() else "z"} = {p.x():.3f}    {"Y" if self.editor.angular.isChecked() else "R"} = {-p.y():.3f} мм')
+        if self.editor._first is not None and self.pointer is not None:
+            a=self.editor._first;painter.setPen(QPen(QColor('#8a73b3'),1,Qt.DashLine));painter.drawLine(self.mapFromScene(QPointF(a[0],-a[1])),self.mapFromScene(self.pointer))
+        painter.restore()
     def mousePressEvent(self,event):
         if event.button()==Qt.MiddleButton:self._pan=event.pos();self.setCursor(Qt.ClosedHandCursor);event.accept();return
         super().mousePressEvent(event)
     def mouseMoveEvent(self,event):
+        self.pointer=self.mapToScene(event.pos());self.viewport().update()
         if self._pan is not None:
             delta=event.pos()-self._pan;self._pan=event.pos();self.horizontalScrollBar().setValue(self.horizontalScrollBar().value()-delta.x());self.verticalScrollBar().setValue(self.verticalScrollBar().value()-delta.y());event.accept();return
         super().mouseMoveEvent(event)
+    def leaveEvent(self,event):self.pointer=None;self.viewport().update();super().leaveEvent(event)
+    def keyPressEvent(self,event):
+        if event.key()==Qt.Key_Escape:self.editor._first=None;self.viewport().update();self.editor.message('Построение отменено.');event.accept();return
+        super().keyPressEvent(event)
     def mouseReleaseEvent(self,event):
         if event.button()==Qt.MiddleButton:self._pan=None;self.unsetCursor();event.accept();return
         super().mouseReleaseEvent(event)
@@ -79,28 +156,42 @@ class Sketch(QGraphicsView):
 
 class GeometryEditor(QWidget):
     def __init__(self,owner,table_class):
-        super().__init__(owner);self.owner=owner;self.loading=True;self.selected=None;self._pending=True;self.paths={};self.handles=[];self._first=None;self.batch_mode=False;self.pending_batch={}
-        layout=QVBoxLayout(self);top=QHBoxLayout();self.enabled=QCheckBox('Переменные профили ЖТ');top.addWidget(self.enabled)
+        super().__init__(owner);self.owner=owner;self.loading=True;self.selected=None;self._pending=True;self.paths={};self.handles=[];self._first=None;self.batch_mode=False;self.pending_batch={};self._draft_invalid=False
+        layout=QVBoxLayout(self);top=QHBoxLayout();self.enabled=QCheckBox('Профили ЖТ');self.enabled.setToolTip('Включить переменные профили стенок в расчёт');top.addWidget(self.enabled)
         self.base=self.spin(0);self.outlet=self.spin(60);self.step=self.spin(1,.0001);self.error=self.spin(.01,.000001)
-        for label,widget in [('База z=x, мм:',self.base),('Выход, мм:',self.outlet),('Внутр. шаг, мм:',self.step),('Хорда ≤, мм:',self.error)]:top.addWidget(QLabel(label));top.addWidget(widget)
+        for label,widget in [('База z, мм:',self.base),('Выход, мм:',self.outlet),('Шаг, мм:',self.step),('Хорда ≤, мм:',self.error)]:top.addWidget(QLabel(label));top.addWidget(widget)
+        top.addStretch()
+        self.step.setToolTip('Внутренний шаг геометрических станций');self.error.setToolTip('Максимальная стрела прогиба отрезков при отображении точной дуги')
         layout.addLayout(top)
         note=QLabel('z=x [мм]; θ — от физической +X против ЧС. Изменения сразу применяются после проверки. Несогласованный черновик не участвует в расчёте.');note.setWordWrap(True);layout.addWidget(note)
         controls=QHBoxLayout();self.angular=QCheckBox('Вид по окружности');controls.addWidget(self.angular)
+        self.grid=QCheckBox('Сетка');self.grid.setChecked(True);self.grid.toggled.connect(lambda:self.sketch.viewport().update());controls.addWidget(self.grid)
         fit=QPushButton('Вписать');fit.clicked.connect(self.fit);controls.addWidget(fit)
-        self.tool=QComboBox();self.tool.addItems(['Выбор','Точка','Отрезок (2 точки)','Дуга (2 точки)','Отверстие','Вставка']);controls.addWidget(QLabel('Двойной ЛКМ:'));controls.addWidget(self.tool);controls.addStretch()
+        creation=QHBoxLayout();self.tool=QComboBox();self.tool.addItems(['Выбор','Точка','Отрезок (2 точки)','Дуга (2 точки)','Отверстие','Вставка']);creation.addWidget(QLabel('Двойной ЛКМ:'));creation.addWidget(self.tool)
+        self.new_wall=QComboBox()
+        for key in ('reference','inner','outer'):self.new_wall.addItem(WALLS[key],key)
+        creation.addWidget(QLabel('Стенка новых примитивов:'));creation.addWidget(self.new_wall);creation.addStretch();layout.addLayout(creation);controls.addStretch()
+        reset=QPushButton('Сбросить черновик');reset.clicked.connect(self.reset_draft);controls.addWidget(reset)
         guide=QPushButton('Инструкция');guide.clicked.connect(self.show_guide);controls.addWidget(guide)
         undo=QPushButton('↶');redo=QPushButton('↷');undo.clicked.connect(owner.undo_stack.undo);redo.clicked.connect(owner.undo_stack.redo);controls.addWidget(undo);controls.addWidget(redo);layout.addLayout(controls)
+        for button,tip in ((undo,'Отменить последнее применённое изменение (Ctrl+Z)'),(redo,'Повторить изменение (Ctrl+Y)'),(fit,'Вписать геометрию в окно'),(reset,'Вернуть последний применённый вариант, отбросив некорректный черновик')):button.setToolTip(tip)
+        undo.setFixedWidth(30);redo.setFixedWidth(30)
+        self.tool.currentIndexChanged.connect(self.cancel_construction)
+        hint=QLabel('Точка — изменить конец · квадрат центра / линия — перенос целиком · колесо — масштаб · средняя кнопка — панорама · Esc — отменить построение')
+        hint.setWordWrap(True);hint.setStyleSheet('color:#596780; font-size:11px;');layout.addWidget(hint)
         self.splitter=QSplitter(Qt.Horizontal);self.sketch=Sketch(self);self.splitter.addWidget(self.sketch);self.pages=QTabWidget();self.splitter.addWidget(self.pages);self.splitter.setSizes([550,650]);layout.addWidget(self.splitter,1)
         self.primitive_table=table_class(0,len(PRIMITIVE_COLUMNS));self.object_table=table_class(0,len(OBJECT_COLUMNS));self.group_table=table_class(0,len(GROUP_COLUMNS));self.section_table=table_class(0,3)
         self.tables=[self.primitive_table,self.object_table,self.group_table,self.section_table]
-        for tab,title,headers in zip(self.tables,['Примитивы','Объекты','Угловые группы','Сечения'],[PRIMITIVE_COLUMNS,OBJECT_COLUMNS,GROUP_COLUMNS,['ID','z=x, мм','Выход ЖТ']]):
+        for tab,title,headers in zip(self.tables,['Примитивы','Объекты','Угловые группы','Расчётные сечения'],[PRIMITIVE_COLUMNS,OBJECT_COLUMNS,GROUP_COLUMNS,['ID','z=x, мм','Выход ЖТ (авто)']]):
             panel=QWidget();box=QVBoxLayout(panel);tab.setHorizontalHeaderLabels(headers);tab.setSelectionBehavior(tab.SelectItems);tab.setMinimumWidth(300);box.addWidget(tab);buttons=QHBoxLayout();box.addLayout(buttons);self.pages.addTab(panel,title)
             if tab is self.primitive_table:
                 for title,callback in [('Точка',lambda:self.add_primitive('point')),('Отрезок',lambda:self.add_primitive('line')),('Дуга',lambda:self.add_primitive('arc')),('Разбить',self.split_primitive)]:self.button(buttons,title,callback)
+                self.import_points_button=self.button(buttons,'Точки XLSX…',self.import_points)
             elif tab is self.object_table:
                 for kind,title in [('hole','Отверстие'),('insert','Вставка'),('custom','Другой тип')]:self.button(buttons,title,lambda checked=False,k=kind:self.add_object(k))
             elif tab is self.group_table:self.button(buttons,'Добавить группу',self.add_group)
             else:
+                note=QLabel('Координаты срезов для расчёта поля. Правка сечения не меняет стенки. Выход определяется концом профилей.');note.setWordWrap(True);box.insertWidget(0,note)
                 self.button(buttons,'Добавить сечение',self.add_section);self.button(buttons,'↑',lambda:self.move_section(-1));self.button(buttons,'↓',lambda:self.move_section(1))
             self.button(buttons,'Удалить',lambda checked=False,t=tab:self.delete(t));buttons.addStretch()
             tab.itemChanged.connect(lambda item,t=tab:self.table_edited(t,item))
@@ -113,7 +204,7 @@ class GeometryEditor(QWidget):
         for column in range(3,10):self.primitive_table.setItemDelegateForColumn(column,numeric)
         for column in (4,5,6):self.object_table.setItemDelegateForColumn(column,numeric)
         self.section_table.setItemDelegateForColumn(1,numeric)
-        self.status=QLabel();self.status.setWordWrap(True);layout.addWidget(self.status)
+        self.status=QLabel();self.status.setWordWrap(True);self.status.setFixedHeight(44);layout.addWidget(self.status)
         self.enabled.toggled.connect(self.config_edited)
         for widget in (self.base,self.outlet,self.step,self.error):widget.editingFinished.connect(self.config_edited)
         self.angular.toggled.connect(lambda:self.draw_scene(True));self.sketch.scene().selectionChanged.connect(self.scene_selected)
@@ -125,32 +216,36 @@ class GeometryEditor(QWidget):
     @staticmethod
     def button(layout,title,callback):
         button=QPushButton(title);button.clicked.connect(callback);layout.addWidget(button);return button
-    @staticmethod
-    def uid(prefix):return prefix+'-'+uuid.uuid4().hex[:8]
+    def uid(self,prefix):return next_id(self.raw,prefix)
+    def cancel_construction(self):self._first=None;self.sketch.viewport().update()
+    def reset_draft(self):self.cancel_construction();self.load(self.owner.cfg,self.owner.nozzles,force=True)
     def load(self,cfg,nozzles,force=False):
         candidate=cfg.geometry or legacy_geometry(cfg,nozzles)
+        if not cfg.geometry:
+            # Only the newly generated starter sketch receives new IDs.
+            # Saved geometry keeps every existing identity and external link.
+            for p in candidate['primitives']:p['id']=WALL_PREFIX[p['wall']]+'1'
+            for index,section in enumerate(candidate['sections'],1):section['id']='S'+str(index)
         if not force and hasattr(self,'base_nozzles') and nozzles==self.base_nozzles and candidate==self.loaded_raw and cfg.nozzle_presets==self.loaded_presets:
             self.cfg=cfg;return
         incremental=False
-        if not force and hasattr(self,'loaded_raw') and self.isVisible() and not self._pending and nozzles==self.base_nozzles and cfg.nozzle_presets==self.loaded_presets:
+        if not force and not self._draft_invalid and hasattr(self,'loaded_raw') and self.isVisible() and not self._pending and nozzles==self.base_nozzles and cfg.nozzle_presets==self.loaded_presets:
             old=self.loaded_raw
             incremental=({k:v for k,v in old.items() if k!='primitives'}=={k:v for k,v in candidate.items() if k!='primitives'} and
                 [(p['id'],p['kind']) for p in old['primitives']]==[(p['id'],p['kind']) for p in candidate['primitives']])
         if incremental:
             old=self.loaded_raw;self.cfg=cfg;self.loaded_raw=deepcopy(candidate);self.raw=deepcopy(candidate)
             self.refresh_primitives(old);return
-        self.cfg=cfg;self.loaded_raw=deepcopy(candidate);self.loaded_presets=deepcopy(cfg.nozzle_presets);self.working_nozzles=deepcopy(nozzles);self.base_nozzles=deepcopy(nozzles);self.raw=deepcopy(candidate);self._pending=True
+        self.cfg=cfg;self.loaded_raw=deepcopy(candidate);self.loaded_presets=deepcopy(cfg.nozzle_presets);self.working_nozzles=deepcopy(nozzles);self.base_nozzles=deepcopy(nozzles);self.raw=deepcopy(candidate);self._pending=True;self._draft_invalid=False
         self.message('Геометрия загружена. Несогласованный черновик не участвует в расчёте.')
         if self.isVisible():self.rebuild()
     def showEvent(self,event):
         super().showEvent(event)
         if self._pending and hasattr(self,'raw'):self.rebuild()
-    def message(self,text,error=False):self.status.setText(text);self.status.setStyleSheet('color:#a32138' if error else 'color:#52617c')
+    def message(self,text,error=False):self.status.setText(text);self.status.setToolTip(text);self.status.setStyleSheet('color:#a32138' if error else 'color:#52617c')
     def show_guide(self):
         self.guide_dialog=QDialog(self);self.guide_dialog.setWindowTitle('Геометрия ЖТ v0.6 — инструкция');self.guide_dialog.resize(900,750)
-        layout=QVBoxLayout(self.guide_dialog);browser=QTextBrowser();path=Path(__file__).resolve().parents[2]/'docs/V0.6_GUIDE.md'
-        try:browser.setMarkdown(path.read_text(encoding='utf-8'))
-        except OSError:browser.setPlainText('Таблица и Sketcher редактируют одну геометрию. Валидные изменения входят в Undo/Redo; неподтверждённый черновик не участвует в расчёте. z=x [мм].')
+        layout=QVBoxLayout(self.guide_dialog);browser=QTextBrowser();browser.setMarkdown(read_help('V0.6_GUIDE.md'))
         layout.addWidget(browser);buttons=QDialogButtonBox(QDialogButtonBox.Close);buttons.rejected.connect(self.guide_dialog.close);layout.addWidget(buttons);self.guide_dialog.show()
     def rebuild(self):
         self.loading=True
@@ -162,7 +257,7 @@ class GeometryEditor(QWidget):
         item=QTableWidgetItem(format(value,'.12g') if isinstance(value,(int,float)) and not isinstance(value,bool) else str(value))
         if isinstance(value,(int,float)) and not isinstance(value,bool):item.setData(Qt.UserRole,value)
         if check is not None:item.setText('');item.setFlags(Qt.ItemIsEnabled|Qt.ItemIsSelectable|Qt.ItemIsUserCheckable);item.setCheckState(Qt.Checked if check else Qt.Unchecked)
-        elif not editable:item.setFlags(item.flags()&~Qt.ItemIsEditable);item.setBackground(QColor('#eee8f6'))
+        elif not editable:item.setFlags(item.flags()&~(Qt.ItemIsEditable|Qt.ItemIsUserCheckable));item.setBackground(QColor('#eee8f6'))
         table.setItem(row,column,item)
     def fill_primitive_row(self,row,p):
         start=p['start'];end=p.get('end',['','']);center=p.get('center',['','']);kind=p['kind']
@@ -202,7 +297,7 @@ class GeometryEditor(QWidget):
                     if h.object_handle and h.identity==obj['id']:h.setPos(QPointF(*point))
             rect=self.sketch.scene().itemsBoundingRect();current=self.sketch.sceneRect()
             if not current.contains(rect):self.sketch.scene().setSceneRect(current.united(rect).adjusted(-3,-3,3,3))
-            self.sketch.viewport().update()
+            self.highlight_selection()
         finally:self.primitive_table.blockSignals(False);self.object_table.blockSignals(False);self.loading=False
     def fill_tables(self):
         for table in self.tables:table.blockSignals(True)
@@ -229,7 +324,7 @@ class GeometryEditor(QWidget):
                 for col,v in enumerate(values):self.item(table,row,col,v,col!=0 and not(col==6 and g['mode']=='uniform'))
             table=self.section_table;table.setRowCount(len(self.raw['sections']))
             for row,s in enumerate(self.raw['sections']):
-                self.item(table,row,0,s['id'],False);self.item(table,row,1,s['z_mm']);self.item(table,row,2,'',check=s.get('is_outlet',False))
+                self.item(table,row,0,s['id'],False);self.item(table,row,1,s['z_mm']);self.item(table,row,2,'Да' if s.get('is_outlet',False) else '',False)
             for table in self.tables:table.resizeColumnsToContents()
         finally:
             for table in self.tables:table.blockSignals(False)
@@ -242,16 +337,17 @@ class GeometryEditor(QWidget):
         return result
     @staticmethod
     def key(text,choices):return next((key for key,label in choices.items() if text in (key,label)),text)
-    def table_edited(self,table,item):
+    def table_edited(self,table,item,columns=None):
         if self.loading:return
-        if table.in_batch:self.pending_batch.setdefault(table,{})[item.row()]=item.column();return
+        if table.in_batch:self.pending_batch.setdefault(table,{}).setdefault(item.row(),set()).add(item.column());return
         row=item.row();col=item.column()
+        columns=columns or {col}
         try:
             if table is self.primitive_table:
                 p=self.raw['primitives'][row];old=deepcopy(p);p['wall']=self.key(self.cell(table,row,1),WALLS);p['kind']=self.key(self.cell(table,row,2),KINDS)
                 unit=self.cell(table,row,11)
                 if unit not in UNITS:raise ValueError('Единицы mm/cm/m')
-                if col==11:
+                if columns=={11}:
                     factor=UNITS[p.get('unit','mm')]/UNITS[unit]
                     for key in ('start','end','center'):
                         if key in p:p[key]=[v*factor for v in p[key]]
@@ -260,12 +356,20 @@ class GeometryEditor(QWidget):
                     p['start']=[self.value(table,row,3),self.value(table,row,4)]
                     if p['kind']!='point':p['end']=[self.value(table,row,5),self.value(table,row,6)] if old['kind']!='point' else [p['start'][0]+10,p['start'][1]]
                     if p['kind']=='arc':
-                        if old['kind']!='arc':p.update(self.arc_data(p['start'],p['end']));p.pop('radius',None)
+                        if old['kind']!='arc':
+                            if {7,8}.issubset(columns):
+                                p['center']=[self.value(table,row,7),self.value(table,row,8)];p['clockwise']=self.cell(table,row,10).lower() in ('1','true','да')
+                                if 9 in columns and self.cell(table,row,9):p['radius']=self.value(table,row,9)
+                            else:p.update(self.arc_data(p['start'],p['end']));p.pop('radius',None)
                         else:
                             p['center']=[self.value(table,row,7),self.value(table,row,8)];p['radius']=self.value(table,row,9);p['clockwise']=table.item(row,10).checkState()==Qt.Checked
-                            if col in (3,4,5,6,7,8):p.pop('radius',None)
-                    if col in (3,4,5,6):
-                        role='start' if col<5 else 'end';self.join_ends(old[role],p[role],p['wall'],p['id'],UNITS[p.get('unit','mm')])
+                            if columns.issubset({3,4}) or columns.issubset({5,6}):
+                                role='start' if col<5 else 'end';p.update(move_endpoint(old,role,p[role]))
+                            elif columns.issubset({7,8}):p.update(translate(old,np.array(p['center'])-old['center']))
+                            elif columns=={9}:p.update(resize_arc(old,p['radius']))
+                            elif columns.intersection({3,4,5,6,7,8}) and 9 not in columns:p.pop('radius',None)
+                    for role in ('start','end'):
+                        if role in old and role in p and old[role]!=p[role]:self.join_ends(np.array(old[role])*UNITS[old.get('unit','mm')],np.array(p[role])*UNITS[unit],p['wall'],p['id'])
                 p['unit']=unit
             elif table is self.object_table:
                 obj=self.raw['objects'][row];obj['type']=self.cell(table,row,1);obj['wall']=self.key(self.cell(table,row,2),WALLS);obj['primitive_id']=self.cell(table,row,3)
@@ -278,25 +382,20 @@ class GeometryEditor(QWidget):
                 g=self.raw['groups'][row];g.update(members=[s.strip() for s in self.cell(table,row,1).split(';') if s.strip()],mode=self.key(self.cell(table,row,2),MODES),phase_deg=self.value(table,row,3),direction=self.value(table,row,4),row_offset_deg=self.value(table,row,5))
                 if g['mode']!='uniform':g['steps_deg' if g['mode']=='steps' else 'angles_deg']=[float(s.strip().replace(',','.')) for s in self.cell(table,row,6).split(';') if s.strip()]
             else:
-                s=self.raw['sections'][row];s['z_mm']=self.value(table,row,1)
-                if col==2:
-                    if table.item(row,2).checkState()==Qt.Checked:
-                        for other in self.raw['sections']:other['is_outlet']=other is s
-                        self.set_outlet(s['z_mm'])
-                    else:s['is_outlet']=False
-                elif s.get('is_outlet',False):self.set_outlet(s['z_mm'])
-            if not self.batch_mode:self.commit('Геометрия: правка таблицы',groups=table is self.group_table)
+                self.raw['sections'][row]['z_mm']=self.value(table,row,1)
+                self.ensure_outlet_section()
+            if not self.batch_mode:self.commit('Геометрия: правка таблицы',groups=table is self.group_table,sections=table is self.section_table)
         except (ValueError,TypeError,KeyError,StopIteration) as exc:
-            self.batch_error=str(exc);self.message('Черновик не применён: '+str(exc),True)
+            self.batch_error=str(exc);self._draft_invalid=True;self.message('Черновик не применён: '+str(exc),True)
             if not self.batch_mode:self.draw_scene()
     def batch_finished(self,table):
         pending=self.pending_batch.pop(table,{})
         if not pending:return
         self.batch_mode=True;self.batch_error=''
         try:
-            for row,col in pending.items():self.table_edited(table,table.item(row,col))
+            for row,columns in pending.items():self.table_edited(table,table.item(row,max(columns)),columns)
         finally:self.batch_mode=False
-        if not self.batch_error:self.commit('Геометрия: вставка ячеек',groups=table is self.group_table)
+        if not self.batch_error:self.commit('Геометрия: вставка ячеек',groups=table is self.group_table,sections=table is self.section_table)
         else:self.draw_scene()
     def update_nozzle(self,obj,z,r,theta):
         from .v02 import effective_nozzle
@@ -312,7 +411,11 @@ class GeometryEditor(QWidget):
             if p['id']==except_id or p['wall']!=wall:continue
             scale=UNITS[p.get('unit','mm')]
             for role in ('start','end'):
-                if role in p and np.allclose(np.array(p[role])*scale,a,atol=TOL,rtol=0):p[role]=(b/scale).tolist();p.pop('radius',None)
+                if role in p and np.allclose(np.array(p[role])*scale,a,atol=TOL,rtol=0):p.update(move_endpoint(p,role,b/scale))
+    def ensure_outlet_section(self):
+        for section in self.raw['sections']:section['is_outlet']=abs(section['z_mm']-self.raw['outlet_z_mm'])<=TOL
+        if not any(s['is_outlet'] for s in self.raw['sections']):
+            self.raw['sections'].append(dict(id=self.uid('S'),z_mm=self.raw['outlet_z_mm'],is_outlet=True))
     def set_outlet(self,z):
         old=self.raw['outlet_z_mm'];self.raw['outlet_z_mm']=z
         for p in self.raw['primitives']:
@@ -329,7 +432,7 @@ class GeometryEditor(QWidget):
             for role in ('start','end'):
                 if role in p and abs(p[role][0]*factor-old)<=TOL:p[role][0]=self.base.value()/factor;p.pop('radius',None)
         self.commit('Параметры геометрии')
-    def commit(self,label,groups=False):
+    def commit(self,label,groups=False,sections=False):
         try:
             model=Chamber(self.raw)
             if groups:self.raw,self.working_nozzles=apply_groups(self.raw,self.working_nozzles)
@@ -341,18 +444,33 @@ class GeometryEditor(QWidget):
                         if key=='z_tip_mm':nozzle.geometry_overrides=sorted(set(nozzle.geometry_overrides)|{'z_tip_mm'})
             if model.enabled and any(o['type']=='nozzle' and o.get('wall','free')!='free' for o in model.objects):current=model.resolve_nozzle_anchors(current,self.owner.cfg)
             state=project_to_json(self.owner.cfg,current);state['settings']['geometry']=deepcopy(self.raw)
-            if model.enabled:state['settings']['z_mm']=[s['z_mm'] for s in self.raw['sections']]
+            if model.enabled or sections:state['settings']['z_mm']=[s['z_mm'] for s in self.raw['sections']]
             # Individual/group geometry edits deliberately preserve all other
             # positions; the old global Auto-follow must not overwrite them.
             if self.raw['groups']:state['settings']['placement_mode']='manual'
             self.owner.apply_geometry_state(state,label)
+            if self._draft_invalid:self.load(self.owner.cfg,self.owner.nozzles,force=True)
             self.message(('Применено. '+WALL_BOUND_NOTICE) if model.variable and model.enabled else 'Применено. Сектора 1–36 и расходные характеристики сохранены.')
             return True
         except (ValueError,TypeError,KeyError,StopIteration) as exc:
-            self.message('Черновик не применён: '+str(exc),True);self.fill_tables();self.draw_scene();return False
+            self._draft_invalid=True;self.message('Черновик не применён: '+str(exc),True);self.fill_tables();self.draw_scene();return False
+    def import_points(self):
+        path,_=QFileDialog.getOpenFileName(self,'Точки геометрии','','Excel (*.xlsx)')
+        if not path:return
+        try:
+            dialog=PointImportDialog(path,self);self.points_import_dialog=dialog
+            if dialog.exec_()!=QDialog.Accepted:return
+            candidate=deepcopy(self.raw);wall=dialog.wall.currentData();first=None
+            for row,z,r in dialog.points:
+                identity=next_id(candidate,WALL_PREFIX[wall]);first=first or identity
+                candidate['primitives'].append(dict(id=identity,wall=wall,kind='point',start=[z,r],unit='mm',provenance=dict(source_kind='imported',file=Path(path).name,sheet=dialog.sheet.currentText(),excel_row=row,source_unit=dialog.unit.currentText())))
+            Chamber(candidate)
+            self.raw=candidate;self.selected=first
+            if self.commit('Импорт точек XLSX'):self.fit()
+        except (ValueError,OSError) as exc:self.message('Импорт не выполнен: '+str(exc),True)
     def add_primitive(self,kind,points=None):
         radius=(self.cfg.r_in_mm+self.cfg.r_out_mm)/2;start,end=points if points is not None else ([self.raw['base_z_mm'],radius],[min(self.raw['outlet_z_mm'],self.raw['base_z_mm']+10),radius+5])
-        p=dict(id=self.uid('p'),wall='reference',kind=kind,start=list(start),unit='mm')
+        wall=self.new_wall.currentData();p=dict(id=self.uid(WALL_PREFIX[wall]),wall=wall,kind=kind,start=list(start),unit='mm')
         if kind!='point':p['end']=list(end)
         if kind=='arc':p.update(self.arc_data(start,end))
         self.raw['primitives'].append(p);self.selected=p['id'];self.commit('Добавить '+KINDS[kind])
@@ -370,31 +488,38 @@ class GeometryEditor(QWidget):
     def split_primitive(self):
         row=self.primitive_table.currentRow()
         if row<0:return
-        p=self.raw['primitives'][row];primitive=Primitive(p)
-        if primitive.kind=='point':return
-        z=(primitive.lo+primitive.hi)/2;middle=[z/UNITS[primitive.unit],float(primitive.at(z))/UNITS[primitive.unit]]
-        first,second=deepcopy(p),deepcopy(p);first['end']=middle;second['start']=middle;second['id']=self.uid('p')
-        self.raw['primitives'][row:row+1]=[first,second];self.commit('Разбить примитив')
+        try:
+            p=self.raw['primitives'][row];primitive=Primitive(p)
+            if primitive.kind=='point':return
+            model=Chamber(self.raw);z=(primitive.lo+primitive.hi)/2;middle=[z/UNITS[primitive.unit],float(primitive.at(z))/UNITS[primitive.unit]]
+            first,second=deepcopy(p),deepcopy(p);first['end']=middle;second['start']=middle;second['id']=self.uid(WALL_PREFIX[p['wall']])
+            first_geometry=Primitive(first);second_geometry=Primitive(second)
+            for obj in self.raw['objects']:
+                if obj.get('primitive_id')!=p['id']:continue
+                oz=model.object_position(obj,self.working_nozzles,self.cfg)[0]
+                if not first_geometry.lo-TOL<=oz<=first_geometry.hi+TOL and second_geometry.lo-TOL<=oz<=second_geometry.hi+TOL:obj['primitive_id']=second['id']
+            self.raw['primitives'][row:row+1]=[first,second];self.commit('Разбить примитив')
+        except ValueError as exc:self.message('Разбиение не выполнено: '+str(exc),True)
     def add_object(self,kind,point=None):
         if kind=='custom':
             kind,ok=QInputDialog.getText(self,'Пользовательский тип','Название типа:')
             if not ok or not kind.strip():return
             kind=kind.strip();self.raw.setdefault('types',{}).setdefault(kind,{'label':kind})
         z,r=point if point else ((self.raw['base_z_mm']+self.raw['outlet_z_mm'])/2,(self.cfg.r_in_mm+self.cfg.r_out_mm)/2)
-        obj=dict(id=self.uid(kind),type=kind,wall='free',z_mm=z,radius_mm=r,theta_deg=0.,parameters=dict(inclination_deg=None,azimuth_deg=None,flow_kg_s=None,penetration_mm=None),units=dict(length='mm',angle='deg',flow='kg/s'),provenance={})
+        obj=dict(id=self.uid(kind[0].upper()),type=kind,wall='free',z_mm=z,radius_mm=r,theta_deg=0.,parameters=dict(inclination_deg=None,azimuth_deg=None,flow_kg_s=None,penetration_mm=None),units=dict(length='mm',angle='deg',flow='kg/s'),provenance={})
         self.raw['objects'].append(obj);self.selected=obj['id'];self.pages.setCurrentIndex(1);self.commit('Добавить объект')
     def add_group(self):
         used={m for g in self.raw['groups'] for m in g['members']};available=[o for o in self.raw['objects'] if o['id'] not in used]
         selected={self.raw['objects'][i.row()]['id'] for i in self.object_table.selectedIndexes()}
         members=[o['id'] for o in available if o['id'] in selected] or [o['id'] for o in available if o['type']=='nozzle' and o['nozzle_id']<=70]
         if not members:self.message('Сначала добавьте/выделите объекты, не включённые в другую группу',True);return
-        self.raw['groups'].append(dict(id=self.uid('g'),members=members,mode='uniform',phase_deg=0.,direction=-1,row_offset_deg=0.));self.commit('Добавить угловую группу',groups=True)
+        self.raw['groups'].append(dict(id=self.uid('G'),members=members,mode='uniform',phase_deg=0.,direction=-1,row_offset_deg=0.));self.commit('Добавить угловую группу',groups=True)
     def add_section(self):
-        zs=sorted({self.raw['base_z_mm'],self.raw['outlet_z_mm'],*[s['z_mm'] for s in self.raw['sections']]});a,b=max(zip(zs,zs[1:]),key=lambda pair:pair[1]-pair[0]);self.raw['sections'].append(dict(id=self.uid('S'),z_mm=(a+b)/2,is_outlet=False));self.commit('Добавить сечение')
+        zs=sorted({self.raw['base_z_mm'],self.raw['outlet_z_mm'],*[s['z_mm'] for s in self.raw['sections']]});a,b=max(zip(zs,zs[1:]),key=lambda pair:pair[1]-pair[0]);self.raw['sections'].append(dict(id=self.uid('S'),z_mm=(a+b)/2,is_outlet=False));self.commit('Добавить сечение',sections=True)
     def move_section(self,delta):
         row=self.section_table.currentRow();other=row+delta
         if row<0 or not 0<=other<len(self.raw['sections']):return
-        self.raw['sections'][row],self.raw['sections'][other]=self.raw['sections'][other],self.raw['sections'][row];self.commit('Порядок ручных сечений')
+        self.raw['sections'][row],self.raw['sections'][other]=self.raw['sections'][other],self.raw['sections'][row];self.commit('Порядок ручных сечений',sections=True)
     def delete(self,table):
         rows=sorted({i.row() for i in table.selectedIndexes()},reverse=True)
         key={self.primitive_table:'primitives',self.object_table:'objects',self.group_table:'groups',self.section_table:'sections'}[table]
@@ -403,7 +528,7 @@ class GeometryEditor(QWidget):
             if key=='objects' and record['type']=='nozzle':self.message('140 позиций форсунок сохраняются; отключайте их на 02',True);return
             if key=='sections' and record.get('is_outlet',False):self.message('Выходное сечение обязательно',True);return
         for row in rows:del self.raw[key][row]
-        self.commit('Удалить геометрические объекты')
+        self.commit('Удалить геометрические объекты',sections=key=='sections')
     def select(self,identity,object_handle=False):
         previous=self.loading;self.loading=True
         self.selected=identity;table=self.object_table if object_handle else self.primitive_table;records=self.raw['objects' if object_handle else 'primitives']
@@ -411,7 +536,12 @@ class GeometryEditor(QWidget):
         if row is not None:
             table.blockSignals(True);table.setCurrentCell(row,0);table.blockSignals(False);self.pages.setCurrentIndex(1 if object_handle else 0)
         for item in self.handles:item.setSelected(item.identity==identity);item.setZValue(10 if item.identity==identity else 8)
+        self.highlight_selection()
         self.loading=previous
+    def highlight_selection(self):
+        for identity,item in self.paths.items():
+            pen=item.pen();pen.setCosmetic(True);pen.setWidthF(2.5 if identity==self.selected else 1.4);item.setPen(pen)
+        self.sketch.viewport().update()
     def table_selected(self,table,row):
         if self.loading or row<0:return
         key={self.primitive_table:'primitives',self.object_table:'objects',self.group_table:'groups',self.section_table:'sections'}[table]
@@ -419,6 +549,7 @@ class GeometryEditor(QWidget):
         record=self.raw[key][row];self.selected=record['id'];members=set(record.get('members',[record['id']]))
         self.loading=True
         for handle in self.handles:handle.setSelected(handle.identity in members);handle.setZValue(10 if handle.identity in members else 8)
+        self.highlight_selection()
         self.loading=False
     def scene_selected(self):
         if self.loading:return
@@ -430,18 +561,21 @@ class GeometryEditor(QWidget):
         if not self.isVisible():self._pending=True;return
         old=self.loading;self.loading=True
         try:
-            scene=self.sketch.scene();scene.clear();self.paths={};self.handles=[];self.section_lines={};self.section_labels={};angular=self.angular.isChecked();model=None
+            scene=self.sketch.scene();scene.clear();self.paths={};self.handles=[];self.section_lines={};self.section_labels={};angular=self.angular.isChecked();model=None;model_error=''
             try:model=Chamber(self.raw)
-            except ValueError:pass
+            except ValueError as exc:model_error=str(exc)
             if not angular:
                 for raw in self.raw['primitives']:
-                    try:p=Primitive(raw);points=p.discretize(self.raw.get('chord_error_mm',.01))
-                    except ValueError:continue
+                    points,diagnostic=preview(raw,self.raw.get('chord_error_mm',.01))
+                    diagnostic=diagnostic or model_error
                     path=QPainterPath(QPointF(points[0,0],-points[0,1]))
                     for z,r in points[1:]:path.lineTo(z,-r)
-                    color={'inner':'#316cb7','outer':'#bb6740','reference':'#8a73b3'}[p.wall];item=scene.addPath(path,QPen(QColor(color),0));self.paths[p.id]=item
-                    for role,point in [('start',p.start)]+([] if p.kind=='point' else [('end',p.end)])+([('center',p.center)] if p.kind=='arc' else []):
-                        handle=Handle(self,p.id,role,(point[0],-point[1]),color);scene.addItem(handle);self.handles.append(handle)
+                    color='#bd354b' if diagnostic else {'inner':'#316cb7','outer':'#bb6740','reference':'#8a73b3'}[raw['wall']]
+                    item=PrimitivePath(self,raw['id'],path);item.setPen(QPen(QColor(color),0,Qt.DashLine if diagnostic else Qt.SolidLine));scene.addItem(item);self.paths[raw['id']]=item
+                    if diagnostic:item.setToolTip(raw['id']+' · '+diagnostic)
+                    factor=UNITS[raw.get('unit','mm')]
+                    for role in ['start']+([] if raw['kind']=='point' else ['end'])+(['center'] if raw['kind']=='arc' else []):
+                        point=np.array(raw[role])*factor;handle=Handle(self,raw['id'],role,(point[0],-point[1]),color);scene.addItem(handle);self.handles.append(handle)
                 for section in self.raw['sections']:
                     try:rin,rout=model.bounds(section['z_mm']) if model else (self.cfg.r_in_mm,self.cfg.r_out_mm)
                     except ValueError:continue
@@ -460,21 +594,35 @@ class GeometryEditor(QWidget):
                 handle=Handle(self,obj['id'],'position',point,color,True);scene.addItem(handle);self.handles.append(handle)
             rect=scene.itemsBoundingRect();pad=max(3.,max(rect.width(),rect.height())*.08);scene.setSceneRect(rect.adjusted(-pad,-pad,pad,pad))
             for handle in self.handles:handle.setSelected(handle.identity==self.selected);handle.setZValue(10 if handle.identity==self.selected else 8)
+            self.highlight_selection()
             if fit:self.fit()
         finally:self.loading=old
     def fit(self):self.sketch.fitInView(self.sketch.sceneRect(),Qt.KeepAspectRatio)
-    def preview_drag(self,identity,role,position,is_object):
-        # Keep Qt's active handle alive throughout the drag. Tables and paths
-        # reflect valid analytic coordinates; invalid drafts get diagnosed only
-        # at release and are rolled back as one action.
+    def preview_drag(self,identity,role,position,is_object,before,before_nozzles,anchor):
+        # Qt never moves a selection group. Every frame is reconstructed from
+        # the press snapshot, so passing through an invalid shape cannot lock it.
+        previous=self.raw['primitives']
+        if is_object:self.raw=deepcopy(before);self.working_nozzles=deepcopy(before_nozzles)
+        else:self.raw['primitives']=deepcopy(before['primitives'])
         try:
-            self.change_position(identity,role,position,is_object)
-            self.refresh_drag_values(identity,is_object)
-            if not is_object:
-                p=Primitive(next(p for p in self.raw['primitives'] if p['id']==identity));points=p.discretize(self.raw.get('chord_error_mm',.01));path=QPainterPath(QPointF(points[0,0],-points[0,1]))
+            self.change_position(identity,role,position,is_object,anchor)
+        except (ValueError,KeyError) as exc:self.message('Черновик: '+str(exc),True)
+        if is_object:
+            self.refresh_drag_values(identity,True)
+            for h in self.handles:
+                if h.identity==identity and h.object_handle:h.setPos(position)
+        else:
+            for old,raw in zip(previous,self.raw['primitives']):
+                if old==raw:continue
+                self.refresh_drag_values(raw['id'],False)
+                points,error=preview(raw,self.raw.get('chord_error_mm',.01));path=QPainterPath(QPointF(points[0,0],-points[0,1]))
                 for z,r in points[1:]:path.lineTo(z,-r)
-                if identity in self.paths:self.paths[identity].setPath(path)
-        except (ValueError,KeyError):pass
+                if raw['id'] in self.paths:
+                    self.paths[raw['id']].setPath(path);self.paths[raw['id']].setPen(QPen(QColor('#bd354b' if error else {'inner':'#316cb7','outer':'#bb6740','reference':'#8a73b3'}[raw['wall']]),0))
+                for h in self.handles:
+                    if h.identity==raw['id'] and not h.object_handle:
+                        point=np.array(raw[h.role])*UNITS[raw.get('unit','mm')];h.setPos(QPointF(point[0],-point[1]))
+            self.highlight_selection()
     def refresh_drag_values(self,identity,is_object):
         table=self.object_table if is_object else self.primitive_table;table.blockSignals(True)
         try:
@@ -488,7 +636,7 @@ class GeometryEditor(QWidget):
                         for col,value in zip(columns,record[role]):self.item(table,row,col,value)
                 if record['kind']=='arc':self.item(table,row,9,float(np.linalg.norm(np.array(record['start'])-record['center'])))
         finally:table.blockSignals(False)
-    def change_position(self,identity,role,position,is_object):
+    def change_position(self,identity,role,position,is_object,anchor=None):
         z,r=position.x(),-position.y()
         if is_object:
             obj=next(o for o in self.raw['objects'] if o['id']==identity)
@@ -498,33 +646,27 @@ class GeometryEditor(QWidget):
             if obj['type']=='nozzle':self.update_nozzle(obj,z,r,theta)
             else:obj.update(z_mm=z,radius_mm=r,theta_deg=theta)
             self.raw=sync_groups(self.raw,self.working_nozzles);return
-        p=next(p for p in self.raw['primitives'] if p['id']==identity);factor=UNITS[p.get('unit','mm')];primitive=Primitive(p)
-        if role=='center':
-            midpoint=(primitive.start+primitive.end)/2;normal=np.array([-(primitive.end-primitive.start)[1],(primitive.end-primitive.start)[0]]);normal/=np.linalg.norm(normal)
-            center=midpoint+normal*np.dot(np.array([z,r])-midpoint,normal);p['center']=(center/factor).tolist();p.pop('radius',None)
+        p=next(p for p in self.raw['primitives'] if p['id']==identity);factor=UNITS[p.get('unit','mm')];old=deepcopy(p)
+        if role in ('center','body'):
+            origin=np.array([anchor.x(),-anchor.y()]) if role=='body' else np.array(p['center'])*factor
+            p.update(translate(p,(np.array([z,r])-origin)/factor))
         else:
-            old=p[role][:]
-            if abs(old[0]*factor-self.raw['base_z_mm'])<=TOL:z=self.raw['base_z_mm']
-            elif abs(old[0]*factor-self.raw['outlet_z_mm'])<=TOL:z=self.raw['outlet_z_mm']
-            if primitive.kind=='arc':
-                delta=np.array([z,r])-primitive.center;length=np.linalg.norm(delta)
-                if length<=TOL:return
-                z,r=primitive.center+primitive.radius*delta/length
             # Snap to an existing same-wall endpoint within eight screen pixels.
             for other in self.raw['primitives']:
                 if other['id']==identity or other['wall']!=p['wall']:continue
                 for key in ('start','end'):
                     if key not in other:continue
                     candidate=np.array(other[key])*UNITS[other.get('unit','mm')]
+                    if np.allclose(candidate,np.array(old[role])*factor,rtol=0,atol=TOL):continue
                     a=self.sketch.mapFromScene(QPointF(z,-r));b=self.sketch.mapFromScene(QPointF(candidate[0],-candidate[1]))
                     if (a-b).manhattanLength()<=8:z,r=candidate
-            p[role]=[z/factor,r/factor];p.pop('radius',None);self.join_ends(old,p[role],p['wall'],identity,factor)
+            point=[z/factor,r/factor]
+            try:p.update(move_endpoint(p,role,point))
+            except ValueError:p[role]=point;p.pop('radius',None);raise
+        for endpoint in ('start','end'):
+            if endpoint in old and old[endpoint]!=p[endpoint]:self.join_ends(old[endpoint],p[endpoint],p['wall'],identity,factor)
     def finish_drag(self,identity,role,position,is_object,before,before_nozzles):
-        try:
-            self.change_position(identity,role,position,is_object);Chamber(self.raw)
-            if not self.commit('Sketcher: переместить '+identity):raise ValueError(self.status.text())
-        except (ValueError,KeyError) as exc:
-            self.raw=before;self.working_nozzles=before_nozzles;self.rebuild();self.message('Перемещение отменено: '+str(exc),True)
+        self.commit('Sketcher: переместить '+identity)
     def sketch_add(self,point):
         tool=self.tool.currentIndex();position=[float(point.x()),float(-point.y())]
         if tool==0:return

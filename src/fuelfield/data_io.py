@@ -62,7 +62,7 @@ def _extract_rows(cells: list[list]):
     raise ValueError('Не нашёл данные. Ожидается ID форсунки и 36 числовых столбцов; для Excel допускается строка заголовков 1..36.')
 
 
-def _xlsx_sheets(path: Path):
+def _xlsx_sheets(path: Path, with_row_numbers=False):
     with zipfile.ZipFile(path,'r') as z:
         wbroot = ET.fromstring(z.read('xl/workbook.xml'))
         relroot = ET.fromstring(z.read('xl/_rels/workbook.xml.rels'))
@@ -96,16 +96,18 @@ def _xlsx_sheets(path: Path):
                         inline = c.find(SS+'is')
                         val = ''.join((t.text or '') for t in inline.iter(SS+'t')) if inline is not None else ''
                     elif v is None:
-                        val = None
+                        val = 'Формула без вычисленного результата' if with_row_numbers and c.find(SS+'f') is not None else None
                     elif kind == 's':
                         val = shared[int(v.text)]
+                    elif kind == 'b' and with_row_numbers:
+                        val = v.text == '1'
                     else:
                         val = v.text
                     values[idx] = val
                 if values:
                     line=[None]*(max(values)+1)
                     for idx,val in values.items():line[idx]=val
-                    result.append(line)
+                    result.append((int(row.attrib['r']),line) if with_row_numbers else line)
             yield name,result
 
 
