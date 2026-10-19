@@ -16,7 +16,8 @@ import numpy as np
 from PyQt5.QtCore import Qt, QPoint, QPointF
 from PyQt5.QtGui import QMouseEvent, QWheelEvent
 from PyQt5.QtTest import QTest
-from PyQt5.QtWidgets import QApplication, QDoubleSpinBox
+from PyQt5.QtWidgets import (QApplication, QDoubleSpinBox, QGraphicsLineItem,
+                             QGraphicsSimpleTextItem)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 from fuelfield.chamber import Chamber, Primitive, legacy_geometry
@@ -159,6 +160,97 @@ class TestV06GeometryUI(unittest.TestCase):
         self.assertEqual(self.w.undo_stack.count(), 1)
         self.assertAlmostEqual(self.handle('reference-point').pos().y(), -251.125)
 
+    def test_coordinate_edit_retains_scene_rows_and_avoids_hidden_editor_reloads(self):
+        scene = self.e.sketch.scene()
+        path = self.e.paths['reference-point']
+        handle = self.handle('reference-point')
+        untouched_path = self.e.paths['reference-line']
+        object_item = self.e.object_table.item(0, 4)
+        nozzle_item = self.w.nozzle_table.item(0, 0)
+        transform = self.e.sketch.transform()
+        before = project_to_json(self.w.cfg, self.w.nozzles)
+        with patch.object(self.w.catalog_editor, 'load', wraps=self.w.catalog_editor.load) as catalog_load, \
+             patch.object(self.w.preset_editor, 'load', wraps=self.w.preset_editor.load) as preset_load, \
+             patch.object(self.w, '_read_nozzles', wraps=self.w._read_nozzles) as read_nozzles, \
+             patch.object(self.w, '_fill_nozzles', wraps=self.w._fill_nozzles) as fill_nozzles:
+            self.edit_number(self.e.primitive_table, 'reference-point', 4, '251.125')
+            catalog_load.assert_not_called()
+            preset_load.assert_not_called()
+            read_nozzles.assert_not_called()
+            fill_nozzles.assert_not_called()
+        self.assertIs(self.e.sketch.scene(), scene)
+        self.assertIs(self.e.paths['reference-point'], path)
+        self.assertIs(self.e.paths['reference-line'], untouched_path)
+        self.assertIs(self.handle('reference-point'), handle)
+        self.assertIs(self.e.object_table.item(0, 4), object_item)
+        self.assertIs(self.w.nozzle_table.item(0, 0), nozzle_item)
+        self.assertEqual(self.e.sketch.transform(), transform)
+        self.assertEqual(self.e.selected, 'reference-point')
+        self.assertTrue(handle.isSelected())
+        self.assertEqual(self.w.undo_stack.count(), 1)
+        after = project_to_json(self.w.cfg, self.w.nozzles)
+        self.w.undo_stack.undo()
+        self.assertEqual(project_to_json(self.w.cfg, self.w.nozzles), before)
+        self.w.undo_stack.redo()
+        self.assertEqual(project_to_json(self.w.cfg, self.w.nozzles), after)
+
+    def test_incremental_wall_edit_updates_bound_hole_row_and_existing_handle(self):
+        hole = next(o for o in self.e.raw['objects'] if o['id'] == 'hole-test')
+        hole.update(wall='inner', primitive_id='inner-1', radial_offset_mm=2.)
+        self.assertTrue(self.e.commit('Привязать тестовое отверстие к стенке'))
+        self.e.pages.setCurrentIndex(0)
+        self.w.undo_stack.clear()
+        row = self.row(self.e.object_table, 'hole-test')
+        handle = self.handle('hole-test', 'position')
+        untouched = self.e.object_table.item(self.row(self.e.object_table, 'N1'), 4)
+        base_radius = self.w.cfg.r_in_mm
+        self.edit_number(self.e.primitive_table, 'inner-1', 6, repr(base_radius + 4.))
+        expected = base_radius + 4. * 18. / 30. + 2.
+        self.assertAlmostEqual(float(self.e.object_table.item(row, 5).text()), expected)
+        self.assertFalse(self.e.object_table.item(row, 5).flags() & Qt.ItemIsEditable)
+        self.assertIs(self.handle('hole-test', 'position'), handle)
+        self.assertAlmostEqual(handle.pos().y(), -expected)
+        self.assertIs(self.e.object_table.item(self.row(self.e.object_table, 'N1'), 4), untouched)
+        self.assertEqual(self.w.undo_stack.count(), 1)
+
+    def test_incremental_wall_edit_updates_section_markers_to_actual_bounds(self):
+        self.edit_number(self.e.primitive_table, 'inner-1', 6,
+                         repr(self.w.cfg.r_in_mm + 4.))
+        self.edit_number(self.e.primitive_table, 'outer-1', 6,
+                         repr(self.w.cfg.r_out_mm + 4.))
+        model = Chamber(self.w.cfg.geometry)
+        markers = [item.line() for item in self.e.sketch.scene().items()
+                   if isinstance(item, QGraphicsLineItem)]
+        self.assertEqual(len(markers), len(model.sections))
+        for section in model.sections:
+            marker = next(line for line in markers
+                          if abs(line.x1() - section['z_mm']) < 1e-8)
+            rin, rout = model.bounds(section['z_mm'])
+            self.assertAlmostEqual(marker.y1(), -rin)
+            self.assertAlmostEqual(marker.y2(), -rout)
+            label_text = section['id'] + (' · выход' if section.get('is_outlet') else '')
+            label = next(item for item in self.e.sketch.scene().items()
+                         if isinstance(item, QGraphicsSimpleTextItem)
+                         and item.text() == label_text)
+            self.assertAlmostEqual(label.pos().x(), section['z_mm'])
+            self.assertAlmostEqual(label.pos().y(), -rout)
+
+    def test_reopening_same_project_discards_invalid_geometry_draft(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = str(Path(folder) / 'geometry_project.json')
+            self.w.project_file = path
+            self.w.save_project()
+            expected = deepcopy(self.w.cfg.geometry)
+            row = self.row(self.e.primitive_table, 'reference-arc')
+            self.e.primitive_table.item(row, 9).setText('1')
+            self.assertIn('не применён', self.e.status.text())
+            self.assertNotEqual(self.e.raw, expected)
+            with patch('fuelfield.gui.QFileDialog.getOpenFileName', return_value=(path, 'JSON')):
+                self.w.open_project()
+            self.assertEqual(self.w.cfg.geometry, expected)
+            self.assertEqual(self.e.raw, expected)
+            self.assertIn('reference-arc', self.e.paths)
+            self.assertEqual(self.w.undo_stack.count(), 0)
     def test_sketch_drag_updates_table_and_commits_once(self):
         before = project_to_json(self.w.cfg, self.w.nozzles)
         self.drag('reference-point', [18., 251.])

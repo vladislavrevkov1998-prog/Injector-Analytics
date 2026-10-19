@@ -59,6 +59,9 @@ class Sketch(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse);self.setMinimumSize(220,220)
         self._pan=None;self.setBackgroundBrush(QColor('#fafbfe'))
     def wheelEvent(self,event):self.scale(1.18 if event.angleDelta().y()>0 else 1/1.18,1.18 if event.angleDelta().y()>0 else 1/1.18);event.accept()
+    def drawForeground(self,painter,rect):
+        painter.save();painter.resetTransform();painter.setPen(QColor('#334155'))
+        painter.drawText(QPointF(8,18),'X/Y [мм], θ от +X против ЧС' if self.editor.angular.isChecked() else 'z=x → [мм]     R ↑ [мм]');painter.restore()
     def mousePressEvent(self,event):
         if event.button()==Qt.MiddleButton:self._pan=event.pos();self.setCursor(Qt.ClosedHandCursor);event.accept();return
         super().mousePressEvent(event)
@@ -124,11 +127,20 @@ class GeometryEditor(QWidget):
         button=QPushButton(title);button.clicked.connect(callback);layout.addWidget(button);return button
     @staticmethod
     def uid(prefix):return prefix+'-'+uuid.uuid4().hex[:8]
-    def load(self,cfg,nozzles):
+    def load(self,cfg,nozzles,force=False):
         candidate=cfg.geometry or legacy_geometry(cfg,nozzles)
-        if hasattr(self,'base_nozzles') and nozzles==self.base_nozzles and candidate==self.loaded_raw and cfg.nozzle_presets==self.loaded_presets:
+        if not force and hasattr(self,'base_nozzles') and nozzles==self.base_nozzles and candidate==self.loaded_raw and cfg.nozzle_presets==self.loaded_presets:
             self.cfg=cfg;return
+        incremental=False
+        if not force and hasattr(self,'loaded_raw') and self.isVisible() and not self._pending and nozzles==self.base_nozzles and cfg.nozzle_presets==self.loaded_presets:
+            old=self.loaded_raw
+            incremental=({k:v for k,v in old.items() if k!='primitives'}=={k:v for k,v in candidate.items() if k!='primitives'} and
+                [(p['id'],p['kind']) for p in old['primitives']]==[(p['id'],p['kind']) for p in candidate['primitives']])
+        if incremental:
+            old=self.loaded_raw;self.cfg=cfg;self.loaded_raw=deepcopy(candidate);self.raw=deepcopy(candidate)
+            self.refresh_primitives(old);return
         self.cfg=cfg;self.loaded_raw=deepcopy(candidate);self.loaded_presets=deepcopy(cfg.nozzle_presets);self.working_nozzles=deepcopy(nozzles);self.base_nozzles=deepcopy(nozzles);self.raw=deepcopy(candidate);self._pending=True
+        self.message('Геометрия загружена. Несогласованный черновик не участвует в расчёте.')
         if self.isVisible():self.rebuild()
     def showEvent(self,event):
         super().showEvent(event)
@@ -152,15 +164,52 @@ class GeometryEditor(QWidget):
         if check is not None:item.setText('');item.setFlags(Qt.ItemIsEnabled|Qt.ItemIsSelectable|Qt.ItemIsUserCheckable);item.setCheckState(Qt.Checked if check else Qt.Unchecked)
         elif not editable:item.setFlags(item.flags()&~Qt.ItemIsEditable);item.setBackground(QColor('#eee8f6'))
         table.setItem(row,column,item)
+    def fill_primitive_row(self,row,p):
+        start=p['start'];end=p.get('end',['','']);center=p.get('center',['','']);kind=p['kind']
+        radius=p.get('radius',float(np.linalg.norm(np.array(start)-center)) if kind=='arc' else '')
+        values=[p['id'],WALLS.get(p['wall'],p['wall']),KINDS.get(kind,kind),*start,*end,*center,radius,'',p.get('unit','mm')]
+        for col,v in enumerate(values):self.item(self.primitive_table,row,col,v,col!=0 and (kind!='point' or col not in (5,6)) and (kind=='arc' or col not in (7,8,9,10)),check=p.get('clockwise',False) if col==10 and kind=='arc' else None)
+    def refresh_primitives(self,previous):
+        # Coordinate edits keep the existing scene and unrelated table rows.
+        # Rebuilding 140 nozzle/property rows on every keystroke caused lag.
+        self.loading=True;self.primitive_table.blockSignals(True);self.object_table.blockSignals(True)
+        try:
+            changed_walls=set()
+            for row,(old,raw) in enumerate(zip(previous['primitives'],self.raw['primitives'])):
+                if old==raw:continue
+                self.fill_primitive_row(row,raw);p=Primitive(raw);changed_walls.update((old['wall'],p.wall))
+                if p.id in self.paths:
+                    points=p.discretize(self.raw.get('chord_error_mm',.01));path=QPainterPath(QPointF(points[0,0],-points[0,1]))
+                    for z,r in points[1:]:path.lineTo(z,-r)
+                    self.paths[p.id].setPath(path)
+                    self.paths[p.id].setPen(QPen(QColor({'inner':'#316cb7','outer':'#bb6740','reference':'#8a73b3'}[p.wall]),0))
+                coordinates={'start':p.start,'end':p.end}
+                if p.kind=='arc':coordinates['center']=p.center
+                for h in self.handles:
+                    if not h.object_handle and h.identity==p.id:
+                        h.setPos(QPointF(coordinates[h.role][0],-coordinates[h.role][1]));h.setBrush(QBrush(QColor({'inner':'#316cb7','outer':'#bb6740','reference':'#8a73b3'}[p.wall])))
+            model=Chamber(self.raw)
+            for section in self.raw['sections']:
+                identity=section['id'];z=section['z_mm'];rin,rout=model.bounds(z)
+                if identity in self.section_lines:self.section_lines[identity].setLine(z,-rin,z,-rout)
+                if identity in self.section_labels:self.section_labels[identity].setPos(z,-rout)
+            for row,obj in enumerate(self.raw['objects']):
+                if obj.get('wall','free') not in changed_walls:continue
+                z,r,theta=model.object_position(obj,self.working_nozzles,self.cfg)
+                for col,value in zip((4,5,6),(z,r,theta)):self.item(self.object_table,row,col,value,col!=5 or obj.get('wall','free')=='free')
+                point=(r*math.cos(math.radians(theta)),-r*math.sin(math.radians(theta))) if self.angular.isChecked() else (z,-r)
+                for h in self.handles:
+                    if h.object_handle and h.identity==obj['id']:h.setPos(QPointF(*point))
+            rect=self.sketch.scene().itemsBoundingRect();current=self.sketch.sceneRect()
+            if not current.contains(rect):self.sketch.scene().setSceneRect(current.united(rect).adjusted(-3,-3,3,3))
+            self.sketch.viewport().update()
+        finally:self.primitive_table.blockSignals(False);self.object_table.blockSignals(False);self.loading=False
     def fill_tables(self):
         for table in self.tables:table.blockSignals(True)
         try:
             table=self.primitive_table;table.setRowCount(len(self.raw['primitives']))
             for row,p in enumerate(self.raw['primitives']):
-                start=p['start'];end=p.get('end',['','']);center=p.get('center',['','']);kind=p['kind']
-                radius=p.get('radius',float(np.linalg.norm(np.array(start)-center)) if kind=='arc' else '')
-                values=[p['id'],WALLS.get(p['wall'],p['wall']),KINDS.get(kind,kind),*start,*end,*center,radius,'',p.get('unit','mm')]
-                for col,v in enumerate(values):self.item(table,row,col,v,col!=0 and (kind!='point' or col not in (5,6)) and (kind=='arc' or col not in (7,8,9,10)),check=p.get('clockwise',False) if col==10 and kind=='arc' else None)
+                self.fill_primitive_row(row,p)
             table=self.object_table;table.setRowCount(len(self.raw['objects']));model=None
             try:model=Chamber(self.raw)
             except ValueError:pass
@@ -290,13 +339,13 @@ class GeometryEditor(QWidget):
                     if getattr(working[nozzle.id],key)!=getattr(base[nozzle.id],key):
                         setattr(nozzle,key,getattr(working[nozzle.id],key))
                         if key=='z_tip_mm':nozzle.geometry_overrides=sorted(set(nozzle.geometry_overrides)|{'z_tip_mm'})
-            if model.enabled:current=model.resolve_nozzle_anchors(current,self.owner.cfg)
+            if model.enabled and any(o['type']=='nozzle' and o.get('wall','free')!='free' for o in model.objects):current=model.resolve_nozzle_anchors(current,self.owner.cfg)
             state=project_to_json(self.owner.cfg,current);state['settings']['geometry']=deepcopy(self.raw)
             if model.enabled:state['settings']['z_mm']=[s['z_mm'] for s in self.raw['sections']]
             # Individual/group geometry edits deliberately preserve all other
             # positions; the old global Auto-follow must not overwrite them.
             if self.raw['groups']:state['settings']['placement_mode']='manual'
-            self.owner.apply_project_state(state,label)
+            self.owner.apply_geometry_state(state,label)
             self.message(('Применено. '+WALL_BOUND_NOTICE) if model.variable and model.enabled else 'Применено. Сектора 1–36 и расходные характеристики сохранены.')
             return True
         except (ValueError,TypeError,KeyError,StopIteration) as exc:
@@ -381,7 +430,7 @@ class GeometryEditor(QWidget):
         if not self.isVisible():self._pending=True;return
         old=self.loading;self.loading=True
         try:
-            scene=self.sketch.scene();scene.clear();self.paths={};self.handles=[];angular=self.angular.isChecked();model=None
+            scene=self.sketch.scene();scene.clear();self.paths={};self.handles=[];self.section_lines={};self.section_labels={};angular=self.angular.isChecked();model=None
             try:model=Chamber(self.raw)
             except ValueError:pass
             if not angular:
@@ -396,8 +445,9 @@ class GeometryEditor(QWidget):
                 for section in self.raw['sections']:
                     try:rin,rout=model.bounds(section['z_mm']) if model else (self.cfg.r_in_mm,self.cfg.r_out_mm)
                     except ValueError:continue
-                    pen=QPen(QColor('#a36bac' if section.get('is_outlet') else '#aab4c5'),0,Qt.DashLine);scene.addLine(section['z_mm'],-rin,section['z_mm'],-rout,pen)
+                    pen=QPen(QColor('#a36bac' if section.get('is_outlet') else '#aab4c5'),0,Qt.DashLine);self.section_lines[section['id']]=scene.addLine(section['z_mm'],-rin,section['z_mm'],-rout,pen)
                     label=scene.addSimpleText(section['id']+(' · выход' if section.get('is_outlet') else ''));label.setFlag(QGraphicsItem.ItemIgnoresTransformations);label.setPos(section['z_mm'],-rout)
+                    self.section_labels[section['id']]=label
             for obj in self.raw['objects']:
                 try:
                     if model:z,r,theta=model.object_position(obj,self.working_nozzles,self.cfg)
@@ -409,7 +459,6 @@ class GeometryEditor(QWidget):
                 color={'nozzle':'#61866a','hole':'#2a81b3','insert':'#b34e91'}.get(obj['type'],'#777777')
                 handle=Handle(self,obj['id'],'position',point,color,True);scene.addItem(handle);self.handles.append(handle)
             rect=scene.itemsBoundingRect();pad=max(3.,max(rect.width(),rect.height())*.08);scene.setSceneRect(rect.adjusted(-pad,-pad,pad,pad))
-            title=scene.addSimpleText('X/Y [мм], θ от +X против ЧС' if angular else 'z=x → [мм]     R ↑ [мм]');title.setFlag(QGraphicsItem.ItemIgnoresTransformations);title.setPos(scene.sceneRect().topLeft())
             for handle in self.handles:handle.setSelected(handle.identity==self.selected);handle.setZValue(10 if handle.identity==self.selected else 8)
             if fit:self.fit()
         finally:self.loading=old

@@ -55,4 +55,29 @@ class TestV06Delivery(unittest.TestCase):
             w.undo_stack.undo();self.assertEqual(project_to_json(w.cfg,w.nozzles),before)
         finally:w.close();w.deleteLater();app.processEvents()
 
+    def test_wrapped_balances_do_not_resize_cached_section_canvases(self):
+        from PyQt5.QtWidgets import QApplication
+        from fuelfield.gui import MainWindow
+        app=QApplication.instance() or QApplication([]);w=MainWindow();w.resize(1480,930);w.show()
+        try:
+            cfg,ns=self.project();cfg.n_sample_radial=8;cfg.n_sample_angular=72
+            w.apply_project_state(project_to_json(cfg,ns),'Variable walls');w.tabs.setCurrentIndex(3);app.processEvents()
+            planes=[calculate_plane(ns,cfg,z) for z in cfg.z_mm]
+            w._done([(p,None) for p in planes]);app.processEvents()
+            sizes=[]
+            for _ in range(2):
+                for i in range(len(planes)):
+                    w.plane_select.setCurrentIndex(i);app.processEvents();sizes.append((w.mapcanvas.width(),w.mapcanvas.height()))
+            self.assertEqual(len(set(sizes)),1,'Balance text wrapping resized a cached plot')
+            cache=list(w._render_cache.values());draws=[]
+            from unittest.mock import patch
+            from contextlib import ExitStack
+            with ExitStack() as stack:
+                for canvas in cache:stack.enter_context(patch.object(canvas,'draw',side_effect=lambda:draws.append(1)))
+                for i in range(len(planes)):
+                    w.plane_select.setCurrentIndex(i);app.processEvents()
+            self.assertEqual(draws,[],'Revisiting a cached section repainted Matplotlib')
+            self.assertEqual(len(w._render_cache),len(planes))
+        finally:w.close();w.deleteLater();app.processEvents()
+
 if __name__=='__main__':unittest.main()

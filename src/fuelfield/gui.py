@@ -5,7 +5,7 @@ from copy import deepcopy
 from pathlib import Path
 import numpy as np
 from PyQt5.QtCore import Qt, QThread, QObject, pyqtSignal, QTimer
-from PyQt5.QtGui import QKeySequence, QFont, QPolygon, QColor
+from PyQt5.QtGui import QKeySequence, QFont, QPolygon, QColor, QTextDocument
 from PyQt5.QtCore import QPoint
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
@@ -364,6 +364,25 @@ class MainWindow(QMainWindow):
         finally:self._restoring=False
         self._record_edit(label=label)
 
+    def apply_geometry_state(self,state,label):
+        """A validated geometry edit needs neither a 140-row read-back nor
+        rebuilding hidden hydraulic plots. It shares the same Undo snapshots.
+        """
+        cfg,nozzles=project_from_json(state);after=project_to_json(cfg,nozzles);before=self._edit_state
+        if after==before:return
+        previous_nozzles=self.nozzles;self._restoring=True
+        try:
+            self.cfg=cfg;self.nozzles=nozzles;self._edit_state=deepcopy(after)
+            self.geom_widgets['z_mm'].setText('; '.join(f'{z:g}' for z in cfg.z_mm))
+            self.mode_widgets['placement_mode'].setCurrentIndex(self.mode_widgets['placement_mode'].findData(cfg.placement_mode))
+            active=bool(chamber(cfg))
+            for key in ('r_in_mm','r_out_mm','z_mm'):
+                self.geom_widgets[key].setEnabled(not active);self.geom_widgets[key].setToolTip('Задаётся в «Профили ЖТ: Sketcher и таблицы»' if active else '')
+            if nozzles!=previous_nozzles:self._fill_nozzles()
+            self.geometry_editor.load(cfg,nozzles)
+        finally:self._restoring=False
+        self.undo_stack.push(ProjectEdit(self,before,after,label));self._invalidate_results();self._queue_preview()
+
     def open_sections_editor(self):
         if chamber(self.cfg):
             self.tabs.setCurrentIndex(0);self.geometry_pages.setCurrentIndex(1);self.geometry_editor.pages.setCurrentIndex(3);return
@@ -693,7 +712,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             elif isinstance(w,QCheckBox):w.setChecked(value)
             else:w.setValue(value)
         self.catalog_editor.load(self.cfg.atomizer_types);self.preset_editor.load()
-        self.geometry_editor.load(self.cfg,self.nozzles)
+        self.geometry_editor.load(self.cfg,self.nozzles,force=True)
         active=bool(chamber(self.cfg))
         for key in ('r_in_mm','r_out_mm','z_mm'):
             self.geom_widgets[key].setEnabled(not active)
@@ -1285,15 +1304,12 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.worker=None
         self.calc_btn.setEnabled(True);self.cancel_calc_btn.setEnabled(False)
 
-    def _plot_result(self,*args):
-        for widget in (self.plot_count,self.plot_columns,self.reset_plot_button,self.axes_button):widget.setEnabled(self.plots.currentIndex()==3)
-        if not self.results:return
-        i=max(0,self.plane_select.currentIndex())
-        p=self.results[i]
+    @staticmethod
+    def _balance_text(p,i):
         total=p.injected_kg_s*3600
         if p.is_composite:
-            self.balance_label.setText(f'<b>Квазистационарное сечение {i+1}, z={p.z_mm:g} мм.</b> Накопленная матрица: один угловой столбец на временной шаг. Эпюры — из этой матрицы. Поле ниже — мгновенный снимок; единый мгновенный баланс накопленной матрицы не определён.')
-        else:self.balance_label.setText(
+            text=f'<b>Квазистационарное сечение {i+1}, z={p.z_mm:g} мм.</b> Накопленная матрица: один угловой столбец на временной шаг. Эпюры — из этой матрицы. Поле ниже — мгновенный снимок; единый мгновенный баланс накопленной матрицы не определён.'
+        else:text=(
             f'<b>Сечение {i+1}, z={p.z_mm:g} мм.</b> '
             f'Через сопла перед сечением {total:.5g} кг/ч; в тракте {p.inside_kg_s*3600:.5g} кг/ч '
             f'({100*p.inside_kg_s/max(p.injected_kg_s,1e-15):.2f}%); '
@@ -1302,8 +1318,33 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             f'wall-bound {p.wall_bound_kg_s*3600:.5g} кг/ч; '
             f'невязка баланса {100*p.rel_balance_error:.3g}%.'
         )
+        if p.geometry_notice:text+='<br>wall-bound: неразрешённое распределение вне стенок; перенос и плёнка не моделируются.'
+        return text
+
+    def _reserve_balance_height(self):
+        # Different line wrapping must not resize and redraw cached Matplotlib
+        # canvases every time a short (e.g. empty inlet) balance is selected.
+        if not self.results:return
+        width=max(1,self.balance_label.contentsRect().width()-2*self.balance_label.margin())
+        key=(id(self.results),width,self.balance_label.font().toString())
+        if key==getattr(self,'_balance_layout_key',None):return
+        self._balance_layout_key=key
+        document=QTextDocument();document.setDocumentMargin(0);document.setDefaultFont(self.balance_label.font());document.setTextWidth(width)
+        height=0.
+        for i,p in enumerate(self.results):
+            document.setHtml(self._balance_text(p,i));height=max(height,document.size().height())
+        self.balance_label.setMinimumHeight(int(np.ceil(height))+4)
+
+    def resizeEvent(self,event):
+        super().resizeEvent(event)
+        if hasattr(self,'balance_label'):QTimer.singleShot(0,self._reserve_balance_height)
+
+    def _plot_result(self,*args):
+        for widget in (self.plot_count,self.plot_columns,self.reset_plot_button,self.axes_button):widget.setEnabled(self.plots.currentIndex()==3)
+        if not self.results:return
+        i=max(0,self.plane_select.currentIndex());p=self.results[i]
+        self._reserve_balance_height();self.balance_label.setText(self._balance_text(p,i))
         if p.geometry_notice:
-            self.balance_label.setText(self.balance_label.text()+'<br>wall-bound: неразрешённое распределение вне стенок; перенос и плёнка не моделируются.')
             self.balance_label.setToolTip(p.geometry_notice)
         else:self.balance_label.setToolTip('')
         self.plot_count.blockSignals(True);self.plot_count.setMaximum(len(p.radial_centers_mm));self.plot_count.blockSignals(False)
