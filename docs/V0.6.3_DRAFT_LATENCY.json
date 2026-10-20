@@ -1,0 +1,47 @@
+{
+  "project": "demo_project_user_field.json",
+  "sha256": "0589843dc9b8b6939cddba22dd0b0d93927da27323b69bb5c131ae01cb59bc4c",
+  "method": "Linux Qt offscreen; real native drag events, 140 original nozzles, synthetic reference arcs/invalid drafts; all times include processEvents; no timers disabled",
+  "arc_arc_frames": {
+    "samples": 240,
+    "median_ms": 8.74,
+    "p95_ms": 16.522,
+    "max_ms": 33.404
+  },
+  "arc_arc_release": {
+    "samples": 8,
+    "median_ms": 82.387,
+    "p95_ms": 144.223,
+    "max_ms": 163.729
+  },
+  "accepted_undo": {
+    "samples": 8,
+    "median_ms": 51.172,
+    "p95_ms": 77.593,
+    "max_ms": 83.742
+  },
+  "accepted_redo": {
+    "samples": 8,
+    "median_ms": 58.45,
+    "p95_ms": 126.597,
+    "max_ms": 126.939
+  },
+  "invalid_commit": {
+    "samples": 12,
+    "median_ms": 68.346,
+    "p95_ms": 87.824,
+    "max_ms": 91.372
+  },
+  "reset_draft": {
+    "samples": 12,
+    "median_ms": 90.689,
+    "p95_ms": 160.158,
+    "max_ms": 169.458
+  },
+  "undo_reset": {
+    "samples": 12,
+    "median_ms": 60.843,
+    "p95_ms": 80.37,
+    "max_ms": 83.776
+  }
+}
