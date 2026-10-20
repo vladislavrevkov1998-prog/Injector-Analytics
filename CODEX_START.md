@@ -1,3 +1,8 @@
+> Актуальная v0.6.2: `codex/v0.6.2-sketcher-constraints`, исходный SHA `07944ee`.
+> Связи/фиксация и max-z выхода: `chamber_constraints.py`, `chamber_sections.py`;
+> геометрия schema 2, legacy schema 1 читается. Инструкция `docs/V0.6_GUIDE.md`,
+> проверки `docs/V0.6.2_VALIDATION.md`. Физика топлива и wall-bound не заменены.
+
 > Исправления v0.6.1: ветка `codex/v0.6.1-fixes` от принятой v0.6 (`cf8c754`).
 > См. `docs/V0.6.1_VALIDATION.md` и обновлённую `docs/V0.6_GUIDE.md`.
 > Свободные жесты дуг, XLSX-точки, стабильные сечения и TXT-поставка; новая физика не добавлена.
