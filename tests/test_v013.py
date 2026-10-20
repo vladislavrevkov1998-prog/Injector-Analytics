@@ -314,8 +314,13 @@ class TestQtEditing(unittest.TestCase):
             self.w.plots.setCurrentIndex(0);self.w.plots.setCurrentIndex(1)
             self.assertIs(self.w.smoothcanvas,cached)
             self.assertEqual(smooth.call_count,1)
+        previous=dict(self.w._render_cache)
         self.w.draw_labels.setChecked(False)
-        self.assertEqual(len(self.w._render_cache),1)
+        self.assertIsNot(self.w.smoothcanvas,cached)
+        self.assertEqual(len(self.w._render_cache),len(previous)+1)
+        self.assertTrue(all(self.w._render_cache[key] is canvas for key,canvas in previous.items()))
+        self.w.draw_labels.setChecked(True)
+        self.assertIs(self.w.smoothcanvas,cached)
 
     def test_scale_undo_keeps_results_physics_edit_invalidates(self):
         self.results();original=self.w.results

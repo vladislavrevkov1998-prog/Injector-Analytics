@@ -177,7 +177,7 @@ class TestV06Migration(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     project_from_json(broken)
         broken = deepcopy(raw)
-        broken['settings']['geometry']['schema_version'] = 2
+        broken['settings']['geometry']['schema_version'] = 3
         with self.assertRaises(ValueError):
             project_from_json(broken)
         for schema in (1, 2):
@@ -203,7 +203,7 @@ class TestV06Migration(unittest.TestCase):
             ('invalid object parameters', lambda g: g['objects'][-1].__setitem__('parameters', [])),
             ('group missing member', lambda g: g['groups'][0].__setitem__('members', ['absent'])),
             ('negative group step', lambda g: g['groups'][0].__setitem__('steps_deg', [-10., 200., 170.])),
-            ('future geometry schema', lambda g: g.__setitem__('schema_version', 2)),
+            ('future geometry schema', lambda g: g.__setitem__('schema_version', 3)),
             ('boolean geometry schema', lambda g: g.__setitem__('schema_version', True)),
             ('invalid user type catalog', lambda g: g.__setitem__('types', [])),
         )

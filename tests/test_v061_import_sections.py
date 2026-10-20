@@ -112,13 +112,14 @@ class TestV061ImportUI(unittest.TestCase):
             with patch('fuelfield.chamber_gui.QFileDialog.getOpenFileName',return_value=(str(path),'')),patch('fuelfield.chamber_gui.PointImportDialog',return_value=dialog),patch.object(dialog,'exec_',return_value=QDialog.Rejected):self.e.import_points()
             self.assertEqual(project_to_json(self.w.cfg,self.w.nozzles),before);self.assertEqual(self.w.undo_stack.count(),0);dialog.close()
 
-    def test_moving_outlet_section_only_changes_calculation_coordinates(self):
+    def test_moving_farthest_section_updates_outlet_preserving_retained_profile(self):
         before=deepcopy(self.e.raw['primitives']);objects=deepcopy(self.e.raw['objects']);outlet=self.e.raw['outlet_z_mm']
         row=next(i for i,s in enumerate(self.e.raw['sections']) if s['is_outlet']);identity=self.e.raw['sections'][row]['id']
         self.assertFalse(self.e.section_table.item(row,2).flags() & Qt.ItemIsUserCheckable)
         self.e.pages.setCurrentIndex(3);self.edit_number(self.e.section_table,identity,1,'21.375')
-        self.assertEqual(self.e.raw['primitives'],before);self.assertEqual(self.e.raw['objects'],objects);self.assertEqual(self.e.raw['outlet_z_mm'],outlet)
-        self.assertEqual(self.w.cfg.z_mm,[0.,21.375,30.]);self.assertEqual(sum(s['is_outlet'] for s in self.e.raw['sections']),1)
+        self.assertEqual(self.e.raw['objects'],objects);self.assertEqual(self.e.raw['outlet_z_mm'],21.375)
+        self.assertEqual(self.e.raw['primitives'][2:],before[2:])
+        self.assertEqual(self.w.cfg.z_mm,[0.,21.375]);self.assertEqual(sum(s['is_outlet'] for s in self.e.raw['sections']),1)
         self.w.undo_stack.undo();self.assertEqual(self.w.cfg.z_mm,[0.,30.]);self.assertEqual(self.e.raw['primitives'],before)
 
     def test_sections_apply_even_when_variable_geometry_is_disabled(self):
