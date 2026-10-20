@@ -25,6 +25,7 @@ class TestV062Sketcher(unittest.TestCase):
     record=previous.TestV06GeometryUI.record
     row=previous.TestV06GeometryUI.row
     edit_number=previous.TestV06GeometryUI.edit_number
+    handle=previous.TestV06GeometryUI.handle
 
     def click_point(self,identity,role):
         handle=next(h for h in self.e.handles if h.identity==identity and h.role==role)
@@ -44,8 +45,23 @@ class TestV062Sketcher(unittest.TestCase):
         self.w.undo_stack.undo();self.assertEqual(project_to_json(self.w.cfg,self.w.nozzles),before)
 
     def add_tangent_line(self):
+        self.record('reference-arc')['radius']=Primitive(self.record('reference-arc')).radius
         line=dict(id='T1',wall='reference',kind='line',start=[15.,260.],end=[25.,265.],unit='mm',provenance={'keep':'operator'})
         self.e.raw['primitives'].append(line);self.assertTrue(self.e.commit('Synthetic tangent line'));self.w.undo_stack.clear();return deepcopy(line)
+
+    def test_endpoint_edit_after_explicit_radius_has_no_stale_derived_radius(self):
+        self.edit_number(self.e.primitive_table,'reference-arc',9,'12')
+        self.edit_number(self.e.primitive_table,'reference-arc',3,'6.125')
+        self.assertFalse(self.e._draft_invalid);arc=Primitive(self.record('reference-arc'));self.assertNotIn('radius',self.record('reference-arc'))
+        self.assertAlmostEqual(np.linalg.norm(arc.start-arc.center),np.linalg.norm(arc.end-arc.center),places=10);Chamber(self.w.cfg.geometry)
+
+    def test_native_endpoint_drag_after_radius_entry_stays_applied(self):
+        self.edit_number(self.e.primitive_table,'reference-arc',9,'12')
+        previous.TestV06GeometryUI.drag(self,'reference-arc',[6.,259.])
+        self.assertFalse(self.e._draft_invalid);self.assertNotIn('radius',self.record('reference-arc'));Chamber(self.w.cfg.geometry)
+        actual=Primitive(self.record('reference-arc'));handle=self.handle('reference-arc')
+        np.testing.assert_allclose([handle.pos().x(),-handle.pos().y()],actual.start,rtol=0,atol=1e-10)
+        self.assertEqual(self.w.undo_stack.count(),2)
 
     def test_tangent_dialog_adjusts_arc_and_fixes_line_without_toggle(self):
         line=self.add_tangent_line();old_arc=deepcopy(self.record('reference-arc'));dialog=ConstraintDialog(self.e.raw,'tangent',self.e)

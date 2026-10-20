@@ -166,7 +166,8 @@ def apply_constraints(raw,drivers=(),baseline=None):
             p['center']=((a+b)/2+(1-bulge*bulge)/(4*bulge)*np.array([-chord[1],chord[0]])).tolist()
     for identity,constraints in tangents.items():
         arc_ref,line_ref=_arc_line(constraints[0],records)
-        records[identity].update(tangent_arc(records[identity],arc_ref[1],records[line_ref[0]],line_ref[1]))
+        fitted=tangent_arc(records[identity],arc_ref[1],records[line_ref[0]],line_ref[1])
+        records[identity].clear();records[identity].update(fitted)
     _check_fixed(raw,result)
     if baseline is not None:_check_fixed(baseline,result)
     validate_constraints(result)

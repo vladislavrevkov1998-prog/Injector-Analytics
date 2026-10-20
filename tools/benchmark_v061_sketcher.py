@@ -18,7 +18,7 @@ from fuelfield.gui import MainWindow
 from fuelfield.chamber import Primitive
 from fuelfield.core import project_to_json
 
-parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--out',type=Path,required=True);args=parser.parse_args()
+parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--out',type=Path,required=True);parser.add_argument('--image-subdir',default='v0.6.1');parser.add_argument('--linked',action='store_true');args=parser.parse_args()
 def stats(values):return dict(samples=len(values),median_ms=round(float(np.median(values)),3),p95_ms=round(float(np.percentile(values,95)),3),max_ms=round(max(values),3))
 app=QApplication([]);app.setStyle('Fusion');w=MainWindow();w.resize(1480,930);w.show()
 source=root/'examples/demo_project_user_field.json';digest=hashlib.sha256(source.read_bytes()).hexdigest()
@@ -44,12 +44,29 @@ for role in ('start','end','center','body'):
         assert w.undo_stack.count()==1 and not e._draft_invalid
         assert e.raw!=original['settings']['geometry'];w.undo_stack.undo();app.processEvents();assert project_to_json(w.cfg,w.nozzles)==original
     reports[role]=dict(frame_ms=stats(samples),release_ms=stats(releases))
-images=args.out.parent/'images/v0.6.1';images.mkdir(parents=True,exist_ok=True);layouts=[]
+if args.linked:
+    e.raw['primitives'].append(dict(id='ОП2',wall='reference',kind='line',start=[20,radius],end=[30,radius+5],unit='mm'))
+    assert e.commit('Synthetic contact line')
+    assert e.create_constraint('tangent',dict(primitive_id='ОП1',endpoint='end'),dict(primitive_id='ОП2',endpoint='start'))
+    linked_original=project_to_json(w.cfg,w.nozzles);samples=[];releases=[]
+    for repeat in range(5):
+        w.undo_stack.clear();handle=next(h for h in e.handles if h.identity=='ОП1' and h.role=='start');view=e.sketch;start=view.mapFromScene(handle.pos())
+        QTest.mousePress(view.viewport(),Qt.LeftButton,pos=start);assert view.scene().mouseGrabberItem().role=='start'
+        for frame in range(30):
+            end=start+view.mapFromScene(QPointF(2*(frame+1)/30,-1.5*(frame+1)/30))-view.mapFromScene(QPointF(0,0))
+            began=time.perf_counter();event=QMouseEvent(QMouseEvent.MouseMove,QPointF(end),QPointF(view.viewport().mapToGlobal(end)),Qt.NoButton,Qt.LeftButton,Qt.NoModifier);app.sendEvent(view.viewport(),event);app.processEvents()
+            if frame>=5:samples.append((time.perf_counter()-began)*1000)
+        began=time.perf_counter();QTest.mouseRelease(view.viewport(),Qt.LeftButton,pos=end);app.processEvents();releases.append((time.perf_counter()-began)*1000)
+        assert w.undo_stack.count()==1 and not e._draft_invalid
+        from fuelfield.chamber_constraints import validate_constraints
+        validate_constraints(e.raw);w.undo_stack.undo();app.processEvents();assert project_to_json(w.cfg,w.nozzles)==linked_original
+    reports['tangent_free_end']=dict(frame_ms=stats(samples),release_ms=stats(releases))
+images=args.out.parent/'images'/args.image_subdir;images.mkdir(parents=True,exist_ok=True);layouts=[]
 for font_size in (10,13):
     app.setFont(QFont(app.font().family(),font_size));w.resize(1280,800);app.processEvents();e.fit();app.processEvents()
     layouts.append(dict(font_size=font_size,window_width=w.width(),window_height=w.height(),minimum_width=w.minimumSizeHint().width(),split=e.splitter.sizes()))
     assert w.width()==1280
     e.select('ОП1');w.grab().save(str(images/f'sketcher_1280_font{font_size}.png'))
 assert hashlib.sha256(source.read_bytes()).hexdigest()==digest
-report=dict(project=source.name,sha256=digest,method='Linux Qt offscreen, real first-click press/move/release and repaint, 20 gestures, 500 measured frames after warmup, 140 nozzles, no timers disabled',arcs=reports,layouts=layouts,one_gesture_one_undo=True,original_project_unchanged=True)
+report=dict(project=source.name,sha256=digest,method=f'Linux Qt offscreen, real first-click press/move/release and repaint, {25 if args.linked else 20} gestures, {625 if args.linked else 500} measured frames after warmup, 140 nozzles, no timers disabled',arcs=reports,layouts=layouts,one_gesture_one_undo=True,original_project_unchanged=True)
 args.out.write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n');print(json.dumps(report,ensure_ascii=False,indent=2));w.close()

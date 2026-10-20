@@ -467,6 +467,7 @@ class GeometryEditor(QWidget):
                         elif old['kind']=='arc' and shape and shape.issubset({5,6}):p.update(move_endpoint(converted,'end',p['end']))
                         elif old['kind']=='arc' and shape and shape.issubset({7,8}):p.update(translate(converted,np.array(p['center'])-converted['center']))
                         elif shape:p.pop('radius',None)
+                        if shape and 9 not in shape:p.pop('radius',None)
                     else:
                         for key in ('center','radius','clockwise'):p.pop(key,None)
                         if p['kind']=='point':p.pop('end',None)
@@ -518,7 +519,8 @@ class GeometryEditor(QWidget):
                 for p in self.raw['primitives']:
                     factor=UNITS[p.get('unit','mm')]
                     for role in ('start','end'):
-                        if role in p and abs(p[role][0]*factor-old)<=TOL:p.update(move_endpoint(p,role,[self.base.value()/factor,p[role][1]]))
+                        if role in p and abs(p[role][0]*factor-old)<=TOL:
+                            moved=move_endpoint(p,role,[self.base.value()/factor,p[role][1]]);p.clear();p.update(moved)
             self.commit('Параметры геометрии')
         except ValueError as exc:self.raw=before;self.rebuild();self.message('Параметры не применены: '+str(exc),True)
     def commit(self,label,groups=False,sections=False):
@@ -800,7 +802,8 @@ class GeometryEditor(QWidget):
                     a=self.sketch.mapFromScene(QPointF(z,-r));b=self.sketch.mapFromScene(QPointF(candidate[0],-candidate[1]))
                     if (a-b).manhattanLength()<=8:z,r=candidate
             point=[z/factor,r/factor]
-            try:p.update(move_endpoint(p,role,point))
+            try:
+                moved=move_endpoint(p,role,point);p.clear();p.update(moved)
             except ValueError:p[role]=point;p.pop('radius',None);raise
     def finish_drag(self,identity,role,position,is_object,before,before_nozzles):
         self.commit('Sketcher: переместить '+identity)
