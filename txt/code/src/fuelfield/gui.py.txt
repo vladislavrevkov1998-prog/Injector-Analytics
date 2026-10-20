@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json, os, sys, traceback
 from copy import deepcopy
+from collections import OrderedDict
 from pathlib import Path
 import numpy as np
 from PyQt5.QtCore import Qt, QThread, QObject, pyqtSignal, QTimer, QSize
@@ -36,7 +37,7 @@ from .numeric_input import DecimalSpinBox
 from .coordinates import to_global,from_global,grid_angles,plot_x,period,x_label,decorate_axes,polar_ticks
 from .axes_settings import open_axes_settings
 from .analytics_io import write_epures_xlsx
-from .comparison import ComparisonPanel
+from .comparison import ComparisonPanel,ResultCanvas
 from .graph_selection import GraphSelection
 from .graph_links import GraphLinks
 from .regression_gui import RegressionDialog
@@ -231,6 +232,7 @@ class PlotStack(QStackedWidget):
 
 
 class MainWindow(QMainWindow):
+    RENDER_CACHE_LIMIT=24
     def __init__(self):
         super().__init__()
         self.setWindowTitle('Fuel Field Pilot — v'+__version__)
@@ -246,7 +248,7 @@ class MainWindow(QMainWindow):
         self.project_file=None
         self.thread=None
         self._restoring=True
-        self._render_cache={}
+        self._render_cache=OrderedDict()
         self._revision=0
         self.undo_stack=QUndoStack(self)
         self.undo_stack.setUndoLimit(100)
@@ -664,22 +666,22 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         plots=QTabWidget();self.plots=plots
         self.plot_stacks=[]
         self.figmap=Figure(figsize=(6,6),tight_layout=True)
-        self.mapcanvas=FigureCanvas(self.figmap)
+        self.mapcanvas=ResultCanvas(self.figmap)
         stack=PlotStack();stack.addWidget(self.mapcanvas);self.plot_stacks.append(stack)
         plots.addTab(stack,'Матрица (консервативная)')
         self.figsmooth=Figure(figsize=(7,7),tight_layout=True)
-        self.smoothcanvas=FigureCanvas(self.figsmooth)
+        self.smoothcanvas=ResultCanvas(self.figsmooth)
         stack=PlotStack();stack.addWidget(self.smoothcanvas);self.plot_stacks.append(stack)
         field_page=QWidget();field_layout=QVBoxLayout(field_page);field_layout.setContentsMargins(0,0,0,0);field_layout.addWidget(stack,1)
         self.time_controls=QWidget();time_layout=QVBoxLayout(self.time_controls);time_layout.setContentsMargins(4,2,4,2);self.time_label=QLabel();self.time_label.setWordWrap(True);self.time_label.setMinimumHeight(self.time_label.fontMetrics().lineSpacing()*3+8);time_layout.addWidget(self.time_label);self.time_slider=QSlider(Qt.Horizontal);self.time_slider.setSingleStep(1);self.time_slider.setPageStep(1);time_layout.addWidget(self.time_slider);field_layout.addWidget(self.time_controls);self.time_controls.hide()
         self.time_slider.valueChanged.connect(self._schedule_time_field);self.time_slider.sliderReleased.connect(self._update_time_field)
         plots.addTab(field_page,'Подробное суммарное поле')
         self.figroses=Figure(figsize=(7,7),tight_layout=True)
-        self.rosescanvas=FigureCanvas(self.figroses)
+        self.rosescanvas=ResultCanvas(self.figroses)
         stack=PlotStack();stack.addWidget(self.rosescanvas);self.plot_stacks.append(stack)
         plots.addTab(stack,'140 полярных эпюр на общей схеме')
         self.figcurves=Figure(figsize=(10,7),tight_layout=True)
-        self.curvecanvas=FigureCanvas(self.figcurves)
+        self.curvecanvas=ResultCanvas(self.figcurves)
         stack=PlotStack();stack.addWidget(self.curvecanvas);self.plot_stacks.append(stack)
         plots.addTab(stack,'Окружные эпюры радиальных уровней')
         plots.currentChanged.connect(self._plot_result)
@@ -986,7 +988,9 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.undo_stack.push(ProjectEdit(self,before,state,label))
         self.geometry_editor.load(self.cfg,self.nozzles)
         if physical_before!=physical_after:self._invalidate_results()
-        else:self._invalidate_render();self._plot_result();self.comparison.draw()
+        else:
+            if any(before['settings'].get(k)!=state['settings'].get(k) for k in state['settings'] if k.startswith('color_')):self._invalidate_render()
+            self._plot_result();self.comparison.draw()
         self._queue_preview()
 
     def _restore_edit(self,state):
@@ -1001,7 +1005,9 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             self._edit_state=deepcopy(state)
         finally:self._restoring=False
         if physical(previous)!=physical(state):self._invalidate_results()
-        else:self._invalidate_render();self._plot_result();self.comparison.draw()
+        else:
+            if any(previous['settings'].get(k)!=state['settings'].get(k) for k in state['settings'] if k.startswith('color_')):self._invalidate_render()
+            self._plot_result();self.comparison.draw()
         self._queue_preview()
 
     def _invalidate_render(self):
@@ -1405,22 +1411,27 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         if hasattr(canvas,'interaction'):canvas.interaction.reset_zoom()
 
     def _comparison_radius_changed(self,*args):
-        self._invalidate_render();self._plot_result()
+        self._plot_result()
 
     def _representation_changed(self,*args):
         self.volume_interval.setEnabled(self.metric.currentData()=='volume')
         self.metric_equation.setText(EQUATIONS[self.metric.currentData()])
-        self._invalidate_render();self._plot_result();self.comparison.draw()
+        self._plot_result();self.comparison.draw()
 
     def _render_view(self,view,i):
-        key=(i,view,self.draw_outlines.isChecked(),self.draw_labels.isChecked(),
-             self.draw_rose_over_field.isChecked(),self.rose_scale.value(),self.metric.currentData(),self.volume_interval.value(),self.compare_radius.currentData(),self.plot_count.value(),self.plot_columns.value(),tuple(self.graph_selection.selected),self.x_axis.currentData())
+        metric=self.metric.currentData();interval=self.volume_interval.value() if metric=='volume' else None
+        marker=(self.draw_outlines.isChecked(),self.draw_labels.isChecked())
+        if view==0:options=marker+(metric,interval)
+        elif view==1:options=marker+(self.draw_rose_over_field.isChecked(),self.rose_scale.value() if self.draw_rose_over_field.isChecked() else None)
+        elif view==2:options=marker+(self.rose_scale.value(),)
+        else:options=(metric,interval,self.compare_radius.currentData(),self.plot_count.value(),self.plot_columns.value(),tuple(self.graph_selection.selected),self.x_axis.currentData())
+        key=(i,view)+options
         fig_name,canvas_name=[('figmap','mapcanvas'),('figsmooth','smoothcanvas'),
                               ('figroses','rosescanvas'),('figcurves','curvecanvas')][view]
         stack=self.plot_stacks[view]
         if key not in self._render_cache:
             fig=Figure(figsize=(10,7) if view==3 else (7,7),tight_layout=view!=3)
-            canvas=FigureCanvas(fig)
+            canvas=ResultCanvas(fig)
             setattr(self,fig_name,fig);setattr(self,canvas_name,canvas)
             p=self.results[i]
             if view==0:self._draw_map(p)
@@ -1434,8 +1445,14 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             stack.addWidget(canvas)
             self._render_cache[key]=canvas
         canvas=self._render_cache[key]
+        self._render_cache.move_to_end(key)
         setattr(self,fig_name,canvas.figure);setattr(self,canvas_name,canvas)
         stack.setCurrentWidget(canvas)
+        while len(self._render_cache)>self.RENDER_CACHE_LIMIT:
+            _,old=self._render_cache.popitem(last=False)
+            for old_stack in self.plot_stacks:
+                if old_stack.indexOf(old)>=0:old_stack.removeWidget(old);break
+            old.deleteLater()
         if view==1 and self.quasi_result:self._update_time_field(canvas,i)
         if hasattr(self,"graph_links"):QTimer.singleShot(0,self.graph_links.refresh)
         return canvas.figure
@@ -1445,7 +1462,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
 
     def _view_changed(self,*args):
         if self._restoring:return
-        self._invalidate_render();self._plot_result()
+        self._plot_result()
 
     def _draw_map(self,p):
         self.figmap.clear()

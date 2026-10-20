@@ -1,11 +1,12 @@
 """Independent comparison data and charts, synchronized by physical coordinates."""
 import json
 import textwrap
+from collections import OrderedDict
 import numpy as np
 from pathlib import Path
-from PyQt5.QtCore import QObject,QThread,pyqtSignal,QTimer
+from PyQt5.QtCore import QObject,QThread,pyqtSignal,QTimer,QSize
 from PyQt5.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QComboBox,QPushButton,
-    QLabel,QFileDialog,QCheckBox,QMessageBox,QSpinBox)
+    QLabel,QFileDialog,QCheckBox,QMessageBox,QSpinBox,QStackedWidget)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from .core import project_from_json,calculate_plane,evaluate_continuous_field
@@ -17,6 +18,34 @@ from .plot_interaction import attach_interaction
 from .graph_selection import GraphSelection
 from .quasi import calculate_quasi,CalculationCancelled,CalculationOutput
 from .coordinates import grid_angles,polar_ticks,plot_x,x_label,decorate_axes,from_global
+
+
+class ResultCanvas(FigureCanvasQTAgg):
+    """Keep hidden cached figures dirty without rendering their resize events.
+
+    Explicit draw/save still works for exports. Only deferred Qt paints wait
+    for visibility, including a paint queued just before another view opens.
+    """
+    def __init__(self,*args,**kwargs):
+        self._hidden_draw_pending=False
+        super().__init__(*args,**kwargs)
+    def draw_idle(self):
+        if not self.isVisible():self._hidden_draw_pending=True;return
+        super().draw_idle()
+    def _draw_idle(self):
+        if not self.isVisible():
+            if self._draw_pending:self._hidden_draw_pending=True;self._draw_pending=False
+            return
+        super()._draw_idle()
+    def showEvent(self,event):
+        super().showEvent(event)
+        if self._hidden_draw_pending:
+            self._hidden_draw_pending=False;super().draw_idle()
+
+
+class ComparisonStack(QStackedWidget):
+    def sizeHint(self):return QSize(400,240)
+    def minimumSizeHint(self):return QSize(160,0)
 
 def x_unit(label):
     if label.strip().lower() in ('cell_index','measurement_index','номер ячейки'):return 'cell_index'
@@ -47,9 +76,11 @@ class ProjectWorker(QObject):
         finally:self.finished.emit()
 
 class ComparisonPanel(QWidget):
+    CHART_CACHE_LIMIT=12
     def __init__(self,owner):
         super().__init__(owner);self.owner=owner;self.planes=[];self.cfg=None;self.tables=[];self.thread=None
         self._loading_cfg=None;self._chart_key=None;self.fields=[];self.nozzles=[]
+        self._chart_cache=OrderedDict();self._syncing=False;self._reuse_chart_canvas=True
         layout=QVBoxLayout(self);top=QHBoxLayout()
         top.addWidget(QLabel('Загрузить:'))
         self.load_button=QPushButton('JSON');self.excel_button=QPushButton('Excel');self.csv_button=QPushButton('CSV')
@@ -79,7 +110,8 @@ class ComparisonPanel(QWidget):
         reset=QPushButton("Исходный масштаб");reset.clicked.connect(lambda:self.interaction.reset_zoom());grid_controls.addWidget(reset)
         self.axes_button=QPushButton("Оси…");self.axes_button.clicked.connect(self.open_axes);grid_controls.addWidget(self.axes_button);grid_controls.addStretch()
         layout.addLayout(grid_controls)
-        self.figure=Figure(figsize=(6,5),tight_layout=True);self.canvas=FigureCanvasQTAgg(self.figure);self.canvas.setMinimumSize(160,0);layout.addWidget(self.canvas,1);self.interaction=attach_interaction(self.canvas)
+        self.figure=Figure(figsize=(6,5),tight_layout=True);self.canvas=ResultCanvas(self.figure);self.canvas.setMinimumSize(160,0)
+        self.canvas_stack=ComparisonStack();self.canvas_stack.addWidget(self.canvas);layout.addWidget(self.canvas_stack,1);self.interaction=attach_interaction(self.canvas)
         self.plane.currentIndexChanged.connect(self._plane_changed)
         for w in (self.radius,self.kind,self.x,self.y,self.y2):w.currentIndexChanged.connect(self.draw)
         self.plot_count.valueChanged.connect(self.draw);self.plot_columns.valueChanged.connect(self.draw)
@@ -102,12 +134,14 @@ class ComparisonPanel(QWidget):
             self.notice.setText('Расчёт второго проекта…');self.thread.start()
         else:
             tables=read_chart_tables(path)
+            self._clear_chart_cache()
             self.tables=tables;self.planes=[];self.cfg=None;self.fields=[];self.nozzles=[]
             self.view.blockSignals(True);self.view.setCurrentIndex(0);self.view.blockSignals(False);self.view.setEnabled(False)
             self._populate([t[0] for t in tables]);self.table_controls.show();self.radius.setEnabled(False);self.sync.setEnabled(False);self._plane_changed()
     def _populate(self,labels):
         self.plane.blockSignals(True);self.plane.clear();self.plane.addItems(labels);self.plane.blockSignals(False)
     def _project_done(self,planes):
+        self._clear_chart_cache()
         self.planes=planes;self.cfg=self._loading_cfg;self.tables=[];self.fields=list(getattr(planes,'fields',()));self.nozzles=getattr(self,"_loading_ns",[]);self.view.setEnabled(True)
         self.quasi_result=getattr(planes,'quasi_result',None)
         self.table_controls.hide();self.radius.setEnabled(True);self.sync.setEnabled(True)
@@ -134,7 +168,7 @@ class ComparisonPanel(QWidget):
                 k=matching_index(self.planes[i].radial_centers_mm,old)
                 if k is not None:self.radius.setCurrentIndex(k)
             self.radius.blockSignals(False)
-        self.draw()
+        self.draw(defer_hidden=self._syncing)
     def sync_from_primary(self,*args):
         if not self.planes:return
         if self.sync.isChecked() and self.owner.results:
@@ -142,17 +176,21 @@ class ComparisonPanel(QWidget):
             j=matching_index([v.z_mm for v in self.planes],p.z_mm)
             r=self.owner.compare_radius.currentData()
             if j is None:
-                self.notice.setText('Несовместимые z: совпадающего физического сечения нет. Выберите справа вручную.');self.draw();return
-            self.plane.setCurrentIndex(j)
+                self.notice.setText('Несовместимые z: совпадающего физического сечения нет. Выберите справа вручную.');self.draw(defer_hidden=True);return
+            self._syncing=True
+            try:self.plane.setCurrentIndex(j)
+            finally:self._syncing=False
             k=matching_index(self.planes[j].radial_centers_mm,r) if r is not None else None
             if k is None:
-                self.notice.setText('Радиальные уровни различаются: совпадающего R нет. Выберите справа вручную.');self.draw();return
-            self.radius.setCurrentIndex(k)
+                self.notice.setText('Радиальные уровни различаются: совпадающего R нет. Выберите справа вручную.');self.draw(defer_hidden=True);return
+            self.radius.blockSignals(True)
+            try:self.radius.setCurrentIndex(k)
+            finally:self.radius.blockSignals(False)
             compatible=(len(p.radial_centers_mm)==len(self.planes[j].radial_centers_mm) and np.allclose(p.radial_centers_mm,self.planes[j].radial_centers_mm,rtol=0,atol=1e-7) and len(p.theta_centers_deg)==len(self.planes[j].theta_centers_deg) and np.allclose(p.theta_centers_deg,self.planes[j].theta_centers_deg,rtol=0,atol=1e-7) and np.allclose(p.radial_edges_mm,self.planes[j].radial_edges_mm,rtol=0,atol=1e-7))
             self.notice.setText('z и R совпадают.' if compatible else 'z и R совпадают; сетки различаются. Расходы разных ячеек напрямую не сопоставимы.')
         elif not self.owner.results:self.notice.setText('Второй проект рассчитан. Рассчитайте основной проект для синхронизации.')
         else:self.notice.setText('Независимый выбор сечения и радиуса.')
-        self.draw()
+        self.draw(defer_hidden=True)
     def _table_x(self,raw,label):
         unit=x_unit(label);cfg=self.owner.cfg;mode=self.owner.x_axis.currentData();order=np.arange(len(raw))
         if unit not in ('angle_deg','cell_index'):return raw,order,label,unit
@@ -168,10 +206,41 @@ class ComparisonPanel(QWidget):
         else:ax.plot(x,y,label=label,color=color)
     def _state_key(self):
         i=max(0,self.plane.currentIndex())
+        view=self.view.currentIndex();metric=self.owner.metric.currentData()
+        interval=self.owner.volume_interval.value() if metric=='volume' else None
+        if self.planes and view:
+            cfg=self.cfg;p=self.planes[i]
+            color=(cfg.color_scale_mode,cfg.color_vmin,cfg.color_vmax,cfg.color_out_of_range,cfg.color_shared_z)
+            if view==2:return ('field',id(p),id(self.fields[i]) if i<len(self.fields) else None,color)
+            return ('matrix',id(p),cfg.density_kg_m3,metric,interval,cfg.theta_zero_deg,cfg.theta_direction,color)
         if self.tables:source=('table',id(self.tables),i,self.x.currentData(),self.y.currentData(),self.y2.currentData())
-        elif self.planes:source=('project',id(self.planes[i]),self.cfg.density_kg_m3,self.owner.metric.currentData(),self.owner.volume_interval.value(),self.radius.currentData())
+        elif self.planes:source=('project',id(self.planes[i]),self.cfg.density_kg_m3,metric,interval,self.radius.currentData())
         else:source=('empty',)
         return source+(self.view.currentIndex(),self.owner.cfg.theta_zero_deg,self.owner.cfg.theta_direction,self.owner.x_axis.currentData(),self.x_reference.currentData(),self.kind.currentIndex(),self.plot_count.value(),self.plot_columns.value(),tuple(self.graph_selection.selected))
+
+    def showEvent(self,event):
+        super().showEvent(event)
+        if hasattr(self,'canvas_stack'):self.draw()
+    def _clear_chart_cache(self):
+        self._chart_key=None;self._chart_cache.clear()
+        if not hasattr(self,'canvas_stack'):return
+        # A newly loaded file replaces the currently displayed chart in place.
+        # Existing plot/link callers may hold that public canvas reference.
+        keep=self.canvas
+        for index in range(self.canvas_stack.count()-1,-1,-1):
+            widget=self.canvas_stack.widget(index)
+            if widget is keep:continue
+            self.canvas_stack.removeWidget(widget);widget.deleteLater()
+        self.interaction.clear_artists();self.figure.clear();self._reuse_chart_canvas=True
+    def _select_chart(self,canvas,key):
+        self.canvas=canvas;self.figure=canvas.figure;self.interaction=canvas.interaction;self._chart_key=key
+        self.canvas_stack.setCurrentWidget(canvas);self._refresh_links()
+    def _remember_chart(self):
+        key=self._state_key();self._chart_cache[key]=self.canvas;self._chart_cache.move_to_end(key)
+        self._select_chart(self.canvas,key)
+        while len(self._chart_cache)>self.CHART_CACHE_LIMIT:
+            _,old=self._chart_cache.popitem(last=False)
+            self.canvas_stack.removeWidget(old);old.deleteLater()
 
     def open_axes(self):
         if self.view.currentIndex()==0:self.axes_dialog=open_axes_settings(self.canvas,self)
@@ -188,8 +257,8 @@ class ComparisonPanel(QWidget):
             draw_detailed_map(self.figure,self.fields[i],p,cfg,self.nozzles,outlines=False,labels=False,shared_values=[f.masked_flux_kg_m2_s for f in self.fields])
             if p.is_composite:self.figure.axes[0].set_title(f'Мгновенное поле сравнения: шаг 0, z={p.z_mm:g} мм',fontsize=10)
         else:self.figure.add_subplot(111).text(.1,.5,'Перезагрузите JSON для подробного поля')
-        self._chart_key=self._state_key();self.interaction.axes=[];self.interaction.original={};self.canvas.draw_idle();self._refresh_links()
-    def draw(self,*args):
+        self.interaction.axes=[];self.interaction.original={};self._remember_chart();self.canvas.draw_idle()
+    def draw(self,*args,defer_hidden=False):
         if hasattr(self.owner,'fit_scale_button'):self.owner.fit_scale_button.setEnabled(bool(self.owner.results and self.owner.split_button.isChecked() and (self.tables or self.planes) and self.view.currentIndex()==0))
         i=max(0,self.plane.currentIndex())
         epures=self.view.currentIndex()==0
@@ -202,17 +271,25 @@ class ComparisonPanel(QWidget):
             p=self.planes[i];start=max(0,self.radius.currentIndex());radii=p.radial_centers_mm
             self.graph_selection.configure([(float(r),f'R={r:g} мм') for r in radii],
                 [float(radii[(start+k)%len(radii)]) for k in range(len(radii))],identity=('project',tuple(radii)))
-        if self._state_key()==self._chart_key:return
-        # One replacement of the axes resets annotations and zoom for changed data.
-        self.interaction.clear_artists()
-        self.figure.clear()
+        if defer_hidden and not self.isVisible():return
+        key=self._state_key()
+        if key==self._chart_key:return
+        if key in self._chart_cache:
+            self._chart_cache.move_to_end(key);self._select_chart(self._chart_cache[key],key);return
+        # Each distinct dataset/view owns its annotations and zoom; revisiting
+        # a warm z reuses the same axes instead of recreating the tick layout.
+        if self._reuse_chart_canvas:
+            self._reuse_chart_canvas=False;self.interaction.clear_artists();self.figure.clear()
+        else:
+            self.figure=Figure(figsize=(6,5),tight_layout=True);self.canvas=ResultCanvas(self.figure);self.canvas.setMinimumSize(160,0)
+            self.interaction=attach_interaction(self.canvas);self.canvas_stack.addWidget(self.canvas)
         if self.planes and self.view.currentIndex()!=0:self._draw_field(i);return
         i=max(0,self.plane.currentIndex())
         series=[];secondary=None
         if self.tables:
             name,headers,data=self.tables[i];xc,yc=self.x.currentData(),self.y.currentData()
             if xc not in data or yc not in data:
-                self.interaction.reset_axes();self.canvas.draw_idle();return
+                self.interaction.reset_axes();self._remember_chart();self.canvas.draw_idle();return
             secondary=self.y2.currentData()
             choices=[yc]+[k for k in data if k not in (xc,yc,secondary)]
             maximum=len(choices)
@@ -241,5 +318,4 @@ class ComparisonPanel(QWidget):
                 other=ax.twinx();self._series(other,tx,data[secondary][table_order],headers[secondary],color='#ad4e21')
                 other._compare_x=ax._compare_x;other._compare_frame=getattr(ax,'_compare_frame',None);other._compare_y=headers[secondary][headers[secondary].find('[')+1:headers[secondary].find(']')] if '[' in headers[secondary] and ']' in headers[secondary] else headers[secondary]
                 other.set_ylabel(textwrap.fill(headers[secondary],18),fontsize=8);other.tick_params(axis='y',colors='#ad4e21',labelsize=7)
-        self._chart_key=self._state_key()
-        self.interaction.reset_axes();self.canvas.draw_idle();self._refresh_links()
+        self.interaction.reset_axes();self._remember_chart();self.canvas.draw_idle()

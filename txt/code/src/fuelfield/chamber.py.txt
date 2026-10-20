@@ -94,7 +94,7 @@ class Primitive:
 
 class Chamber:
     def __init__(self,raw):
-        if not isinstance(raw,dict) or type(raw.get('schema_version',1)) is not int or raw.get('schema_version',1)!=1:raise ValueError('Неподдерживаемая схема геометрии')
+        if not isinstance(raw,dict) or type(raw.get('schema_version',1)) is not int or raw.get('schema_version',1) not in (1,2):raise ValueError('Неподдерживаемая схема геометрии')
         self.raw=deepcopy(raw)
         if not isinstance(raw.get('enabled',False),bool):raise ValueError('enabled геометрии должен быть логическим')
         self.enabled=raw.get('enabled',False)
@@ -104,7 +104,10 @@ class Chamber:
         if self.error<=0 or self.step<=0:raise ValueError('Погрешность хорды и внутренний шаг должны быть >0')
         primitives=raw.get('primitives',[])
         if not isinstance(primitives,list):raise ValueError('Примитивы: список')
+        if raw.get('schema_version',1)==1 and ('constraints' in raw or any(p.get('fixed',False) for p in primitives if isinstance(p,dict))):raise ValueError('Связи и фиксация требуют схему геометрии 2')
         self.primitives=tuple(Primitive(p) for p in primitives)
+        from .chamber_constraints import validate_constraints
+        validate_constraints(raw)
         ids=[p.id for p in self.primitives]
         if len(ids)!=len(set(ids)):raise ValueError('Повторный ID примитива')
         self.profiles={wall:sorted((p for p in self.primitives if p.wall==wall and p.kind!='point'),key=lambda p:p.lo) for wall in ('inner','outer')}
@@ -187,7 +190,9 @@ class Chamber:
                 if isinstance(nid,bool) or not isinstance(nid,int) or not 1<=nid<=140:raise ValueError('Объект форсунки ссылается на ID 1…140')
                 nozzle_ids.append(nid)
             else:
-                z=number(obj.get('z_mm'),'z объекта');radius=number(obj.get('radius_mm'),'R объекта');self.bounds(z)
+                z=number(obj.get('z_mm'),'z объекта');radius=number(obj.get('radius_mm'),'R объекта')
+                try:self.bounds(z)
+                except ValueError as exc:raise ValueError(obj['id']+': z объекта '+str(z)+' вне покрытого профилем интервала') from exc
                 if radius<=0:raise ValueError('R объекта должен быть >0')
                 theta=number(obj.get('theta_deg',0),'θ объекта')
                 if not 0<=theta<360:raise ValueError('Угол объекта нормализуйте в [0,360)')

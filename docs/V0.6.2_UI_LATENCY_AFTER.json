@@ -1,0 +1,822 @@
+{
+  "source": "/workspace/Injector-Analytics",
+  "source_gui_sha256": "b22b281591b7ae0012b433161cd44234ba1e309dd501f535d7ef6cf129b83fa6",
+  "fixture": "examples/demo_project_user_field.json",
+  "nozzles": 140,
+  "worker_ms": 3268.376,
+  "config": {
+    "z_mm": [
+      0.0,
+      15.0,
+      30.0,
+      50.0
+    ],
+    "n_sample_radial": 80,
+    "n_sample_angular": 720,
+    "preview_resolution": 720
+  },
+  "records": [
+    {
+      "name": "cold_view_1",
+      "dispatch_ms": 127.339,
+      "total_ms": 527.205,
+      "cache_before": 1,
+      "cache_after": 2,
+      "retained_keys": 1,
+      "builds": [
+        {
+          "name": "_draw_smooth",
+          "ms": 123.906
+        }
+      ],
+      "draws": [
+        {
+          "ms": 387.818,
+          "visible": true,
+          "canvas": 140456525042256,
+          "title": "Подробное поле без агрегирования 6×140 · z=0 мм"
+        }
+      ],
+      "profiled": false
+    },
+    {
+      "name": "cold_view_2",
+      "dispatch_ms": 542.475,
+      "total_ms": 902.747,
+      "cache_before": 2,
+      "cache_after": 3,
+      "retained_keys": 2,
+      "builds": [
+        {
+          "name": "_draw_roses",
+          "ms": 539.295
+        }
+      ],
+      "draws": [
+        {
+          "ms": 346.445,
+          "visible": true,
+          "canvas": 140456498897136,
+          "title": "Индивидуальные полярные эпюры · z=0 мм"
+        }
+      ],
+      "profiled": false
+    },
+    {
+      "name": "cold_view_3",
+      "dispatch_ms": 129.319,
+      "total_ms": 542.577,
+      "cache_before": 3,
+      "cache_after": 4,
+      "retained_keys": 3,
+      "builds": [
+        {
+          "name": "_draw_curves",
+          "ms": 37.256
+        }
+      ],
+      "draws": [
+        {
+          "ms": 402.318,
+          "visible": true,
+          "canvas": 140456452994064,
+          "title": "Уровень 1: R=275.00 мм · сравнение"
+        }
+      ],
+      "profiled": false
+    },
+    {
+      "name": "cold_view_0",
+      "dispatch_ms": 1.102,
+      "total_ms": 9.242,
+      "cache_before": 4,
+      "cache_after": 4,
+      "retained_keys": 4,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "warm_view_0_1",
+      "dispatch_ms": 0.826,
+      "total_ms": 9.671,
+      "cache_before": 4,
+      "cache_after": 4,
+      "retained_keys": 4,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "warm_view_0_2",
+      "dispatch_ms": 1.728,
+      "total_ms": 10.876,
+      "cache_before": 4,
+      "cache_after": 4,
+      "retained_keys": 4,
+      "builds": [],
+      "draws": [],
+      "profiled": true
+    },
+    {
+      "name": "warm_view_0_3",
+      "dispatch_ms": 0.85,
+      "total_ms": 7.725,
+      "cache_before": 4,
+      "cache_after": 4,
+      "retained_keys": 4,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "warm_view_0_0",
+      "dispatch_ms": 0.948,
+      "total_ms": 9.027,
+      "cache_before": 4,
+      "cache_after": 4,
+      "retained_keys": 4,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "warm_view_1_1",
+      "dispatch_ms": 0.837,
+      "total_ms": 9.729,
+      "cache_before": 4,
+      "cache_after": 4,
+      "retained_keys": 4,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "warm_view_1_2",
+      "dispatch_ms": 0.822,
+      "total_ms": 10.454,
+      "cache_before": 4,
+      "cache_after": 4,
+      "retained_keys": 4,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "warm_view_1_3",
+      "dispatch_ms": 1.979,
+      "total_ms": 12.361,
+      "cache_before": 4,
+      "cache_after": 4,
+      "retained_keys": 4,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "warm_view_1_0",
+      "dispatch_ms": 1.184,
+      "total_ms": 11.643,
+      "cache_before": 4,
+      "cache_after": 4,
+      "retained_keys": 4,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "cold_z_1",
+      "dispatch_ms": 95.15,
+      "total_ms": 485.696,
+      "cache_before": 4,
+      "cache_after": 5,
+      "retained_keys": 4,
+      "builds": [
+        {
+          "name": "_draw_map",
+          "ms": 91.992
+        }
+      ],
+      "draws": [
+        {
+          "ms": 374.836,
+          "visible": true,
+          "canvas": 140456450145120,
+          "title": "Плотность расхода, кг/(м²·с) · z=15 мм"
+        }
+      ],
+      "profiled": false
+    },
+    {
+      "name": "cold_z_2",
+      "dispatch_ms": 92.34,
+      "total_ms": 469.056,
+      "cache_before": 5,
+      "cache_after": 6,
+      "retained_keys": 5,
+      "builds": [
+        {
+          "name": "_draw_map",
+          "ms": 89.175
+        }
+      ],
+      "draws": [
+        {
+          "ms": 364.004,
+          "visible": true,
+          "canvas": 140456449521952,
+          "title": "Плотность расхода, кг/(м²·с) · z=30 мм"
+        }
+      ],
+      "profiled": false
+    },
+    {
+      "name": "cold_z_3",
+      "dispatch_ms": 107.584,
+      "total_ms": 490.526,
+      "cache_before": 6,
+      "cache_after": 7,
+      "retained_keys": 6,
+      "builds": [
+        {
+          "name": "_draw_map",
+          "ms": 103.4
+        }
+      ],
+      "draws": [
+        {
+          "ms": 367.83,
+          "visible": true,
+          "canvas": 140456447095824,
+          "title": "Плотность расхода, кг/(м²·с) · z=50 мм"
+        }
+      ],
+      "profiled": false
+    },
+    {
+      "name": "cold_z_0",
+      "dispatch_ms": 1.103,
+      "total_ms": 13.97,
+      "cache_before": 7,
+      "cache_after": 7,
+      "retained_keys": 7,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "warm_z_1",
+      "dispatch_ms": 0.681,
+      "total_ms": 13.518,
+      "cache_before": 7,
+      "cache_after": 7,
+      "retained_keys": 7,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "warm_z_2",
+      "dispatch_ms": 1.076,
+      "total_ms": 21.327,
+      "cache_before": 7,
+      "cache_after": 7,
+      "retained_keys": 7,
+      "builds": [],
+      "draws": [],
+      "profiled": true
+    },
+    {
+      "name": "warm_z_3",
+      "dispatch_ms": 0.986,
+      "total_ms": 12.432,
+      "cache_before": 7,
+      "cache_after": 7,
+      "retained_keys": 7,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "warm_z_0",
+      "dispatch_ms": 0.625,
+      "total_ms": 10.8,
+      "cache_before": 7,
+      "cache_after": 7,
+      "retained_keys": 7,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "return_from_tab_0",
+      "dispatch_ms": 3.47,
+      "total_ms": 16.966,
+      "cache_before": 7,
+      "cache_after": 7,
+      "retained_keys": 7,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "return_from_tab_1",
+      "dispatch_ms": 1.97,
+      "total_ms": 18.499,
+      "cache_before": 7,
+      "cache_after": 7,
+      "retained_keys": 7,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "return_from_tab_2",
+      "dispatch_ms": 1.923,
+      "total_ms": 15.747,
+      "cache_before": 7,
+      "cache_after": 7,
+      "retained_keys": 7,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "radius_change",
+      "dispatch_ms": 120.131,
+      "total_ms": 935.03,
+      "cache_before": 7,
+      "cache_after": 8,
+      "retained_keys": 7,
+      "builds": [
+        {
+          "name": "_draw_curves",
+          "ms": 94.12
+        }
+      ],
+      "draws": [
+        {
+          "ms": 799.191,
+          "visible": true,
+          "canvas": 140456857712928,
+          "title": "Уровень 1: R=275.00 мм"
+        }
+      ],
+      "profiled": true
+    },
+    {
+      "name": "return_matrix_after_radius",
+      "dispatch_ms": 1.465,
+      "total_ms": 9.51,
+      "cache_before": 8,
+      "cache_after": 8,
+      "retained_keys": 8,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "epure_count_change",
+      "dispatch_ms": 67.077,
+      "total_ms": 509.654,
+      "cache_before": 8,
+      "cache_after": 9,
+      "retained_keys": 8,
+      "builds": [
+        {
+          "name": "_draw_curves",
+          "ms": 53.479
+        }
+      ],
+      "draws": [
+        {
+          "ms": 429.596,
+          "visible": true,
+          "canvas": 140456515796816,
+          "title": "Уровень 2: R=305.00 мм · сравнение"
+        }
+      ],
+      "profiled": true
+    },
+    {
+      "name": "return_roses_after_epure_count",
+      "dispatch_ms": 0.997,
+      "total_ms": 8.22,
+      "cache_before": 9,
+      "cache_after": 9,
+      "retained_keys": 9,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "split_empty_on",
+      "dispatch_ms": 10.003,
+      "total_ms": 262.628,
+      "cache_before": 9,
+      "cache_after": 9,
+      "retained_keys": 9,
+      "builds": [],
+      "draws": [
+        {
+          "ms": 42.833,
+          "visible": true,
+          "canvas": 140456526030480,
+          "title": ""
+        },
+        {
+          "ms": 194.291,
+          "visible": true,
+          "canvas": 140456515796816,
+          "title": "Уровень 2: R=305.00 мм · сравнение"
+        }
+      ],
+      "profiled": false
+    },
+    {
+      "name": "split_empty_off",
+      "dispatch_ms": 0.381,
+      "total_ms": 229.291,
+      "cache_before": 9,
+      "cache_after": 9,
+      "retained_keys": 9,
+      "builds": [],
+      "draws": [
+        {
+          "ms": 213.849,
+          "visible": true,
+          "canvas": 140456515796816,
+          "title": "Уровень 2: R=305.00 мм · сравнение"
+        }
+      ],
+      "profiled": false
+    },
+    {
+      "name": "hidden_compare_z_1",
+      "dispatch_ms": 70.836,
+      "total_ms": 535.623,
+      "cache_before": 9,
+      "cache_after": 10,
+      "retained_keys": 9,
+      "builds": [
+        {
+          "name": "_draw_curves",
+          "ms": 54.529
+        }
+      ],
+      "draws": [
+        {
+          "ms": 447.321,
+          "visible": true,
+          "canvas": 140456367651536,
+          "title": "Уровень 2: R=305.00 мм · сравнение"
+        }
+      ],
+      "profiled": true
+    },
+    {
+      "name": "split_loaded_on",
+      "dispatch_ms": 18.038,
+      "total_ms": 320.897,
+      "cache_before": 10,
+      "cache_after": 10,
+      "retained_keys": 10,
+      "builds": [],
+      "draws": [
+        {
+          "ms": 76.823,
+          "visible": true,
+          "canvas": 140456366144928,
+          "title": "z=15 мм; R=305 мм"
+        },
+        {
+          "ms": 211.381,
+          "visible": true,
+          "canvas": 140456367651536,
+          "title": "Уровень 2: R=305.00 мм · сравнение"
+        }
+      ],
+      "profiled": false
+    },
+    {
+      "name": "split_z_31_2",
+      "dispatch_ms": 43.049,
+      "total_ms": 387.718,
+      "cache_before": 10,
+      "cache_after": 11,
+      "retained_keys": 10,
+      "builds": [
+        {
+          "name": "_draw_curves",
+          "ms": 20.783
+        }
+      ],
+      "draws": [
+        {
+          "ms": 227.469,
+          "visible": true,
+          "canvas": 140456364446720,
+          "title": "Уровень 2: R=305.00 мм · сравнение"
+        },
+        {
+          "ms": 100.623,
+          "visible": true,
+          "canvas": 140456364457376,
+          "title": "z=30 мм; R=305 мм"
+        }
+      ],
+      "profiled": false
+    },
+    {
+      "name": "split_z_32_3",
+      "dispatch_ms": 99.997,
+      "total_ms": 878.327,
+      "cache_before": 11,
+      "cache_after": 12,
+      "retained_keys": 11,
+      "builds": [
+        {
+          "name": "_draw_curves",
+          "ms": 56.56
+        }
+      ],
+      "draws": [
+        {
+          "ms": 596.057,
+          "visible": true,
+          "canvas": 140456363309344,
+          "title": "Уровень 2: R=305.00 мм · сравнение"
+        },
+        {
+          "ms": 162.091,
+          "visible": true,
+          "canvas": 140456363933232,
+          "title": "z=50 мм; R=305 мм"
+        }
+      ],
+      "profiled": true
+    },
+    {
+      "name": "split_z_33_1",
+      "dispatch_ms": 2.067,
+      "total_ms": 13.495,
+      "cache_before": 12,
+      "cache_after": 12,
+      "retained_keys": 12,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "split_z_34_2",
+      "dispatch_ms": 1.741,
+      "total_ms": 12.737,
+      "cache_before": 12,
+      "cache_after": 12,
+      "retained_keys": 12,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "split_z_35_3",
+      "dispatch_ms": 2.124,
+      "total_ms": 15.163,
+      "cache_before": 12,
+      "cache_after": 12,
+      "retained_keys": 12,
+      "builds": [],
+      "draws": [],
+      "profiled": true
+    },
+    {
+      "name": "split_z_36_1",
+      "dispatch_ms": 2.4,
+      "total_ms": 14.86,
+      "cache_before": 12,
+      "cache_after": 12,
+      "retained_keys": 12,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "split_view_37_0",
+      "dispatch_ms": 2.746,
+      "total_ms": 380.979,
+      "cache_before": 12,
+      "cache_after": 12,
+      "retained_keys": 12,
+      "builds": [],
+      "draws": [
+        {
+          "ms": 367.138,
+          "visible": true,
+          "canvas": 140456450145120,
+          "title": "Плотность расхода, кг/(м²·с) · z=15 мм"
+        }
+      ],
+      "profiled": false
+    },
+    {
+      "name": "split_view_38_1",
+      "dispatch_ms": 119.741,
+      "total_ms": 532.69,
+      "cache_before": 12,
+      "cache_after": 13,
+      "retained_keys": 12,
+      "builds": [
+        {
+          "name": "_draw_smooth",
+          "ms": 114.909
+        }
+      ],
+      "draws": [
+        {
+          "ms": 400.748,
+          "visible": true,
+          "canvas": 140456367652544,
+          "title": "Подробное поле без агрегирования 6×140 · z=15 мм"
+        }
+      ],
+      "profiled": false
+    },
+    {
+      "name": "split_view_39_2",
+      "dispatch_ms": 585.569,
+      "total_ms": 988.393,
+      "cache_before": 13,
+      "cache_after": 14,
+      "retained_keys": 13,
+      "builds": [
+        {
+          "name": "_draw_roses",
+          "ms": 580.08
+        }
+      ],
+      "draws": [
+        {
+          "ms": 388.665,
+          "visible": true,
+          "canvas": 140456360750560,
+          "title": "Индивидуальные полярные эпюры · z=15 мм"
+        }
+      ],
+      "profiled": false
+    },
+    {
+      "name": "split_view_40_3",
+      "dispatch_ms": 1.879,
+      "total_ms": 10.25,
+      "cache_before": 14,
+      "cache_after": 14,
+      "retained_keys": 14,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "split_view_41_0",
+      "dispatch_ms": 1.321,
+      "total_ms": 10.814,
+      "cache_before": 14,
+      "cache_after": 14,
+      "retained_keys": 14,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "split_view_42_1",
+      "dispatch_ms": 1.788,
+      "total_ms": 19.036,
+      "cache_before": 14,
+      "cache_after": 14,
+      "retained_keys": 14,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "split_view_43_2",
+      "dispatch_ms": 1.2,
+      "total_ms": 11.243,
+      "cache_before": 14,
+      "cache_after": 14,
+      "retained_keys": 14,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    },
+    {
+      "name": "split_view_44_3",
+      "dispatch_ms": 1.481,
+      "total_ms": 13.423,
+      "cache_before": 14,
+      "cache_after": 14,
+      "retained_keys": 14,
+      "builds": [],
+      "draws": [],
+      "profiled": false
+    }
+  ],
+  "method": "Real native Qt tab clicks and dropdown/control signals; draw/build instrumentation; no timers disabled",
+  "environment": {
+    "os": "Linux-6.18.55-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "numpy": "2.5.4",
+    "matplotlib": "3.11.2",
+    "qt": "5.15.14",
+    "pyqt": "5.15.11",
+    "backend": "Qt5Agg / Linux offscreen",
+    "native_window": "1480x930"
+  },
+  "baseline_sha": "07944eea3382360356a44f408e0b34c017ba24a0",
+  "source_revision": "working tree based on 07944ee",
+  "source_comparison_sha256": "64cbf5663cd0e6fde10e729c39e3f4d1b4d99011b92294d2c2207279f2ce2ad1",
+  "profile_note": "Only rows marked profiled include cProfile overhead; do not compare those elapsed times to ordinary native UI timings.",
+  "comparison_summary": {
+    "warm_view_": {
+      "before_samples": 7,
+      "before_median_ms": 11.052,
+      "after_samples": 7,
+      "after_median_ms": 9.729,
+      "after_max_ms": 12.361
+    },
+    "return_from_tab_": {
+      "before_samples": 3,
+      "before_median_ms": 18.021,
+      "after_samples": 3,
+      "after_median_ms": 16.966,
+      "after_max_ms": 18.499
+    },
+    "warm_z_": {
+      "before_samples": 3,
+      "before_median_ms": 12.894,
+      "after_samples": 3,
+      "after_median_ms": 12.432,
+      "after_max_ms": 13.518
+    },
+    "split_view_": {
+      "before_samples": 5,
+      "before_median_ms": 14.899,
+      "after_samples": 5,
+      "after_median_ms": 11.243,
+      "after_max_ms": 19.036
+    },
+    "return_matrix_after_radius": {
+      "before_ms": 617.155,
+      "after_ms": 9.51,
+      "after_builds": 0,
+      "after_draws": 0
+    },
+    "return_roses_after_epure_count": {
+      "before_ms": 1324.9,
+      "after_ms": 8.22,
+      "after_builds": 0,
+      "after_draws": 0
+    },
+    "split_view_39_2": {
+      "before_ms": 1561.237,
+      "after_ms": 988.393,
+      "after_builds": 1,
+      "after_draws": 1
+    },
+    "before_warm_split_z": [
+      {
+        "name": "split_z_33_1",
+        "ms": 130.437,
+        "full_draws": 1
+      },
+      {
+        "name": "split_z_34_2",
+        "ms": 137.994,
+        "full_draws": 1
+      },
+      {
+        "name": "split_z_36_1",
+        "ms": 123.372,
+        "full_draws": 1
+      }
+    ],
+    "after_warm_split_z": [
+      {
+        "name": "split_z_33_1",
+        "ms": 13.495,
+        "full_draws": 0
+      },
+      {
+        "name": "split_z_34_2",
+        "ms": 12.737,
+        "full_draws": 0
+      },
+      {
+        "name": "split_z_36_1",
+        "ms": 14.86,
+        "full_draws": 0
+      }
+    ]
+  },
+  "reason": "View-specific keys retain unrelated field canvases when epure controls change. Bounded LRU caches reuse primary and comparison axes; cached annotations and zoom remain attached. Hidden Qt resize paints are deferred until a canvas becomes visible. Navigation synchronizes hidden comparison selectors without rebuilding its chart. Loading a new file retains its public current canvas. Explicit draw and PNG export still render hidden figures.",
+  "limits": "A first view/z or changed curve layout still has a real synchronous Matplotlib build/draw; this measurement does not claim zero cold-render latency. Physically resizing a visible canvas for split still redraws it. Profiled actions include cProfile overhead and are marked individually."
+}

@@ -456,7 +456,7 @@ class TestV06GeometryUI(unittest.TestCase):
         self.assertEqual(self.qt_errors, [])
         dialog.close()
 
-    def test_manual_sections_preserve_order_and_outlet_cannot_be_deleted(self):
+    def test_manual_section_order_and_outlet_deletion_honor_object_domain(self):
         self.e.pages.setCurrentIndex(3)
         before = [s['z_mm'] for s in self.e.raw['sections']]
         self.e.add_section()
@@ -470,11 +470,13 @@ class TestV06GeometryUI(unittest.TestCase):
         self.e.move_section(-1)
         self.assertEqual(self.w.cfg.z_mm, [0., 12.125, 30.])
         outlet_row = next(i for i, s in enumerate(self.e.raw['sections']) if s['is_outlet'])
+        geometry_before=deepcopy(self.e.raw)
         self.e.section_table.clearSelection()
         self.e.section_table.item(outlet_row, 0).setSelected(True)
         self.e.delete(self.e.section_table)
         self.assertEqual(self.w.cfg.z_mm, [0., 12.125, 30.])
-        self.assertIn('обязательно', self.e.status.text())
+        self.assertEqual(self.e.raw,geometry_before)
+        self.assertIn('hole-test',self.e.status.text())
 
     def test_real_save_open_restores_geometry_and_unknown_fields(self):
         self.w.cfg._project_extra['future_project'] = {'x': [1, 2]}
