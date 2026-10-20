@@ -1,4 +1,0 @@
-numpy>=1.25.2,<2.6
-matplotlib>=3.5
-PyQt5>=5.15
-scipy==1.16.3
