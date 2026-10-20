@@ -290,7 +290,7 @@ class GeometryEditor(QWidget):
         self.loading=True
         try:
             self.enabled.setChecked(self.raw.get('enabled',False));self.base.setValue(self.raw['base_z_mm']);self.outlet.setValue(self.raw['outlet_z_mm']);self.step.setValue(self.raw.get('internal_step_mm',1));self.error.setValue(self.raw.get('chord_error_mm',.01))
-            self.fill_tables();chamber_history.restore_cells(self);self.draw_scene(not bool(self.paths));self._pending=False
+            self.fill_tables();self.draw_scene(not bool(self.paths));self._pending=False
         finally:self.loading=False
     def item(self,table,row,column,value,editable=True,check=None):
         item=QTableWidgetItem(format(value,'.12g') if isinstance(value,(int,float)) and not isinstance(value,bool) else str(value))
@@ -381,6 +381,7 @@ class GeometryEditor(QWidget):
             self.fill_constraints()
         finally:
             for table in self.tables:table.blockSignals(False)
+            chamber_history.restore_cells(self)
     def cell(self,table,row,col):return table.item(row,col).text().strip()
     def fill_constraints(self):
         records=constraint_records(self.raw);self.constraint_table.setRowCount(len(records))
@@ -470,7 +471,8 @@ class GeometryEditor(QWidget):
         if table.in_batch:self.pending_batch.setdefault(table,{}).setdefault(item.row(),set()).add(item.column());return
         row=item.row();col=item.column()
         columns=columns or {col}
-        for column in columns:self._draft_cell_errors.pop((self.tables.index(table),row,column),None)
+        identity=table.item(row,0).text()
+        for column in columns:self._draft_cell_errors.pop((self.tables.index(table),identity,column),None)
         try:
             if table is self.primitive_table:
                 materialize_constraints(self.raw);p=self.raw['primitives'][row];old=deepcopy(p)
@@ -524,7 +526,8 @@ class GeometryEditor(QWidget):
             if not self.batch_mode:self.commit('Геометрия: правка таблицы',groups=table is self.group_table,sections=table is self.section_table)
         except (ValueError,TypeError,KeyError,StopIteration) as exc:
             self.batch_error=str(exc);self._draft_invalid=True;self.message('Черновик не применён: '+str(exc),True)
-            for column in columns:self._draft_cell_errors[(self.tables.index(table),row,column)]=self.cell(table,row,column)
+            for column in columns:self._draft_cell_errors[(self.tables.index(table),identity,column)]=self.cell(table,row,column)
+            chamber_history.restore_cells(self)
             if not self.batch_mode:
                 self.draw_scene();chamber_history.record(self,'Геометрия: правка черновика')
     def batch_finished(self,table):
@@ -566,6 +569,10 @@ class GeometryEditor(QWidget):
         history_before=self._draft_checkpoint if hasattr(self,'_draft_checkpoint') else chamber_history.snapshot(self)
         project_before=project_to_json(self.owner.cfg,self.owner.nozzles)
         try:
+            chamber_history.prune_cells(self)
+            if self._draft_cell_errors:
+                table_index,identity,col=next(iter(self._draft_cell_errors));header=self.tables[table_index].horizontalHeaderItem(col).text().replace('\n',' ')
+                raise ValueError(identity+': исправьте ошибочное значение в столбце «'+header+'» или сбросьте черновик')
             materialize_constraints(self.raw)
             previous={p['id']:p for p in self.loaded_raw['primitives']};drivers=[]
             for p in self.raw['primitives']:
@@ -680,16 +687,16 @@ class GeometryEditor(QWidget):
             if key=='primitives' and record.get('fixed',False):self.message(record['id']+': снимите фиксацию перед удалением.',True);return
             if key=='objects' and record['type']=='nozzle':self.message('140 позиций форсунок сохраняются; отключайте их на 02',True);return
             if key=='sections' and len(self.raw['sections'])-len(rows)<1:self.message('Оставьте хотя бы одно сечение.',True);return
-        before=deepcopy(self.raw);was_invalid=self._draft_invalid
+        before=deepcopy(self.raw);before_cells=deepcopy(self._draft_cell_errors);was_invalid=self._draft_invalid
         if key=='primitives':
             materialize_constraints(self.raw);removed={self.raw[key][row]['id'] for row in rows}
             self.raw['constraints']=[c for c in self.raw['constraints'] if not any(c[k]['primitive_id'] in removed for k in ('a','b'))]
         for row in rows:del self.raw[key][row]
         if key=='sections':
             try:self.sync_section_outlet()
-            except ValueError as exc:self.raw=before;self.message('Сечения не изменены: '+str(exc),True);return
+            except ValueError as exc:self.raw=before;self._draft_cell_errors=before_cells;self.message('Сечения не изменены: '+str(exc),True);return
         if not self.commit('Удалить геометрические объекты',sections=key=='sections',record_failure=key!='sections') and key=='sections':
-            message=self.status.text();self.raw=before;self._draft_invalid=was_invalid;self.fill_tables();self.draw_scene();self.message('Сечения не изменены. '+message,True)
+            message=self.status.text();self.raw=before;self._draft_cell_errors=before_cells;self._draft_invalid=was_invalid;self.fill_tables();self.draw_scene();self.message('Сечения не изменены. '+message,True)
     def select(self,identity,object_handle=False):
         previous=self.loading;self.loading=True
         self.selected=identity;table=self.object_table if object_handle else self.primitive_table;records=self.raw['objects' if object_handle else 'primitives']

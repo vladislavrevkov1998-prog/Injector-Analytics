@@ -8,6 +8,7 @@ must never mutate a saved snapshot. Restoration copies back into the editor.
 """
 from copy import deepcopy
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QUndoCommand
 
 from .core import project_to_json
@@ -24,12 +25,28 @@ def checkpoint(editor):
 
 
 def restore_cells(editor):
-    for (table_index,row,col),text in getattr(editor,'_draft_cell_errors',{}).items():
+    for (table_index,identity,col),text in getattr(editor,'_draft_cell_errors',{}).items():
         table=editor.tables[table_index]
-        if row<table.rowCount() and table.item(row,col) is not None:
+        row=next((row for row in range(table.rowCount()) if table.item(row,0) is not None and table.item(row,0).text()==identity),None)
+        if row is not None and table.item(row,col) is not None:
             table.blockSignals(True)
-            try:table.item(row,col).setText(text)
+            try:
+                table.item(row,col).setText(text)
+                # A rejected entry has no validated numeric backing value.
+                # Reopening it must edit this text, not an old UserRole value.
+                table.item(row,col).setData(Qt.UserRole,None)
             finally:table.blockSignals(False)
+
+
+def prune_cells(editor):
+    """Deleting/reordering a row must never attach its error to another ID."""
+    if not editor._draft_cell_errors:return
+    records=[{row['id']:row for row in editor.raw[name]} for name in ('primitives','objects','groups','sections')]
+    for key in tuple(editor._draft_cell_errors):
+        table_index,identity,col=key;record=records[table_index].get(identity)
+        obsolete=(record is None or table_index==0 and
+            (record['kind'] in ('line','point') and col in (7,8,9,10) or record['kind']=='point' and col in (5,6)))
+        if obsolete:del editor._draft_cell_errors[key]
 
 
 def restore(editor, draft):

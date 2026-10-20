@@ -2,9 +2,11 @@
 from copy import deepcopy
 import unittest
 from unittest.mock import patch
+import numpy as np
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtTest import QTest
+from PyQt5.QtWidgets import QLineEdit
 
 from fuelfield.core import project_to_json
 import test_v06_gui as previous
@@ -133,6 +135,51 @@ class TestDraftHistory(unittest.TestCase):
         self.assertEqual(command.before,before);self.assertEqual(command.after,after)
         self.assertEqual(command.project_before,project_before);self.assertEqual(command.project_after,project_after)
         self.w.undo_stack.undo();self.assertEqual(self.record('reference-point')['start'][0],14.125)
+
+    def test_bad_cell_blocks_publishing_other_row_until_repaired(self):
+        canonical=project_to_json(self.w.cfg,self.w.nozzles)
+        table=self.e.primitive_table;row=self.row(table,'reference-arc')
+        table.item(row,9).setText('не число')
+        self.edit_number(table,'reference-point',3,'14.125')
+        self.assertTrue(self.e._draft_invalid)
+        self.assertEqual(table.item(row,9).text(),'не число')
+        self.assertEqual(self.record('reference-point')['start'][0],14.125)
+        self.assertEqual(project_to_json(self.w.cfg,self.w.nozzles),canonical)
+        table.setCurrentCell(row,9);table.editItem(table.item(row,9));self.app.processEvents()
+        editor=next(child for child in table.findChildren(QLineEdit) if child.isVisible())
+        editor.selectAll();QTest.keyClicks(editor,'12');QTest.keyClick(editor,Qt.Key_Return);self.app.processEvents()
+        self.assertFalse(self.e._draft_invalid);self.assertEqual(self.e._draft_cell_errors,{})
+        accepted={p['id']:p for p in self.w.cfg.geometry['primitives']}
+        self.assertEqual(accepted['reference-point']['start'][0],14.125)
+        self.assertNotEqual(project_to_json(self.w.cfg,self.w.nozzles),canonical)
+
+    def test_deleting_previous_row_keeps_error_on_its_id_and_deleting_error_row_clears_it(self):
+        canonical=project_to_json(self.w.cfg,self.w.nozzles)
+        table=self.e.primitive_table
+        self.edit_number(table,'reference-arc',9,'3')
+        table.selectRow(self.row(table,'reference-point'));self.e.delete(table)
+        self.assertTrue(self.e._draft_invalid)
+        self.assertEqual(table.item(self.row(table,'reference-arc'),9).text(),'3')
+        self.assertEqual(project_to_json(self.w.cfg,self.w.nozzles),canonical)
+        draft=deepcopy(self.e.raw)
+        table.selectRow(self.row(table,'reference-arc'));self.e.delete(table)
+        self.assertFalse(self.e._draft_invalid);self.assertEqual(self.e._draft_cell_errors,{})
+        self.assertNotIn('reference-arc',{p['id'] for p in self.w.cfg.geometry['primitives']})
+        self.w.undo_stack.undo();self.assertTrue(self.e._draft_invalid)
+        self.assertEqual(self.e.raw,draft)
+        self.assertEqual(table.item(self.row(table,'reference-arc'),9).text(),'3')
+
+    def test_failed_radius_can_be_fixed_back_to_its_original_value(self):
+        original=self.record('reference-arc')
+        radius=float(np.linalg.norm(np.array(original['start'])-original['center']))
+        table=self.e.primitive_table;row=self.row(table,'reference-arc')
+        self.edit_number(table,'reference-arc',9,'3')
+        self.assertIsNone(table.item(row,9).data(Qt.UserRole))
+        self.edit_number(table,'reference-point',3,'14.125')
+        self.assertEqual(table.item(row,9).text(),'3')
+        self.edit_number(table,'reference-arc',9,str(radius))
+        self.assertFalse(self.e._draft_invalid);self.assertEqual(self.e._draft_cell_errors,{})
+        self.assertEqual(next(p for p in self.w.cfg.geometry['primitives'] if p['id']=='reference-point')['start'][0],14.125)
 
 
 if __name__=='__main__':unittest.main()
