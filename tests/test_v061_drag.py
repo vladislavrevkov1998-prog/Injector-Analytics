@@ -215,7 +215,7 @@ class TestV061FirstClickDrag(unittest.TestCase):
         before = project_to_json(self.w.cfg, self.w.nozzles)
         self.edit_number(self.e.primitive_table, 'reference-arc', 9, '3')
         self.assertEqual(project_to_json(self.w.cfg, self.w.nozzles), before)
-        self.assertEqual(self.w.undo_stack.count(), 0)
+        self.assertEqual(self.w.undo_stack.count(), 1)  # One draft action, no calculation change.
         self.assertIn('reference-arc', self.e.paths)
         self.assertGreater(self.e.paths['reference-arc'].path().elementCount(), 1)
         self.assertTrue(self.e.status.text())
@@ -236,7 +236,7 @@ class TestV061FirstClickDrag(unittest.TestCase):
         self.assertNotEqual(actual['end'], original['end'])
         self.assertIn('inner-1', self.e.paths)
         self.assertEqual(project_to_json(self.w.cfg, self.w.nozzles), before)
-        self.assertEqual(self.w.undo_stack.count(), 0)
+        self.assertEqual(self.w.undo_stack.count(), 1)  # Release records the incomplete draft.
         self.assertTrue(self.e.status.text())
 
     def test_results_split_canvas_stays_inside_window_with_larger_ui_font(self):

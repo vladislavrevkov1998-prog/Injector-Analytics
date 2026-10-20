@@ -38,13 +38,18 @@ import sys
 sys.path.insert(0, 'src')
 from PyQt5.QtWidgets import QApplication, QTextBrowser
 from fuelfield.gui import MainWindow
-from fuelfield.help_text import read_help
+from fuelfield.help_text import read_help,HELP_IMAGES
+from PyQt5.QtCore import QUrl
+from PyQt5.QtGui import QTextDocument
 app=QApplication([]);w=MainWindow();w.show();app.processEvents()
 assert len(w.nozzles)==140
 for name in %r:
     assert len(read_help(name))>2000
 w.geometry_editor.show_guide()
 assert len(w.geometry_editor.guide_dialog.findChild(QTextBrowser).toPlainText())>2000
+for relative in HELP_IMAGES:
+    resource=w.geometry_editor.guide_dialog.findChild(QTextBrowser).document().resource(QTextDocument.ImageResource,QUrl(relative))
+    assert resource is not None and not resource.isNull(),relative
 w.geometry_editor.guide_dialog.close()
 w.open_regression();w.regression_dialog.show_guide()
 assert len(w.regression_dialog.guide_dialog.findChild(QTextBrowser).toPlainText())>2000

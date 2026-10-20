@@ -241,11 +241,11 @@ def tangent_references(raw,first_id,second_id):
     pairs=[((first_id,a),(second_id,b)) for a in ('start','end') for b in ('start','end')]
     linked=[(a,b) for a,b in pairs if root(a)==root(b)]
     if linked:
-        if len(linked)>1:raise ValueError('У объектов несколько общих концов; укажите контакт в таблице связей')
+        if len(linked)>1:raise ValueError('У объектов несколько общих концов; откройте «Связи → Касательность» и укажите контакт вручную')
         a,b=linked[0]
     else:
         distances=sorted((float(np.linalg.norm(_point(first,a[1])-_point(second,b[1]))),a,b) for a,b in pairs)
-        if abs(distances[1][0]-distances[0][0])<=TOL:raise ValueError('Ближайший контакт неоднозначен; укажите концы в таблице связей')
+        if abs(distances[1][0]-distances[0][0])<=TOL:raise ValueError('Ближайший контакт неоднозначен; откройте «Связи → Касательность» и укажите концы вручную')
         _,a,b=distances[0]
     if first['kind']=='line' or (first['kind']==second['kind']=='arc' and first.get('fixed',False) and not second.get('fixed',False)):a,b=b,a
     return dict(primitive_id=a[0],endpoint=a[1]),dict(primitive_id=b[0],endpoint=b[1])

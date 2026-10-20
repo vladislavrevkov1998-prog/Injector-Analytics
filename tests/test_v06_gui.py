@@ -349,7 +349,7 @@ class TestV06GeometryUI(unittest.TestCase):
         row = self.row(self.e.primitive_table, 'reference-arc')
         self.e.primitive_table.item(row, 9).setText('1')
         self.assertEqual(project_to_json(self.w.cfg, self.w.nozzles), before)
-        self.assertEqual(self.w.undo_stack.count(), 0)
+        self.assertEqual(self.w.undo_stack.count(), 1)  # Draft edits are undoable too.
         self.assertIn('не применён', self.e.status.text())
         radius = float(np.linalg.norm(np.array([5., 260.]) - [10., 265.]))
         self.e.primitive_table.item(row, 9).setText(repr(radius))
