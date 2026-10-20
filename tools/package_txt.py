@@ -1,5 +1,6 @@
 """Build the clean, verifiable IDLE TXT distribution from runtime sources only."""
 import argparse
+import base64
 import hashlib
 from pathlib import Path
 import subprocess
@@ -65,7 +66,8 @@ def build_bundle(root, output, commit):
     for path in sorted((root / 'src/fuelfield').rglob('*.py')):
         files[path.relative_to(root).as_posix()] = path.read_bytes()
     help_text = {name: (root / 'docs' / name).read_text(encoding='utf-8') for name in GUIDES}
-    files['src/fuelfield/runtime_help.py'] = ('# Embedded runtime instructions for the clean TXT distribution.\nHELP = ' + repr(help_text) + '\n').encode('utf-8')
+    images={path.relative_to(root/'docs').as_posix():base64.b64encode(path.read_bytes()).decode('ascii') for path in sorted((root/'docs/images/v0.6.3').glob('*.png')) if path.name in ('current-model.png','narrowing.png','widening.png')}
+    files['src/fuelfield/runtime_help.py'] = ('# Embedded runtime instructions for the clean TXT distribution.\nHELP = ' + repr(help_text) + '\nIMAGES = '+repr(images)+'\n').encode('utf-8')
     hashes = {name: hashlib.sha256(content).hexdigest() for name, content in files.items()}
     restore = RESTORE.replace('__FILES__', repr(hashes)).replace('__VERSION__', repr(version)).replace('__COMMIT__', repr(commit))
     payload = {('code/' + name + '.txt' if name.endswith('.py') else name): content for name, content in files.items()}

@@ -1,4 +1,10 @@
-> Актуальная v0.6.2: `codex/v0.6.2-sketcher-constraints`, исходный SHA `07944ee`.
+> Актуальная v0.6.3: `codex/v0.6.3-profile-drafts`, исходный SHA `d7794ab`.
+> Принятие готового профиля, объектная касательность дуга–дуга, история черновика:
+> `chamber_sections.py`, `chamber_constraints.py`, `chamber_history.py`.
+> Проверки `docs/V0.6.3_VALIDATION.md`; схемы в `docs/V0.6_GUIDE.md` и встроенной
+> справке. Учебные доли поясов не являются реализованным оператором переноса.
+>
+> Предыдущая v0.6.2: `codex/v0.6.2-sketcher-constraints`, исходный SHA `07944ee`.
 > Связи/фиксация и max-z выхода: `chamber_constraints.py`, `chamber_sections.py`;
 > геометрия schema 2, legacy schema 1 читается. Инструкция `docs/V0.6_GUIDE.md`,
 > проверки `docs/V0.6.2_VALIDATION.md`. Физика топлива и wall-bound не заменены.

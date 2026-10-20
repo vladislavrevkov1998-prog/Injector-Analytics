@@ -1,0 +1,101 @@
+{
+  "project": "demo_project_user_field.json",
+  "sha256": "0589843dc9b8b6939cddba22dd0b0d93927da27323b69bb5c131ae01cb59bc4c",
+  "method": "Linux Qt offscreen, real first-click press/move/release and repaint, 25 gestures, 625 measured frames after warmup, 140 nozzles, no timers disabled",
+  "arcs": {
+    "start": {
+      "frame_ms": {
+        "samples": 125,
+        "median_ms": 6.394,
+        "p95_ms": 11.149,
+        "max_ms": 28.147
+      },
+      "release_ms": {
+        "samples": 5,
+        "median_ms": 71.862,
+        "p95_ms": 115.29,
+        "max_ms": 123.208
+      }
+    },
+    "end": {
+      "frame_ms": {
+        "samples": 125,
+        "median_ms": 6.057,
+        "p95_ms": 8.365,
+        "max_ms": 19.588
+      },
+      "release_ms": {
+        "samples": 5,
+        "median_ms": 80.993,
+        "p95_ms": 126.874,
+        "max_ms": 138.242
+      }
+    },
+    "center": {
+      "frame_ms": {
+        "samples": 125,
+        "median_ms": 6.201,
+        "p95_ms": 13.146,
+        "max_ms": 18.252
+      },
+      "release_ms": {
+        "samples": 5,
+        "median_ms": 79.626,
+        "p95_ms": 227.015,
+        "max_ms": 243.013
+      }
+    },
+    "body": {
+      "frame_ms": {
+        "samples": 125,
+        "median_ms": 6.194,
+        "p95_ms": 9.432,
+        "max_ms": 16.362
+      },
+      "release_ms": {
+        "samples": 5,
+        "median_ms": 70.978,
+        "p95_ms": 110.867,
+        "max_ms": 120.651
+      }
+    },
+    "tangent_free_end": {
+      "frame_ms": {
+        "samples": 125,
+        "median_ms": 6.787,
+        "p95_ms": 9.881,
+        "max_ms": 18.523
+      },
+      "release_ms": {
+        "samples": 5,
+        "median_ms": 78.709,
+        "p95_ms": 120.853,
+        "max_ms": 130.418
+      }
+    }
+  },
+  "layouts": [
+    {
+      "font_size": 10,
+      "window_width": 1280,
+      "window_height": 800,
+      "minimum_width": 1268,
+      "split": [
+        565,
+        667
+      ]
+    },
+    {
+      "font_size": 13,
+      "window_width": 1280,
+      "window_height": 800,
+      "minimum_width": 1117,
+      "split": [
+        565,
+        667
+      ]
+    }
+  ],
+  "one_gesture_one_undo": true,
+  "original_project_unchanged": true
+}

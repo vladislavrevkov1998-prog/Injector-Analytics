@@ -1,4 +1,9 @@
-> Актуальная v0.6.2: `codex/v0.6.2-sketcher-constraints`, исходный SHA `07944ee`.
+> Актуальная v0.6.3: `codex/v0.6.3-profile-drafts`, исходный SHA `d7794ab`.
+> Готовые стенки/новый выход, касательность объектов дуга–дуга, общий Undo для
+> черновика и сброса. См. `docs/V0.6.3_VALIDATION.md` и `docs/V0.6_GUIDE.md`.
+> Схемы переноса учебные: физическое ядро остаётся независимым по сечениям.
+>
+> Предыдущая v0.6.2: `codex/v0.6.2-sketcher-constraints`, исходный SHA `07944ee`.
 > Связи/фиксация и max-z выхода: `chamber_constraints.py`, `chamber_sections.py`;
 > геометрия schema 2, legacy schema 1 читается. Инструкция `docs/V0.6_GUIDE.md`,
 > проверки `docs/V0.6.2_VALIDATION.md`. Физика топлива и wall-bound не заменены.

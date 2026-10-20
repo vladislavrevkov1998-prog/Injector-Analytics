@@ -65,7 +65,7 @@ class TestV062Sketcher(unittest.TestCase):
 
     def test_tangent_dialog_adjusts_arc_and_fixes_line_without_toggle(self):
         line=self.add_tangent_line();old_arc=deepcopy(self.record('reference-arc'));dialog=ConstraintDialog(self.e.raw,'tangent',self.e)
-        dialog.a.setCurrentIndex(dialog.a.findData(ref('reference-arc','end')));dialog.b.setCurrentIndex(dialog.b.findData(ref('T1','start')))
+        dialog.a.setCurrentIndex(dialog.a.findData('reference-arc'));dialog.b.setCurrentIndex(dialog.b.findData('T1'))
         with patch('fuelfield.chamber_gui.ConstraintDialog',return_value=dialog),patch.object(dialog,'exec_',return_value=QDialog.Accepted):self.e.constraint_dialog('tangent')
         actual=self.record('T1');self.assertTrue(actual['fixed'])
         self.assertEqual({k:v for k,v in actual.items() if k!='fixed'},line)

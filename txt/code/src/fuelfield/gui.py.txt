@@ -372,7 +372,7 @@ class MainWindow(QMainWindow):
         finally:self._restoring=False
         self._record_edit(label=label)
 
-    def apply_geometry_state(self,state,label):
+    def apply_geometry_state(self,state,label,record_history=True):
         """A validated geometry edit needs neither a 140-row read-back nor
         rebuilding hidden hydraulic plots. It shares the same Undo snapshots.
         """
@@ -389,7 +389,8 @@ class MainWindow(QMainWindow):
             if nozzles!=previous_nozzles:self._fill_nozzles()
             self.geometry_editor.load(cfg,nozzles)
         finally:self._restoring=False
-        self.undo_stack.push(ProjectEdit(self,before,after,label));self._invalidate_results();self._queue_preview()
+        if record_history:self.undo_stack.push(ProjectEdit(self,before,after,label))
+        self._invalidate_results();self._queue_preview()
 
     def open_sections_editor(self):
         if chamber(self.cfg):

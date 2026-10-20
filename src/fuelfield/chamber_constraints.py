@@ -1,4 +1,4 @@
-"""Small exact endpoint/line-circle constraints, independent of Qt and flow math.
+"""Small exact endpoint/circle constraints, independent of Qt and flow math.
 
 Coordinates are solved in physical millimetres. There is no iterative CAD
 optimizer: incompatible fixed anchors or tangencies produce a diagnostic.
@@ -60,11 +60,18 @@ def _structure(raw):
             identity,role=_key(c.get(name));p=records.get(identity)
             if p is None or role not in p or (p['kind']=='point' and role!='start'):raise ValueError(c['id']+': не найдена точка '+identity+'.'+role)
         if _key(c['a'])[0]==_key(c['b'])[0]:raise ValueError(c['id']+': выберите точки разных примитивов')
-        if c['kind']=='tangent' and {records[_key(c[k])[0]]['kind'] for k in ('a','b')}!={'arc','line'}:raise ValueError(c['id']+': касательность задаётся между дугой и отрезком')
+        kinds=[records[_key(c[k])[0]]['kind'] for k in ('a','b')]
+        if c['kind']=='tangent' and not('arc' in kinds and all(k in ('arc','line') for k in kinds)):raise ValueError(c['id']+': для касательности нужны дуга–отрезок или дуга–дуга')
     return records,entries
 
 
-def _arc_line(c,records):
+def tangent_parts(c,records):
+    """Return (fitted arc, reference curve) endpoint keys.
+
+    For two arcs the first stored reference is the fitted arc. This makes the
+    direction of the dependency explicit without reinterpreting old arc/line
+    records, whose endpoint order has never mattered.
+    """
     a,b=_key(c['a']),_key(c['b'])
     return (a,b) if records[a[0]]['kind']=='arc' else (b,a)
 
@@ -78,14 +85,25 @@ def _circle_branch(arc):
     raise ValueError(arc['id']+': касательная окружность не задаёт однозначный R(z); '+errors[0])
 
 
-def tangent_arc(arc,arc_endpoint,line,line_endpoint):
-    """Fit one exact circle through the opposite end and a fixed line contact."""
-    if arc.get('kind')!='arc' or line.get('kind')!='line':raise ValueError('Для касания нужны дуга и отрезок')
-    if arc_endpoint not in ('start','end') or line_endpoint not in ('start','end'):raise ValueError('Выберите концы дуги и отрезка')
-    contact=_point(line,line_endpoint);opposite='end' if arc_endpoint=='start' else 'start';other=_point(arc,opposite)
-    direction=_point(line,'end')-_point(line,'start');length=np.linalg.norm(direction)
-    if length<=TOL:raise ValueError('Касательность: нулевой отрезок')
-    normal=np.array([-direction[1],direction[0]])/length;delta=other-contact
+def tangent_arc(arc,arc_endpoint,reference,reference_endpoint):
+    """Fit one exact circle through the other end and a reference contact.
+
+    The reference line or arc is never changed. For an arc its contact radius
+    supplies the common normal, so internal and external circle tangencies are
+    handled by the same signed analytic solution.
+    """
+    if arc.get('kind')!='arc' or reference.get('kind') not in ('line','arc'):raise ValueError('Для касания нужны дуга–отрезок или дуга–дуга')
+    if arc_endpoint not in ('start','end') or reference_endpoint not in ('start','end'):raise ValueError('Выберите концы кривых')
+    contact=_point(reference,reference_endpoint);opposite='end' if arc_endpoint=='start' else 'start';other=_point(arc,opposite)
+    if reference['kind']=='line':
+        direction=_point(reference,'end')-_point(reference,'start')
+        normal=np.array([-direction[1],direction[0]])
+    else:
+        arc_circle(reference)  # Diagnose a malformed reference circle first.
+        normal=contact-_point(reference,'center')
+    length=np.linalg.norm(normal)
+    if length<=TOL:raise ValueError('Касательность: нулевая опорная кривая')
+    normal=normal/length;delta=other-contact
     tolerance=max(TOL,64*np.finfo(float).eps*float(np.linalg.norm(delta)))
     height=float(np.dot(delta,normal))
     if np.linalg.norm(delta)<=tolerance or abs(height)<=tolerance:raise ValueError('Касательность невозможна: для заданных концов нет конечной окружности')
@@ -120,8 +138,11 @@ def validate_constraints(raw):
         a,b=(_key(c[k]) for k in ('a','b'))
         if not _same(_point(records[a[0]],a[1]),_point(records[b[0]],b[1])):raise ValueError(c['id']+': точки связи не совпадают')
         if c['kind']=='tangent':
-            arc_ref,line_ref=_arc_line(c,records);arc,line=records[arc_ref[0]],records[line_ref[0]]
-            contact=_point(line,line_ref[1]);radius=contact-_point(arc,'center');direction=_point(line,'end')-_point(line,'start')
+            arc_ref,target_ref=tangent_parts(c,records);arc,target=records[arc_ref[0]],records[target_ref[0]]
+            contact=_point(target,target_ref[1]);radius=contact-_point(arc,'center')
+            if target['kind']=='line':direction=_point(target,'end')-_point(target,'start')
+            else:
+                target_radius=contact-_point(target,'center');direction=np.array([-target_radius[1],target_radius[0]])
             denominator=np.linalg.norm(radius)*np.linalg.norm(direction)
             if denominator<=TOL*TOL or abs(float(np.dot(radius,direction)))/denominator>1e-9:raise ValueError(c['id']+': касательность не выполнена')
 
@@ -140,16 +161,16 @@ def apply_constraints(raw,drivers=(),baseline=None):
         while parent[key]!=key:
             following=parent[key];parent[key]=ancestor;key=following
         return ancestor
-    active=[c for c in entries if c.get('enabled',True)];line_anchors=set();tangents=defaultdict(list)
+    active=[c for c in entries if c.get('enabled',True)];contact_anchors=set();tangents=defaultdict(list)
     for c in active:
         a,b=_key(c['a']),_key(c['b']);parent[root(b)]=root(a)
         if c['kind']=='tangent':
-            arc,line=_arc_line(c,records);line_anchors.add(line);tangents[arc[0]].append(c)
+            arc,target=tangent_parts(c,records);contact_anchors.add(target);tangents[arc[0]].append(c)
     groups=defaultdict(list)
     for key in parent:groups[root(key)].append(key)
     changes=defaultdict(dict)
     for members in groups.values():
-        pinned=[key for key in members if records[key[0]].get('fixed',False) or key in line_anchors]
+        pinned=[key for key in members if records[key[0]].get('fixed',False) or key in contact_anchors]
         moving=[key for key in members if key in drivers]
         anchor=(pinned or moving or members)[0];target=_point(records[anchor[0]],anchor[1])
         for key in pinned+moving:
@@ -164,10 +185,22 @@ def apply_constraints(raw,drivers=(),baseline=None):
             *_,sweep=arc_circle(old);bulge=math.tan(sweep/4);a,b=np.array(p['start']),np.array(p['end']);chord=b-a
             if np.linalg.norm(chord)<=TOL/UNITS[p.get('unit','mm')]:raise ValueError(identity+': связь совмещает оба конца дуги')
             p['center']=((a+b)/2+(1-bulge*bulge)/(4*bulge)*np.array([-chord[1],chord[0]])).tolist()
-    for identity,constraints in tangents.items():
-        arc_ref,line_ref=_arc_line(constraints[0],records)
-        fitted=tangent_arc(records[identity],arc_ref[1],records[line_ref[0]],line_ref[1])
-        records[identity].clear();records[identity].update(fitted)
+    # Reference arcs must be solved before the arcs that depend on them. An
+    # already satisfied cycle is harmless; an unsatisfied cycle needs a general
+    # CAD solver and is diagnosed rather than depending on equation order.
+    pending=dict(tangents)
+    while pending:
+        ready=[identity for identity,constraints in pending.items()
+               if not any(tangent_parts(c,records)[1][0] in pending for c in constraints)]
+        if not ready:
+            try:validate_constraints(result)
+            except ValueError as exc:raise ValueError('Касательности образуют несогласованный цикл; оставьте одну опорную дугу без встречной зависимости') from exc
+            break
+        for identity in ready:
+            constraints=pending.pop(identity)
+            arc_ref,target_ref=tangent_parts(constraints[0],records)
+            fitted=tangent_arc(records[identity],arc_ref[1],records[target_ref[0]],target_ref[1])
+            records[identity].clear();records[identity].update(fitted)
     _check_fixed(raw,result)
     if baseline is not None:_check_fixed(baseline,result)
     validate_constraints(result)
@@ -181,8 +214,46 @@ def add_constraint(raw,kind,a,b):
     result['constraints'].append(dict(id=next_id({**result,'groups':result.get('groups',[])+result['constraints']},'C'),kind=kind,a=deepcopy(a),b=deepcopy(b)))
     records,entries=_structure(result)
     driver=_key(b)
-    if kind=='tangent':_,driver=_arc_line(entries[-1],records)
+    if kind=='tangent':_,driver=tangent_parts(entries[-1],records)
     return apply_constraints(result,drivers=(driver,),baseline=raw)
+
+
+def tangent_references(raw,first_id,second_id):
+    """Resolve an object pair to contact endpoints without pixel hit testing.
+
+    An existing coincidence component takes precedence over distance, including
+    transitive links. Otherwise the unique nearest endpoint pair is used. A tie
+    is intentionally reported, so the UI can offer explicit endpoint selectors.
+    """
+    records=_records(raw)
+    if first_id==second_id or first_id not in records or second_id not in records:raise ValueError('Выберите два разных объекта')
+    first,second=records[first_id],records[second_id]
+    if not('arc' in (first['kind'],second['kind']) and first['kind'] in ('arc','line') and second['kind'] in ('arc','line')):raise ValueError('Для касательности нужны дуга–отрезок или дуга–дуга')
+    parent={}
+    def root(key):
+        parent.setdefault(key,key)
+        while parent[key]!=key:
+            parent[key]=parent[parent[key]];key=parent[key]
+        return key
+    for c in constraint_records(raw):
+        if c.get('enabled',True):
+            a,b=_key(c['a']),_key(c['b']);parent[root(b)]=root(a)
+    pairs=[((first_id,a),(second_id,b)) for a in ('start','end') for b in ('start','end')]
+    linked=[(a,b) for a,b in pairs if root(a)==root(b)]
+    if linked:
+        if len(linked)>1:raise ValueError('У объектов несколько общих концов; откройте «Связи → Касательность» и укажите контакт вручную')
+        a,b=linked[0]
+    else:
+        distances=sorted((float(np.linalg.norm(_point(first,a[1])-_point(second,b[1]))),a,b) for a,b in pairs)
+        if abs(distances[1][0]-distances[0][0])<=TOL:raise ValueError('Ближайший контакт неоднозначен; откройте «Связи → Касательность» и укажите концы вручную')
+        _,a,b=distances[0]
+    if first['kind']=='line' or (first['kind']==second['kind']=='arc' and first.get('fixed',False) and not second.get('fixed',False)):a,b=b,a
+    return dict(primitive_id=a[0],endpoint=a[1]),dict(primitive_id=b[0],endpoint=b[1])
+
+
+def add_object_tangent(raw,first_id,second_id):
+    a,b=tangent_references(raw,first_id,second_id)
+    return add_constraint(raw,'tangent',a,b)
 
 
 def remove_constraints(raw,ids):
