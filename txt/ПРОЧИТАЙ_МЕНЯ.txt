@@ -1,5 +1,5 @@
-Fuel Field Pilot 0.6.2 — чистый комплект для IDLE
-Исходный commit: a18c2076c77999871aa8acc39ef67b0437e5dbca
+Fuel Field Pilot 0.6.3 — чистый комплект для IDLE
+Исходный commit: 42fb9d4c2d42951d6ed4cc4d44fde73b9951f19e
 
 1. Установите Python 3.12 или новее и распакуйте весь архив в отдельную папку.
 2. Откройте IDLE → File → New File. Скопируйте ВОССТАНОВИТЬ_ПРОГРАММУ.txt.

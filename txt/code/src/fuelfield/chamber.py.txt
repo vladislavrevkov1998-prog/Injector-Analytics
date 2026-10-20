@@ -54,7 +54,16 @@ class Primitive:
             self.sweep=-((self.angle-end)%(2*math.pi)) if clockwise else ((end-self.angle)%(2*math.pi))
             if abs(self.sweep)<1e-12:raise ValueError(self.id+': полная/нулевая окружность не является R(z)')
             lower,upper=sorted((self.angle,self.angle+self.sweep))
-            if any(lower+1e-10<k*math.pi<upper-1e-10 for k in range(-4,5)):raise ValueError(self.id+': дуга поворачивает по z (самоперекрытие профиля)')
+            # Near a vertical tangent a fixed angular epsilon scales badly:
+            # for small circles it rejects round-off, and for large circles it
+            # can hide a finite reversal. Only tolerate a turning point within
+            # half the physical endpoint tolerance. The opposite R(z) branch
+            # then differs by at most TOL, including at the affected endpoint.
+            for k in range(-4,5):
+                if lower<k*math.pi<upper:
+                    turning=self.center+np.array([(-1 if k%2 else 1)*self.radius,0.])
+                    if min(np.linalg.norm(turning-self.start),np.linalg.norm(turning-self.end))>TOL/2:
+                        raise ValueError(self.id+': дуга поворачивает по z (самоперекрытие профиля); проверьте центр и направление «По ЧС»')
             self.branch=1 if math.sin(self.angle+self.sweep/2)>0 else -1
             if self.range(self.lo,self.hi)[0]<=0:raise ValueError(self.id+': дуга достигает неположительного R')
 

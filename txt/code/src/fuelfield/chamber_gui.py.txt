@@ -1,4 +1,4 @@
-"""Peer Sketcher/table editor. Valid edits commit through the main Undo stack.
+"""Peer Sketcher/table editor. Accepted and draft edits share the Undo stack.
 
 The editable draft may temporarily have an open joint; it never enters a
 calculation until validated. Dragging commits once, at mouse release.
@@ -13,17 +13,19 @@ from PyQt5.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QSplitter,QTabWidge
     QTableWidgetItem,QPushButton,QLabel,QComboBox,QCheckBox,QGraphicsView,
     QGraphicsScene,QGraphicsPathItem,QGraphicsEllipseItem,QGraphicsItem,
     QStyledItemDelegate,QInputDialog,QDoubleSpinBox,QDialog,QTextBrowser,QDialogButtonBox,QFileDialog)
-from .chamber import Chamber,Primitive,legacy_geometry,apply_groups,sync_groups,group_angles,UNITS,TOL,WALL_BOUND_NOTICE
+from .chamber import Chamber,Primitive,legacy_geometry,apply_groups,sync_groups,group_angles,UNITS,TOL,WALL_BOUND_NOTICE,number
 from .core import project_to_json
 from .numeric_input import DecimalSpinBox
 from .numeric_delegate import NumericDelegate
 from .chamber_editing import next_id,WALL_PREFIX,move_endpoint,translate,resize_arc,preview
 from .chamber_import_gui import PointImportDialog
-from .help_text import read_help
+from .help_text import populate_help
 from .chamber_constraints import (constraint_records,materialize_constraints,apply_constraints,
-    add_constraint,remove_constraints)
+    add_constraint,remove_constraints,tangent_references)
+from .chamber_preview import draft_bounds
 from .chamber_constraints_gui import ConstraintDialog
 from .chamber_sections import sync_section_outlet,set_section_outlet
+from . import chamber_history
 
 WALLS={'inner':'Внутренняя','outer':'Наружная','reference':'Опорная','free':'Свободно'}
 KINDS={'point':'Точка','line':'Отрезок','arc':'Дуга'}
@@ -49,7 +51,7 @@ class DragGesture:
         self.constraint_click=False
         if self.editor.constraint_mode:
             self.constraint_click=True
-            if not self.object_handle and self.role in ('start','end'):self.editor.constraint_pick(self.identity,self.role)
+            if not self.object_handle and (self.editor.constraint_mode=='tangent' or self.role in ('start','end')):self.editor.constraint_pick(self.identity,self.role)
             else:self.editor.message('Для связи выберите круглый маркер начала или конца кривой.')
             event.accept();return
         if not self.object_handle and next(p for p in self.editor.raw['primitives'] if p['id']==self.identity).get('fixed',False):
@@ -193,7 +195,7 @@ class GeometryEditor(QWidget):
         reset=QPushButton('Сбросить черновик');reset.clicked.connect(self.reset_draft);controls.addWidget(reset)
         guide=QPushButton('Инструкция');guide.clicked.connect(self.show_guide);controls.addWidget(guide)
         undo=QPushButton('↶');redo=QPushButton('↷');undo.clicked.connect(owner.undo_stack.undo);redo.clicked.connect(owner.undo_stack.redo);controls.addWidget(undo);controls.addWidget(redo);layout.addLayout(controls)
-        for button,tip in ((undo,'Отменить последнее применённое изменение (Ctrl+Z)'),(redo,'Повторить изменение (Ctrl+Y)'),(fit,'Вписать геометрию в окно'),(reset,'Вернуть последний применённый вариант, отбросив некорректный черновик')):button.setToolTip(tip)
+        for button,tip in ((undo,'Отменить последний шаг, включая черновик или его сброс (Ctrl+Z)'),(redo,'Повторить изменение (Ctrl+Y)'),(fit,'Вписать геометрию в окно'),(reset,'Вернуть последний применённый вариант. Ctrl+Z восстановит черновик.')):button.setToolTip(tip)
         undo.setFixedWidth(30);redo.setFixedWidth(30)
         self.tool.currentIndexChanged.connect(self.cancel_construction)
         hint=QLabel('Точка — изменить конец · квадрат центра / линия — перенос целиком · колесо — масштаб · средняя кнопка — панорама · Esc — отменить построение')
@@ -207,7 +209,7 @@ class GeometryEditor(QWidget):
             if tab is self.primitive_table:
                 for title,callback in [('Точка',lambda:self.add_primitive('point')),('Отрезок',lambda:self.add_primitive('line')),('Дуга',lambda:self.add_primitive('arc')),('Разбить',self.split_primitive)]:self.button(buttons,title,callback)
                 self.import_points_button=self.button(buttons,'Точки XLSX…',self.import_points)
-                extra=QHBoxLayout();self.button(extra,'Согласовать дугу по радиусу',self.repair_arc);extra.addStretch();box.addLayout(extra)
+                extra=QHBoxLayout();self.button(extra,'Согласовать дугу по радиусу',self.repair_arc);self.button(extra,'Исправить направление дуги',self.repair_arc_direction);extra.addStretch();box.addLayout(extra)
             elif tab is self.object_table:
                 for kind,title in [('hole','Отверстие'),('insert','Вставка'),('custom','Другой тип')]:self.button(buttons,title,lambda checked=False,k=kind:self.add_object(k))
             elif tab is self.group_table:self.button(buttons,'Добавить группу',self.add_group)
@@ -243,7 +245,10 @@ class GeometryEditor(QWidget):
     def uid(self,prefix):return next_id(self.raw,prefix)
     def cancel_construction(self):
         self._first=None;self.constraint_mode=None;self._constraint_first=None;self.coincident_button.setChecked(False);self.tangent_button.setChecked(False);self.sketch.viewport().update()
-    def reset_draft(self):self.cancel_construction();self.load(self.owner.cfg,self.owner.nozzles,force=True)
+    def reset_draft(self):
+        before=chamber_history.snapshot(self)
+        self.cancel_construction();self.load(self.owner.cfg,self.owner.nozzles,force=True)
+        chamber_history.record(self,'Sketcher: сбросить черновик',before=before)
     def load(self,cfg,nozzles,force=False):
         candidate=cfg.geometry or legacy_geometry(cfg,nozzles)
         if not cfg.geometry:
@@ -259,7 +264,7 @@ class GeometryEditor(QWidget):
             incremental=({k:v for k,v in old.items() if k not in ('primitives','constraints','schema_version')}=={k:v for k,v in candidate.items() if k not in ('primitives','constraints','schema_version')} and
                 [(p['id'],p['kind']) for p in old['primitives']]==[(p['id'],p['kind']) for p in candidate['primitives']])
         if incremental:
-            old=self.loaded_raw;self.cfg=cfg;self.loaded_raw=deepcopy(candidate);self.raw=deepcopy(candidate)
+            old=self.loaded_raw;self.cfg=cfg;self.loaded_raw=deepcopy(candidate);self.raw=deepcopy(candidate);self._draft_cell_errors={}
             self.refresh_primitives(old)
             if old.get('constraints')!=candidate.get('constraints'):
                 affected={ref['primitive_id'] for c in old.get('constraints',[])+candidate.get('constraints',[]) for ref in (c['a'],c['b'])}
@@ -268,17 +273,18 @@ class GeometryEditor(QWidget):
                     for row,p in enumerate(self.raw['primitives']):
                         if p['id'] in affected:self.fill_primitive_row(row,p)
                 finally:self.primitive_table.blockSignals(False)
-            self.fill_constraints();self.sync_constraint_glyphs();return
-        self.cfg=cfg;self.loaded_raw=deepcopy(candidate);self.loaded_presets=deepcopy(cfg.nozzle_presets);self.working_nozzles=deepcopy(nozzles);self.base_nozzles=deepcopy(nozzles);self.raw=deepcopy(candidate);self._pending=True;self._draft_invalid=False
+            self.fill_constraints();self.sync_constraint_glyphs();chamber_history.checkpoint(self);return
+        self.cfg=cfg;self.loaded_raw=deepcopy(candidate);self.loaded_presets=deepcopy(cfg.nozzle_presets);self.working_nozzles=deepcopy(nozzles);self.base_nozzles=deepcopy(nozzles);self.raw=deepcopy(candidate);self._pending=True;self._draft_invalid=False;self._draft_cell_errors={}
         self.message('Геометрия загружена. Несогласованный черновик не участвует в расчёте.')
         if self.isVisible():self.rebuild()
+        chamber_history.checkpoint(self)
     def showEvent(self,event):
         super().showEvent(event)
         if self._pending and hasattr(self,'raw'):self.rebuild()
     def message(self,text,error=False):self.status.setText(text);self.status.setToolTip(text);self.status.setStyleSheet('color:#a32138' if error else 'color:#52617c')
     def show_guide(self):
         self.guide_dialog=QDialog(self);self.guide_dialog.setWindowTitle('Геометрия ЖТ v0.6 — инструкция');self.guide_dialog.resize(900,750)
-        layout=QVBoxLayout(self.guide_dialog);browser=QTextBrowser();browser.setMarkdown(read_help('V0.6_GUIDE.md'))
+        layout=QVBoxLayout(self.guide_dialog);browser=QTextBrowser();populate_help(browser,'V0.6_GUIDE.md')
         layout.addWidget(browser);buttons=QDialogButtonBox(QDialogButtonBox.Close);buttons.rejected.connect(self.guide_dialog.close);layout.addWidget(buttons);self.guide_dialog.show()
     def rebuild(self):
         self.loading=True
@@ -300,7 +306,9 @@ class GeometryEditor(QWidget):
         if kind=='arc':
             for c in self.raw.get('constraints',[]):
                 if c['kind']!='tangent' or not c.get('enabled',True):continue
+                pair=[next(q for q in self.raw['primitives'] if q['id']==c[k]['primitive_id']) for k in ('a','b')]
                 for ref in (c['a'],c['b']):
+                    if all(q['kind']=='arc' for q in pair) and ref is c['b']:continue
                     if ref['primitive_id']==p['id']:derived.update((7,8,9,10,*( (3,4) if ref['endpoint']=='start' else (5,6))))
         for col,v in enumerate(values):
             editable=col!=0 and (kind!='point' or col not in (5,6)) and (kind=='arc' or col not in (7,8,9,10)) and not(p.get('fixed',False) and col in range(2,11)) and col not in derived
@@ -373,6 +381,7 @@ class GeometryEditor(QWidget):
             self.fill_constraints()
         finally:
             for table in self.tables:table.blockSignals(False)
+            chamber_history.restore_cells(self)
     def cell(self,table,row,col):return table.item(row,col).text().strip()
     def fill_constraints(self):
         records=constraint_records(self.raw);self.constraint_table.setRowCount(len(records))
@@ -384,15 +393,30 @@ class GeometryEditor(QWidget):
         previous=self.constraint_mode;self.cancel_construction()
         if previous==kind:return
         self.constraint_mode=kind;self.coincident_button.setChecked(kind=='coincident');self.tangent_button.setChecked(kind=='tangent')
-        self.message(('Совпадение: выберите перемещаемую точку, затем точку назначения.' if kind=='coincident' else 'Касательность: выберите конец дуги и конец отрезка. Отрезок останется на месте.')+' Esc — отмена; перекрывающиеся точки можно выбрать на странице «Связи».')
+        self.message(('Совпадение: выберите перемещаемую точку, затем точку назначения.' if kind=='coincident' else 'Касательность: щёлкните по двум кривым. Отрезок сохраняется; для двух дуг первая подгоняется ко второй (опорной). Общая точка определяется автоматически.')+' Esc — отмена.')
     def constraint_pick(self,identity,role):
+        if self.constraint_mode=='tangent':
+            if next(p for p in self.raw['primitives'] if p['id']==identity)['kind']=='point':self.message('Выберите отрезок или дугу.');return
+            self.select(identity)
+            if self._constraint_first is None:
+                self._constraint_first=identity;self.message('Выбрана кривая '+identity+'. Выберите вторую кривую (её линию, а не общую точку).');return
+            first=self._constraint_first
+            if first==identity:self.message('Выберите другую кривую; можно щёлкнуть по её линии вдали от общей точки.');return
+            try:a,b=tangent_references(self.raw,first,identity)
+            except ValueError as exc:self.message('Касательность: '+str(exc),True);return
+            if self.create_constraint('tangent',a,b):self.cancel_construction()
+            return
         self.select(identity);reference=dict(primitive_id=identity,endpoint=role)
         if self._constraint_first is None:self._constraint_first=reference;self.message('Выбрана '+identity+'.'+role+'. Теперь выберите вторую точку.');return
         first=self._constraint_first;kind=self.constraint_mode;self._constraint_first=None
         if self.create_constraint(kind,first,reference):self.cancel_construction()
     def constraint_dialog(self,kind):
         dialog=ConstraintDialog(self.raw,kind,self);self.connection_dialog=dialog
-        if dialog.exec_()==QDialog.Accepted:self.create_constraint(kind,dialog.a.currentData(),dialog.b.currentData())
+        if dialog.exec_()==QDialog.Accepted:
+            try:
+                a,b=dialog.references()
+                self.create_constraint(kind,a,b)
+            except ValueError as exc:self.message('Касательность: '+str(exc),True)
     def create_constraint(self,kind,a,b):
         before=deepcopy(self.raw)
         try:
@@ -422,6 +446,18 @@ class GeometryEditor(QWidget):
                 except ValueError:continue
             self.commit('Sketcher: согласовать дугу по радиусу')
         except ValueError as exc:self.message('Дуга не согласована: '+str(exc),True)
+    def repair_arc_direction(self):
+        row=self.primitive_table.currentRow()
+        if row<0:return
+        p=self.raw['primitives'][row]
+        if p['kind']!='arc':self.message('Выберите дугу в таблице.');return
+        if p.get('fixed',False):self.message(p['id']+': сначала снимите фиксацию.',True);return
+        try:Primitive(p);self.message('Направление уже задаёт однозначную дугу R(z).');return
+        except ValueError:pass
+        candidate=deepcopy(p);candidate['clockwise']=not candidate.get('clockwise',False)
+        try:Primitive(candidate)
+        except ValueError as exc:self.message('Смена направления не устраняет ошибку: '+str(exc),True);return
+        p.update(candidate);self.commit('Sketcher: исправить направление дуги')
     def value(self,table,row,col):
         item=table.item(row,col);text=item.text().replace(',','.');raw=item.data(Qt.UserRole)
         if isinstance(raw,(int,float)) and text==format(raw,'.12g'):return float(raw)
@@ -435,6 +471,8 @@ class GeometryEditor(QWidget):
         if table.in_batch:self.pending_batch.setdefault(table,{}).setdefault(item.row(),set()).add(item.column());return
         row=item.row();col=item.column()
         columns=columns or {col}
+        identity=table.item(row,0).text()
+        for column in columns:self._draft_cell_errors.pop((self.tables.index(table),identity,column),None)
         try:
             if table is self.primitive_table:
                 materialize_constraints(self.raw);p=self.raw['primitives'][row];old=deepcopy(p)
@@ -488,7 +526,10 @@ class GeometryEditor(QWidget):
             if not self.batch_mode:self.commit('Геометрия: правка таблицы',groups=table is self.group_table,sections=table is self.section_table)
         except (ValueError,TypeError,KeyError,StopIteration) as exc:
             self.batch_error=str(exc);self._draft_invalid=True;self.message('Черновик не применён: '+str(exc),True)
-            if not self.batch_mode:self.draw_scene()
+            for column in columns:self._draft_cell_errors[(self.tables.index(table),identity,column)]=self.cell(table,row,column)
+            chamber_history.restore_cells(self)
+            if not self.batch_mode:
+                self.draw_scene();chamber_history.record(self,'Геометрия: правка черновика')
     def batch_finished(self,table):
         pending=self.pending_batch.pop(table,{})
         if not pending:return
@@ -497,7 +538,8 @@ class GeometryEditor(QWidget):
             for row,columns in pending.items():self.table_edited(table,table.item(row,max(columns)),columns)
         finally:self.batch_mode=False
         if not self.batch_error:self.commit('Геометрия: вставка ячеек',groups=table is self.group_table,sections=table is self.section_table)
-        else:self.draw_scene()
+        else:
+            self.draw_scene();chamber_history.record(self,'Геометрия: вставка в черновик')
     def update_nozzle(self,obj,z,r,theta):
         from .v02 import effective_nozzle
         n=next(n for n in self.working_nozzles if n.id==obj['nozzle_id'])
@@ -523,8 +565,14 @@ class GeometryEditor(QWidget):
                             moved=move_endpoint(p,role,[self.base.value()/factor,p[role][1]]);p.clear();p.update(moved)
             self.commit('Параметры геометрии')
         except ValueError as exc:self.raw=before;self.rebuild();self.message('Параметры не применены: '+str(exc),True)
-    def commit(self,label,groups=False,sections=False):
+    def commit(self,label,groups=False,sections=False,record_failure=True):
+        history_before=self._draft_checkpoint if hasattr(self,'_draft_checkpoint') else chamber_history.snapshot(self)
+        project_before=project_to_json(self.owner.cfg,self.owner.nozzles)
         try:
+            chamber_history.prune_cells(self)
+            if self._draft_cell_errors:
+                table_index,identity,col=next(iter(self._draft_cell_errors));header=self.tables[table_index].horizontalHeaderItem(col).text().replace('\n',' ')
+                raise ValueError(identity+': исправьте ошибочное значение в столбце «'+header+'» или сбросьте черновик')
             materialize_constraints(self.raw)
             previous={p['id']:p for p in self.loaded_raw['primitives']};drivers=[]
             for p in self.raw['primitives']:
@@ -533,6 +581,8 @@ class GeometryEditor(QWidget):
                 for role in ('start','end'):
                     if role in p and role in old and not np.allclose(np.array(p[role])*UNITS[p.get('unit','mm')],np.array(old[role])*UNITS[old.get('unit','mm')],rtol=0,atol=TOL):drivers.append((p['id'],role))
             self.raw=apply_constraints(self.raw,drivers=drivers,baseline=self.loaded_raw)
+            if self.raw['sections'] and max(number(s['z_mm']) for s in self.raw['sections'])>number(self.raw['outlet_z_mm'])+TOL:
+                self.raw=sync_section_outlet(self.raw)
             model=Chamber(self.raw)
             if groups:self.raw,self.working_nozzles=apply_groups(self.raw,self.working_nozzles)
             current=deepcopy(self.owner.nozzles);base={n.id:n for n in self.base_nozzles};working={n.id:n for n in self.working_nozzles}
@@ -547,12 +597,15 @@ class GeometryEditor(QWidget):
             # Individual/group geometry edits deliberately preserve all other
             # positions; the old global Auto-follow must not overwrite them.
             if self.raw['groups']:state['settings']['placement_mode']='manual'
-            self.owner.apply_geometry_state(state,label)
+            self.owner.apply_geometry_state(state,label,record_history=False)
             if self._draft_invalid:self.load(self.owner.cfg,self.owner.nozzles,force=True)
             self.message('Применено. Связи и размеры сохранены; пояснение wall-bound — в «Инструкции».' if model.variable and model.enabled else 'Применено. Сектора 1–36 и расходные характеристики сохранены.')
+            chamber_history.record(self,label,before=history_before,project_before=project_before)
             return True
         except (ValueError,TypeError,KeyError,StopIteration) as exc:
-            self._draft_invalid=True;self.message('Черновик не применён: '+str(exc),True);self.fill_tables();self.draw_scene();return False
+            self._draft_invalid=True;self.message('Черновик не применён: '+str(exc),True);self.fill_tables();self.draw_scene()
+            if record_failure:chamber_history.record(self,label,before=history_before,project_before=project_before)
+            return False
     def import_points(self):
         path,_=QFileDialog.getOpenFileName(self,'Точки геометрии','','Excel (*.xlsx)')
         if not path:return
@@ -634,16 +687,16 @@ class GeometryEditor(QWidget):
             if key=='primitives' and record.get('fixed',False):self.message(record['id']+': снимите фиксацию перед удалением.',True);return
             if key=='objects' and record['type']=='nozzle':self.message('140 позиций форсунок сохраняются; отключайте их на 02',True);return
             if key=='sections' and len(self.raw['sections'])-len(rows)<1:self.message('Оставьте хотя бы одно сечение.',True);return
-        before=deepcopy(self.raw);was_invalid=self._draft_invalid
+        before=deepcopy(self.raw);before_cells=deepcopy(self._draft_cell_errors);was_invalid=self._draft_invalid
         if key=='primitives':
             materialize_constraints(self.raw);removed={self.raw[key][row]['id'] for row in rows}
             self.raw['constraints']=[c for c in self.raw['constraints'] if not any(c[k]['primitive_id'] in removed for k in ('a','b'))]
         for row in rows:del self.raw[key][row]
         if key=='sections':
             try:self.sync_section_outlet()
-            except ValueError as exc:self.raw=before;self.message('Сечения не изменены: '+str(exc),True);return
-        if not self.commit('Удалить геометрические объекты',sections=key=='sections') and key=='sections':
-            message=self.status.text();self.raw=before;self._draft_invalid=was_invalid;self.fill_tables();self.draw_scene();self.message('Сечения не изменены. '+message,True)
+            except ValueError as exc:self.raw=before;self._draft_cell_errors=before_cells;self.message('Сечения не изменены: '+str(exc),True);return
+        if not self.commit('Удалить геометрические объекты',sections=key=='sections',record_failure=key!='sections') and key=='sections':
+            message=self.status.text();self.raw=before;self._draft_cell_errors=before_cells;self._draft_invalid=was_invalid;self.fill_tables();self.draw_scene();self.message('Сечения не изменены. '+message,True)
     def select(self,identity,object_handle=False):
         previous=self.loading;self.loading=True
         self.selected=identity;table=self.object_table if object_handle else self.primitive_table;records=self.raw['objects' if object_handle else 'primitives']
@@ -692,8 +745,10 @@ class GeometryEditor(QWidget):
                     for role in ['start']+([] if raw['kind']=='point' else ['end'])+(['center'] if raw['kind']=='arc' else []):
                         point=np.array(raw[role])*factor;handle=Handle(self,raw['id'],role,(point[0],-point[1]),color);scene.addItem(handle);self.handles.append(handle)
                 for section in self.raw['sections']:
-                    try:rin,rout=model.bounds(section['z_mm']) if model else (self.cfg.r_in_mm,self.cfg.r_out_mm)
+                    try:bounds=model.bounds(section['z_mm']) if model else draft_bounds(self.raw,section['z_mm'])
                     except ValueError:continue
+                    if bounds is None:continue
+                    rin,rout=bounds
                     pen=QPen(QColor('#a36bac' if section.get('is_outlet') else '#aab4c5'),0,Qt.DashLine);self.section_lines[section['id']]=scene.addLine(section['z_mm'],-rin,section['z_mm'],-rout,pen)
                     label=scene.addSimpleText(section['id']+(' · выход' if section.get('is_outlet') else ''));label.setFlag(QGraphicsItem.ItemIgnoresTransformations);label.setPos(section['z_mm'],-rout)
                     self.section_labels[section['id']]=label
