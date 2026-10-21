@@ -1,0 +1,159 @@
+{
+  "purpose": "Actual accessed source evidence for V0.7_LITERATURE_REVIEW.md; master URLs may change.",
+  "openfoam_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/OpenFOAM/OpenFOAM-dev/master/README.org",
+      "http_status": 200,
+      "file_name": "README.org",
+      "bytes": 1635,
+      "sha256": "3aa25f4f5afeb37cf01cd5f1343d7f510a442c159ba3a3cbfb57a8e457d02e33",
+      "read_scope": "Local source text; not independent experimental validation"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/OpenFOAM/OpenFOAM-dev/master/src/lagrangian/parcel/submodels/Momentum/DispersionModel/StochasticDispersionRAS/StochasticDispersionRAS.C",
+      "http_status": 200,
+      "file_name": "StochasticDispersionRAS.C",
+      "bytes": 3670,
+      "sha256": "b2491146f19524ebb77b5b55fc491fec848744aa6a05605946581c81b4d0486b",
+      "read_scope": "Local source text; not independent experimental validation"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/OpenFOAM/OpenFOAM-dev/master/src/lagrangian/parcel/submodels/Momentum/PatchInteractionModel/LocalInteraction/LocalInteraction.C",
+      "http_status": 200,
+      "file_name": "LocalInteraction.C",
+      "bytes": 13522,
+      "sha256": "e5762884ad40066b0195eb846bd25caabe3feac3b7110735d5788ac4ffeac6dc",
+      "read_scope": "Local source text; not independent experimental validation"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/OpenFOAM/OpenFOAM-dev/master/src/lagrangian/parcel/submodels/Momentum/ParticleForces/Drag/SphereDrag/SphereDragForce.H",
+      "http_status": 200,
+      "file_name": "SphereDragForce.H",
+      "bytes": 3669,
+      "sha256": "0bb046183bb59343ab3f8db38f57516546fb8cd8abd1218d89d908003d76e5b9",
+      "read_scope": "Local source text; not independent experimental validation"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/OpenFOAM/OpenFOAM-dev/master/src/lagrangian/parcel/submodels/Momentum/ParticleForces/Drag/SphereDrag/SphereDragForce.C",
+      "http_status": 200,
+      "file_name": "SphereDragForce.C",
+      "bytes": 2695,
+      "sha256": "74d9929d08c892d16d38a6544b94557e311eb8ab8856e55a98df5c4bf31c932c",
+      "read_scope": "Local source text; not independent experimental validation"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/OpenFOAM/OpenFOAM-dev/master/applications/solvers/potentialFoam/potentialFoam.C",
+      "http_status": 200,
+      "file_name": "potentialFoam.C",
+      "bytes": 5534,
+      "sha256": "8d886eb814d1ad3002c3129e694f6c0e3768dca19e2514ce1b8234a310d8c68b",
+      "read_scope": "Local source text; not independent experimental validation"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/OpenFOAM/OpenFOAM-dev/master/src/lagrangian/parcel/submodels/Momentum/PatchInteractionModel/LocalInteraction/LocalInteraction.H",
+      "http_status": 200,
+      "file_name": "LocalInteraction.H",
+      "bytes": 4644,
+      "sha256": "9cd71533af27f76111e84bdc2d42a3a3e95d40cc01d443eae269bd9086200799",
+      "read_scope": "Local source text; not independent experimental validation"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/OpenFOAM/OpenFOAM-dev/master/src/lagrangian/parcel/submodels/Momentum/DispersionModel/StochasticDispersionRAS/StochasticDispersionRAS.H",
+      "http_status": 200,
+      "file_name": "StochasticDispersionRAS.H",
+      "bytes": 3300,
+      "sha256": "7f82703ac475198aa717188a357567f5bb6dc00aa5277eb933dee329e2f7b48d",
+      "read_scope": "Local source text; not independent experimental validation"
+    }
+  ],
+  "user_uploaded_book": {
+    "title": "Распыливание жидкостей",
+    "authors": [
+      "Ю. Ф. Дитякин",
+      "Л. А. Клячко",
+      "Б. В. Новиков",
+      "В. И. Ягодкин"
+    ],
+    "year": 1977,
+    "publisher": "Машиностроение",
+    "file_name": "Дитякин распыливание жидкостей.djvu",
+    "bytes": 3386683,
+    "sha256": "db89c066172c4bdf144b82d223f0ec194730049cc904d6ab4c0457b856fbc5a2",
+    "read_djvu_pages": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      112,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118,
+      160,
+      161,
+      162,
+      163,
+      164,
+      165,
+      166,
+      167,
+      168,
+      169,
+      170,
+      171,
+      172,
+      173,
+      174,
+      175,
+      176,
+      177,
+      178,
+      179,
+      180,
+      181,
+      182,
+      204,
+      205,
+      206,
+      207,
+      208,
+      209
+    ],
+    "visually_checked_body_page": 116,
+    "scope": "Selected rendered pages and OCR; full-book OCR is empty; no claim of a complete monograph review."
+  },
+  "inaccessible_network_records": [
+    {
+      "url": "https://turbmodels.larc.nasa.gov/",
+      "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+    },
+    {
+      "url": "https://ntrs.nasa.gov/",
+      "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+    },
+    {
+      "url": "https://api.openalex.org/works?search=confined%20turbulent%20jets&per-page=2",
+      "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+    },
+    {
+      "url": "https://doc.cfd.direct/openfoam/user-guide-v13/turbulence",
+      "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/OpenFOAM/OpenFOAM-dev/master/README.md",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://arxiv.org/search/?query=confined+turbulent+jet&searchtype=all",
+      "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+    },
+    {
+      "url": "https://pope.mae.cornell.edu/TurbulentFlows/",
+      "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+    }
+  ],
+  "distinction": "No inaccessible paper was treated as read. Reduced potential carrier, effective relaxation, OU and prescribed capture-film law are explicit model closures, not published validation of this application."
+}

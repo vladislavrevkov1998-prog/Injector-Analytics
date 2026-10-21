@@ -51,7 +51,7 @@ def main():
         m=ax.pcolormesh(th,r,data,shading='flat',cmap=cmap,norm=norm)
         ax.set_theta_zero_location('E');ax.set_theta_direction(1);polar_ticks(ax,cfg)
         ax.set_ylim(0,plane.radial_edges_mm[-1])
-        ax.set_title(f'Section {i+1}, z={z:g} mm'+(' · accumulated matrix' if quasi else ''))
+        ax.set_title(f'Section {i+1}, z={z:g} mm'+(' · accumulated matrix' if quasi else '')+(' · suspended + film' if plane.transport_notice else ''))
         draw_nozzle_markers(ax,cfg,nozzles,polar=True)
         fig.colorbar(m,ax=ax,shrink=.8,label='kg/(m² s)')
         fig.savefig(out/f'section_{i+1}_field.png',dpi=160,bbox_inches='tight');plt.close(fig)
@@ -79,13 +79,16 @@ def main():
         fig.tight_layout();fig.savefig(out/f'section_{i+1}_profiles.png',dpi=140,bbox_inches='tight');plt.close(fig)
         if quasi:
             snap=quasi.snapshot(i,args.step);print(f'Section {i+1} z={z:g} mm | accumulated matrix; field step={args.step} t={quasi.settings.times[args.step]:g} s | instantaneous balance={snap.rel_balance_error:+.3e}')
+        elif plane.transport_notice:
+            print(f'Section {i+1} z={z:g} mm | total={plane.injected_kg_s*3600:.5f} kg/h | '
+                  f'suspended={plane.suspended_cell_mass_kg_s.sum()*3600:.5f}, film_inner={plane.film_inner_cell_mass_kg_s.sum()*3600:.5f}, film_outer={plane.film_outer_cell_mass_kg_s.sum()*3600:.5f}; balance error={plane.rel_balance_error:+.3e}')
         else:print(f'Section {i+1} z={z:g} mm | total={plane.injected_kg_s*3600:.5f} kg/h | '
               f'in={plane.inside_kg_s*3600:.5f}, inner={plane.inner_kg_s*3600:.5f}, '
               f'outer={plane.outer_kg_s*3600:.5f}, wall-bound={plane.wall_bound_kg_s*3600:.5f}; balance error={plane.rel_balance_error:+.3e}')
     if quasi:
         from fuelfield.quasi_io import write_report
         write_report(out/'fuel_fields.csv',quasi);write_report(out/'epures.xlsx',quasi)
-    else:write_result_csv(str(out/'fuel_fields.csv'),planes)
+    else:write_result_csv(str(out/'fuel_fields.csv'),planes,cfg=cfg)
     print('Results:',out.resolve())
 
 if __name__=='__main__':main()

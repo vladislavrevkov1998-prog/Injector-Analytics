@@ -3,10 +3,12 @@ import argparse
 import base64
 import hashlib
 from pathlib import Path
+import re
 import subprocess
 import zipfile
 
-GUIDES = ('V0.6_GUIDE.md', 'QUASISTATIONARY_GUIDE.md', 'V0.4.1_IDENTIFICATION_GUIDE.md')
+GUIDES = ('V0.6_GUIDE.md', 'QUASISTATIONARY_GUIDE.md', 'V0.4.1_IDENTIFICATION_GUIDE.md',
+          'V0.7_GUIDE.md', 'V0.7_LITERATURE_REVIEW.md')
 
 RESTORE = '''# Скопируйте этот текст в IDLE, сохраните рядом с папкой code как restore.py и нажмите F5.
 from pathlib import Path
@@ -66,7 +68,14 @@ def build_bundle(root, output, commit):
     for path in sorted((root / 'src/fuelfield').rglob('*.py')):
         files[path.relative_to(root).as_posix()] = path.read_bytes()
     help_text = {name: (root / 'docs' / name).read_text(encoding='utf-8') for name in GUIDES}
-    images={path.relative_to(root/'docs').as_posix():base64.b64encode(path.read_bytes()).decode('ascii') for path in sorted((root/'docs/images/v0.6.3').glob('*.png')) if path.name in ('current-model.png','narrowing.png','widening.png')}
+    image_names={relative for text in help_text.values()
+                 for relative in re.findall(r'!\[[^\]]*\]\(([^)]+)\)',text)}
+    images={}
+    for relative in sorted(image_names):
+        path=Path(relative)
+        if path.is_absolute() or '..' in path.parts or path.suffix.lower()!='.png':
+            raise ValueError('Unsupported runtime help image: '+relative)
+        images[path.as_posix()]=base64.b64encode((root/'docs'/path).read_bytes()).decode('ascii')
     files['src/fuelfield/runtime_help.py'] = ('# Embedded runtime instructions for the clean TXT distribution.\nHELP = ' + repr(help_text) + '\nIMAGES = '+repr(images)+'\n').encode('utf-8')
     hashes = {name: hashlib.sha256(content).hexdigest() for name, content in files.items()}
     restore = RESTORE.replace('__FILES__', repr(hashes)).replace('__VERSION__', repr(version)).replace('__COMMIT__', repr(commit))
@@ -85,7 +94,7 @@ def build_bundle(root, output, commit):
 структуру папок. requirements.txt нужен для установки зависимостей.
 Программа запускается со штатной конфигурацией; собственные проекты загружаются
 через «Открыть». Примеров, проектов, документационных папок и временных файлов
-в комплекте нет. Три встроенные инструкции являются частью работающего UI.
+в комплекте нет. Встроенные инструкции ({len(GUIDES)}) и схемы являются частью работающего UI.
 Повторный запуск restore.py проверяет SHA-256 и не перезаписывает изменённый код.
 Зависимости требуют интернета при установке; архив не содержит интерпретатор.
 ''').encode('utf-8')

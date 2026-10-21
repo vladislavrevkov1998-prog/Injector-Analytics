@@ -38,7 +38,7 @@ import sys
 sys.path.insert(0, 'src')
 from PyQt5.QtWidgets import QApplication, QTextBrowser
 from fuelfield.gui import MainWindow
-from fuelfield.help_text import read_help,HELP_IMAGES
+from fuelfield.help_text import read_help,HELP_IMAGES,TRANSPORT_HELP_IMAGES
 from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QTextDocument
 app=QApplication([]);w=MainWindow();w.show();app.processEvents()
@@ -56,7 +56,19 @@ assert len(w.regression_dialog.guide_dialog.findChild(QTextBrowser).toPlainText(
 w.regression_dialog.guide_dialog.close();w.regression_dialog.close()
 w.open_quasi_settings();w.quasi_dialog.show_guide()
 assert len(w.quasi_dialog.guide_dialog.findChild(QTextBrowser).toPlainText())>2000
-w.quasi_dialog.guide_dialog.close();w.quasi_dialog.close();w.close()
+w.quasi_dialog.guide_dialog.close();w.quasi_dialog.close()
+w.open_transport_settings();w.transport_dialog.show_guide()
+browser=w.transport_dialog.guide_dialog.findChild(QTextBrowser)
+assert 'сохранение массы' in browser.toPlainText().lower()
+for relative in TRANSPORT_HELP_IMAGES:
+    picture=browser.document().resource(QTextDocument.ImageResource,QUrl(relative))
+    assert picture is not None and not picture.isNull(),relative
+    assert 600<picture.width()<=840,relative
+browser.anchorClicked.emit(QUrl('V0.7_LITERATURE_REVIEW.md'))
+assert 'Дитякин' in browser.toPlainText()
+browser.anchorClicked.emit(QUrl('V0.7_GUIDE.md'))
+assert 'Как включить и получить результат' in browser.toPlainText()
+w.transport_dialog.guide_dialog.close();w.transport_dialog.close();w.close()
 print('PORTABLE_OK')
 ''' % (GUIDES,)
             result = subprocess.run([sys.executable, '-B', '-c', code], cwd=destination, capture_output=True, text=True, timeout=60)

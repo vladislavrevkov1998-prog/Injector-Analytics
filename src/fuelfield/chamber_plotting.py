@@ -11,7 +11,9 @@ from .visualization import color_scale
 class LongitudinalDialog(QDialog):
     def __init__(self,owner):
         super().__init__(owner);self.owner=owner;self.setWindowTitle('Продольный вид ЖТ: профиль и рассчитанные сечения');self.resize(1080,800)
-        layout=QVBoxLayout(self);note=QLabel('z=x [мм], R [мм]. Цвет показан только в рассчитанных сечениях; межсеченный перенос не вычисляется. Для квазистационара — накопленные значения столбцов, без единого мгновенного баланса.');note.setWordWrap(True);layout.addWidget(note)
+        from .fuel_transport import transport_enabled
+        description=('Цвет: полный поток из сохраняющихся траекторий, включая отдельно учитываемую плёнку в граничных ячейках.' if transport_enabled(owner.cfg) else 'Цвет показан только в рассчитанных сечениях; прежнее ядро пересчитывает их независимо.')
+        layout=QVBoxLayout(self);note=QLabel('z=x [мм], R [мм]. '+description+' Для квазистационара — накопленные значения столбцов, без единого мгновенного баланса.');note.setWordWrap(True);layout.addWidget(note)
         controls=QHBoxLayout();self.mode=QComboBox();self.mode.addItems(['Среднее по окружности','Окружная ячейка']);self.index=QSpinBox();self.index.setRange(0,owner.cfg.n_angular-1);controls.addWidget(self.mode);controls.addWidget(QLabel('Ячейка (от 0):'));controls.addWidget(self.index)
         refresh=QPushButton('Обновить из текущего проекта');refresh.clicked.connect(self.draw);controls.addWidget(refresh);controls.addStretch();layout.addLayout(controls)
         self.figure=Figure(figsize=(10,7),tight_layout=True);self.canvas=FigureCanvasQTAgg(self.figure);layout.addWidget(self.canvas,1)

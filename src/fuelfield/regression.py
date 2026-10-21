@@ -14,6 +14,16 @@ METRIC={'flux':'flux','normalized_ring':'ring','normalized_track':'track'}
 PARAM_UNITS={k:('мм' if k.endswith('_mm') else '°' if 'angle' in k or k in ('alpha_deg','clock_deg') else '°/мм' if k=='rotation_deg_per_mm' else '°/√мм' if k=='diffusion_deg_sqrt_mm' else '1') for k in GEOMETRY_KEYS}
 PARAM_UNITS.update(k_quadratic='1/мм',diffusion_deg_sqrt_mm='°/√мм',rotation_deg_per_mm='°/мм')
 
+CONFINED_IDENTIFICATION_NOTICE=('Идентификация прежних параметров факела недоступна для инерционного переноса внутри ЖТ. '
+    'Параметры h₀, Rc₀, роста толщины и затухания не задают эту модель. '
+    'Настройки скорости, τ и плёнки задайте явно в «Настройки → Перенос топлива внутри ЖТ». '
+    'Для их калибровки потребуется отдельный проверенный оператор и топливные эталоны.')
+
+
+def require_legacy_identification(cfg):
+    if (cfg.fuel_transport or {}).get('mode','legacy')=='confined_inertial':
+        raise ValueError(CONFINED_IDENTIFICATION_NOTICE)
+
 @dataclass(frozen=True)
 class RegressionSnapshot:
     payload: str
@@ -136,6 +146,9 @@ class FitResult:
     def candidate(self):return project_from_json(json.loads(self.candidate_payload))
 
 def active_parameters(cfg,nozzles,target,scope):
+    # The GUI asks for this list while rebuilding a table, outside an exception
+    # handler. Unsupported legacy parameters must never look identifiable.
+    if (cfg.fuel_transport or {}).get('mode','legacy')=='confined_inertial':return []
     if scope not in NOZZLE_KINDS:raise ValueError('v0.4 подбирает только параметры типа форсунки')
     members=[effective_nozzle(n,cfg) for n in nozzles if n.enabled and n.nozzle_kind==scope and source_flow_kg_s(n,cfg)>0]
     if not members:return []
@@ -172,6 +185,7 @@ class _Stopped(Exception):pass
 def fit(snapshot,target,parameters,*,budget=120,regularization=0.,criterion='absolute',relative_floor=1e-9,seed=0,
         geometry_model=None,angular_model=None,progress=None,cancel=None):
     started=time.perf_counter();cfg,ns=snapshot.restore()
+    require_legacy_identification(cfg)
     if geometry_model is not None:cfg.geometry_model=geometry_model
     if angular_model is not None:cfg.angular_model=angular_model
     cfg.validate();mapping=target.validate(cfg);parameters=tuple(replace(p,unit=p.unit or PARAM_UNITS.get(p.key,"")) for p in parameters)
@@ -297,7 +311,7 @@ def fit(snapshot,target,parameters,*,budget=120,regularization=0.,criterion='abs
 
 def predict_snapshot(snapshot,target,cancel=None):
     """Original project prediction at target coordinates for an honest before/after view."""
-    cfg,nozzles=snapshot.restore();mapping=target.validate(cfg);mask,weights,_=target.arrays();used=mask&(weights>0)
+    cfg,nozzles=snapshot.restore();require_legacy_identification(cfg);mapping=target.validate(cfg);mask,weights,_=target.arrays();used=mask&(weights>0)
     fields={};prediction=np.full(len(target.y),np.nan)
     for z in sorted({z for i,(z,_,_) in enumerate(mapping) if used[i]}):
         if cancel and cancel():raise ValueError('Предпросмотр исходного проекта отменён')

@@ -158,22 +158,62 @@ class Influence:
     preview_axis: object=None
     preview_mask: object=None
     upper_field: object=None
+    suspended_weights: object=None
+    film_inner_weights: object=None
+    film_outer_weights: object=None
+    momentum_weights: object=None
+    travel_time_s: object=None
+    transport_notice: str=''
     def plane(self,flows):
         mass=(self.weights@flows).reshape(self.area.shape)
         wi=float(self.wall_inner@flows) if self.wall_inner is not None else 0.;wo=float(self.wall_outer@flows) if self.wall_outer is not None else 0.
+        transport={}
+        if self.suspended_weights is not None:
+            momentum={key:np.asarray(flows@value) for key,value in self.momentum_weights.items()}
+            residual=momentum['outgoing_N']-momentum['incoming_N']-momentum['carrier_N']-momentum['wall_N']
+            denominator=max(*(np.linalg.norm(value) for value in momentum.values()),1e-15)
+            momentum={**{key:value.tolist() for key,value in momentum.items()},
+                'residual_N':residual.tolist(),'relative_residual':float(np.linalg.norm(residual)/denominator)}
+            transport=dict(suspended_cell_mass_kg_s=(self.suspended_weights@flows).reshape(self.area.shape),
+                film_inner_cell_mass_kg_s=(self.film_inner_weights@flows).reshape(self.area.shape),
+                film_outer_cell_mass_kg_s=(self.film_outer_weights@flows).reshape(self.area.shape),
+                transport_momentum=momentum,transport_notice=self.transport_notice,
+                max_travel_time_s=float(np.max(self.travel_time_s[np.asarray(flows)>0],initial=0.)))
         return PlaneResult(self.z_mm,mass,self.area,mass/self.area,self.radii,self.edges,self.angles,float(self.reached@flows),float(mass.sum()),float(self.inner@flows),float(self.outer@flows),
-            wall_bound_kg_s=wi+wo,wall_inner_kg_s=wi,wall_outer_kg_s=wo,geometry_notice=WALL_BOUND_NOTICE if self.wall_inner is not None else '')
+            wall_bound_kg_s=wi+wo,wall_inner_kg_s=wi,wall_outer_kg_s=wo,
+            geometry_notice=self.transport_notice or (WALL_BOUND_NOTICE if self.wall_inner is not None else ''),**transport)
     def smooth(self,flows):
         if self.preview_weights is None:raise ValueError('Подробное поле не было подготовлено')
         dim=len(self.preview_axis);values=(self.preview_weights@flows).reshape(dim,dim)
         return SmoothField(self.preview_axis,self.preview_axis,values,np.ma.masked_where(self.preview_mask,values),self.z_mm)
 
 def build_influence(nozzles,cfg,z,flows,preview=True,cancel=None):
+    from .fuel_transport import transport_enabled
+    confined=transport_enabled(cfg)
     radii,edges=cfg.radial_centers_and_edges(z);weights=np.zeros((cfg.n_radial*cfg.n_angular,len(nozzles)));inner=np.zeros(len(nozzles));outer=inner.copy();reached=inner.copy()
     model=chamber(cfg);variable=bool(model and model.variable)
+    if confined:
+        from .fuel_transport import confined_samples,validate_transport_source,transport_model
+        from .core import confined_cell_masses,confined_momentum
+        phase_weights=[np.zeros_like(weights) for _ in range(3)]
+        momentum_weights={key:np.zeros((len(nozzles),3)) for key in ('incoming_N','outgoing_N','carrier_N','wall_N')}
+        travel=np.zeros(len(nozzles));transport_notices=set()
+        source_model=transport_model(cfg)
     for j,n in enumerate(nozzles):
         check_cancel(cancel)
+        if confined and n.enabled and np.any(flows[:,j]>0):validate_transport_source(n,cfg,source_model)
         if not n.enabled or z<effective_nozzle(n,cfg).z_tip_mm:continue
+        if confined:
+            if not np.any(flows[:,j]>0):continue
+            reached[j]=1.;samples=confined_samples(n,cfg,z,unit_mass=True)
+            phases=confined_cell_masses(samples,cfg,edges)
+            for target,values in zip(phase_weights,phases):target[:,j]=values.reshape(-1)
+            weights[:,j]=sum(values[:,j] for values in phase_weights)
+            momentum=confined_momentum(samples)
+            for key in momentum_weights:momentum_weights[key][j]=momentum[key]
+            travel[j]=float(np.max(samples.travel_time_s,initial=0.))
+            if samples.notice:transport_notices.add(samples.notice)
+            continue
         reached[j]=1.;xp,yp,w=sample_kernel(n,z,cfg,unit_mass=True);ir=np.searchsorted(edges,np.hypot(xp,yp),side='right')-1;inside=(ir>=0)&(ir<cfg.n_radial)
         inner[j]=w[ir<0].sum();outer[j]=w[ir>=cfg.n_radial].sum()
         ith=angular_indices(xp[inside],yp[inside],cfg)
@@ -181,7 +221,10 @@ def build_influence(nozzles,cfg,z,flows,preview=True,cancel=None):
     if np.max(np.abs(weights.sum(axis=0)+inner+outer-reached))>1e-12:raise ValueError('Не замкнута нормировка единичных пространственных влияний')
     area=np.repeat((np.pi/cfg.n_angular*np.diff((edges*.001)**2))[:,None],cfg.n_angular,axis=1)
     op=Influence(deepcopy(cfg),float(z),weights,inner,outer,reached,area,radii,edges,grid_angles(cfg))
-    if variable:op.wall_inner=inner.copy();op.wall_outer=outer.copy();op.inner=np.zeros_like(inner);op.outer=np.zeros_like(outer)
+    if confined:
+        op.suspended_weights,op.film_inner_weights,op.film_outer_weights=phase_weights
+        op.momentum_weights=momentum_weights;op.travel_time_s=travel;op.transport_notice=' '.join(sorted(transport_notices))
+    elif variable:op.wall_inner=inner.copy();op.wall_outer=outer.copy();op.inner=np.zeros_like(inner);op.outer=np.zeros_like(outer)
     if preview:
         dim=int(cfg.preview_resolution);columns=[];data=[];pointers=[0]
         for j,n in enumerate(nozzles):
@@ -217,10 +260,20 @@ class QuasiResult:
         ops=self.operators if (self.cfg.color_shared_z if shared is None else shared) else (self.operators[plane_index],)
         return max(1e-15,max(float(op.upper_field.max()) if op.upper_field.count() else 0. for op in ops))
     def manifest(self):
+        confined=any(op.suspended_weights is not None for op in self.operators)
+        transport={}
+        if confined:
+            maximum=max((plane.max_travel_time_s for plane in self.composites),default=0.)
+            transport=dict(max_travel_time_s=maximum,scan_dt_s=self.settings.dt_s,
+                travel_time_to_scan_step_ratio=maximum/self.settings.dt_s,
+                pressure_response='Only prescribed source mass flow changes with pressure; injection velocity and trajectory parameters stay fixed; no transport delay or time-history response')
         return dict(format='fuel-quasistationary-result',version=1,project_sha256=hashlib.sha256(self.project_payload.encode()).hexdigest(),settings=self.settings.to_dict(),
             composite='One angular column per uniform timestamp; all radial cells simultaneously; density kg/(m2 s), not accumulated mass',
-            composite_global_balance=None,maximum_instantaneous_balance_error=self.maximum_balance_error,spatial_model='fixed unit conservative kernels; no pressure-dependent shape; tau=0',
-            preview='analytic per-source kernels; sparse cached linear superposition at selected timestamp',wall_bound=WALL_BOUND_NOTICE if chamber(self.cfg) and chamber(self.cfg).variable else None,color_auto='fixed across time; upper envelope from per-nozzle maximum flows',notices=list(self.notices),elapsed_s=self.elapsed_s)
+            composite_global_balance=None,maximum_instantaneous_balance_error=self.maximum_balance_error,
+            spatial_model=('fixed unit inertial trajectories in a prescribed carrier; suspended fuel and two captured wall films; source mass flow follows pressure' if confined else 'fixed unit conservative kernels; no pressure-dependent shape; tau=0'),
+            preview=('conservative per-source parcel reconstruction; sparse cached linear superposition at selected timestamp' if confined else 'analytic per-source kernels; sparse cached linear superposition at selected timestamp'),
+            wall_bound=WALL_BOUND_NOTICE if not confined and chamber(self.cfg) and chamber(self.cfg).variable else None,
+            color_auto='fixed across time; upper envelope from per-nozzle maximum flows',notices=list(self.notices),elapsed_s=self.elapsed_s,**transport)
 
 def calculate_quasi(nozzles,cfg,*,preview=True,cancel=None,progress=None):
     started=time.perf_counter();cfg=deepcopy(cfg);nozzles=tuple(sorted(deepcopy(nozzles),key=lambda n:n.id));cfg.validate();validate_nozzles(nozzles,cfg)
@@ -241,14 +294,39 @@ def calculate_quasi(nozzles,cfg,*,preview=True,cancel=None,progress=None):
         if progress:progress(f'Квазистационарный: сечение {i+1}/{len(cfg.z_mm)}, z={z:g} мм — влияния и кэш поля…')
         op=build_influence(nozzles,cfg,z,g,preview,cancel);operators.append(op)
         mass=np.empty(op.area.shape);times=np.empty(cfg.n_angular);steps=np.empty(cfg.n_angular,dtype=int);pcolumns=[None]*cfg.n_angular
+        phase_mass=[np.empty(op.area.shape) for _ in range(3)] if op.suspended_weights is not None else None
         for step,col in enumerate(cols):
             check_cancel(cancel);mass[:,col]=op.weights.reshape(cfg.n_radial,cfg.n_angular,-1)[:,col,:]@g[step]
+            if phase_mass is not None:
+                for target,unit in zip(phase_mass,(op.suspended_weights,op.film_inner_weights,op.film_outer_weights)):
+                    target[:,col]=unit.reshape(cfg.n_radial,cfg.n_angular,-1)[:,col,:]@g[step]
             times[col]=settings.times[step];steps[col]=step;pcolumns[col]={key:float(v[step]) for key,v in pressures.items()}
             snapshot=op.plane(g[step]);error=snapshot.rel_balance_error
             if abs(error)>1e-11:raise ValueError('Не замкнут баланс мгновенного сечения')
-            balances.append(dict(z_mm=float(z),step=step,t_s=float(settings.times[step]),injected_kg_s=snapshot.injected_kg_s,inside_kg_s=snapshot.inside_kg_s,inner_kg_s=snapshot.inner_kg_s,outer_kg_s=snapshot.outer_kg_s,wall_bound_kg_s=snapshot.wall_bound_kg_s,wall_inner_kg_s=snapshot.wall_inner_kg_s,wall_outer_kg_s=snapshot.wall_outer_kg_s,relative_error=error))
+            balance=dict(z_mm=float(z),step=step,t_s=float(settings.times[step]),injected_kg_s=snapshot.injected_kg_s,inside_kg_s=snapshot.inside_kg_s,inner_kg_s=snapshot.inner_kg_s,outer_kg_s=snapshot.outer_kg_s,wall_bound_kg_s=snapshot.wall_bound_kg_s,wall_inner_kg_s=snapshot.wall_inner_kg_s,wall_outer_kg_s=snapshot.wall_outer_kg_s,relative_error=error)
+            if phase_mass is not None:
+                balance.update(suspended_kg_s=float(snapshot.suspended_cell_mass_kg_s.sum()),
+                    film_inner_kg_s=float(snapshot.film_inner_cell_mass_kg_s.sum()),
+                    film_outer_kg_s=float(snapshot.film_outer_cell_mass_kg_s.sum()),
+                    momentum_relative_residual=snapshot.transport_momentum['relative_residual'],max_travel_time_s=snapshot.max_travel_time_s)
+                for key in ('incoming_N','outgoing_N','carrier_N','wall_N','residual_N'):
+                    for axis,value in zip(('z','x','y'),snapshot.transport_momentum[key]):
+                        balance[key.removesuffix('_N')+'_'+axis+'_N']=float(value)
+            balances.append(balance)
+        transport={}
+        if phase_mass is not None:
+            transport=dict(suspended_cell_mass_kg_s=phase_mass[0],film_inner_cell_mass_kg_s=phase_mass[1],
+                film_outer_cell_mass_kg_s=phase_mass[2],transport_notice=op.transport_notice,
+                max_travel_time_s=float(np.max(op.travel_time_s[np.any(g>0,axis=0)],initial=0.)))
         planes.append(PlaneResult(float(z),mass,op.area,mass/op.area,op.radii,op.edges,op.angles,float('nan'),float(mass.sum()),float('nan'),float('nan'),True,times,steps,tuple(pcolumns),
-            wall_bound_kg_s=float('nan'),geometry_notice=WALL_BOUND_NOTICE if op.wall_inner is not None else ''))
-    notices=set(flow.notices);notices.add('Накопленная матрица содержит разные времена; единый мгновенный глобальный баланс не определён.');notices.add('Фиксированная форма ядер, τ=0; температура и воздух не являются входными данными.')
+            wall_bound_kg_s=0. if phase_mass is not None else float('nan'),
+            geometry_notice=op.transport_notice or (WALL_BOUND_NOTICE if op.wall_inner is not None else ''),**transport))
+    notices=set(flow.notices);notices.add('Накопленная матрица содержит разные времена; единый мгновенный глобальный баланс не определён.')
+    if any(op.suspended_weights is not None for op in operators):
+        maximum=max((p.max_travel_time_s for p in planes),default=0.)
+        notices.update(op.transport_notice for op in operators if op.transport_notice)
+        notices.add('Давление изменяет только расход источника; скорость истечения, параметры релаксации и траектории заданы независимо от давления. Задержка переноса и предыстория давления не учитываются.')
+        notices.add(f'Максимальное время переноса {maximum:.6g} с; шаг сканирования {settings.dt_s:.6g} с; отношение {maximum/settings.dt_s:.6g}. Для квазистационарного приближения время переноса должно быть мало относительно масштаба изменения давления; быстрое изменение давления требует нестационарной модели.')
+    else:notices.add('Фиксированная форма ядер, τ=0; температура и воздух не являются входными данными.')
     payload=json.dumps(project_to_json(cfg,list(nozzles)),ensure_ascii=False,sort_keys=True,allow_nan=False)
     return QuasiResult(cfg,nozzles,settings,g,pressures,tuple(operators),tuple(planes),tuple(balances),tuple(sorted(notices)),time.perf_counter()-started,payload)

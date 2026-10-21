@@ -1,0 +1,145 @@
+{
+  "method": "Linux native Qt offscreen, real F5 QThread workers, QTest tab/slider controls, RGBA QWidget pixels, active 5-ms heartbeat; no UI timers disabled; synthetic assumptions are explicit; timings are measurements, not assertions about other computers",
+  "projects_sha256": {
+    "examples/demo_project_user_field.json": "0589843dc9b8b6939cddba22dd0b0d93927da27323b69bb5c131ae01cb59bc4c",
+    "examples/demo_project_v07_confined_synthetic.json": "edbcb736f243031d14ef850538b449a253edeae973d54fd562062671278ea0eb"
+  },
+  "screenshots": [
+    "images/v0.7/ui-settings.png",
+    "images/v0.7/ui-matrix.png",
+    "images/v0.7/ui-field.png",
+    "images/v0.7/ui-epures.png",
+    "images/v0.7/ui-quasi-field.png"
+  ],
+  "legacy_original_planes_ms": 3119.015,
+  "legacy_implicit_equals_explicit_exactly": true,
+  "user_copy_synthetic_first": {
+    "worker_and_initial_render_ms": 3484.256,
+    "worker_until_completed_slot_ms": 2793.448,
+    "completion_to_settled_render_ms": 690.808,
+    "worker_qt_heartbeat_ms": {
+      "samples": 459,
+      "median_ms": 5.281,
+      "p95_ms": 7.466,
+      "max_ms": 134.042
+    },
+    "qt_heartbeat_ms": {
+      "samples": 463,
+      "median_ms": 5.286,
+      "p95_ms": 7.858,
+      "max_ms": 503.309
+    },
+    "event_loop_ticks": 464,
+    "planes": 4
+  },
+  "user_copy_new_mode_mass_residual_max": 2.2799138008901953e-15,
+  "user_copy_nozzles_unchanged": true,
+  "confined_first": {
+    "worker_and_initial_render_ms": 3408.718,
+    "worker_until_completed_slot_ms": 2921.357,
+    "completion_to_settled_render_ms": 487.361,
+    "worker_qt_heartbeat_ms": {
+      "samples": 507,
+      "median_ms": 5.423,
+      "p95_ms": 7.494,
+      "max_ms": 85.389
+    },
+    "qt_heartbeat_ms": {
+      "samples": 512,
+      "median_ms": 5.43,
+      "p95_ms": 7.622,
+      "max_ms": 377.792
+    },
+    "event_loop_ticks": 513,
+    "planes": 5
+  },
+  "transport_cache_after_first": {
+    "entries": 2,
+    "bytes": 558720,
+    "limit_bytes": 100663296
+  },
+  "confined_warm": {
+    "worker_and_initial_render_ms": 2850.604,
+    "worker_until_completed_slot_ms": 2375.579,
+    "completion_to_settled_render_ms": 475.025,
+    "worker_qt_heartbeat_ms": {
+      "samples": 368,
+      "median_ms": 5.431,
+      "p95_ms": 8.509,
+      "max_ms": 168.739
+    },
+    "qt_heartbeat_ms": {
+      "samples": 373,
+      "median_ms": 5.433,
+      "p95_ms": 8.655,
+      "max_ms": 363.498
+    },
+    "event_loop_ticks": 374,
+    "planes": 5
+  },
+  "warm_last_plane_math_ms": {
+    "samples": 3,
+    "median_ms": 204.56,
+    "p95_ms": 216.318,
+    "max_ms": 217.625
+  },
+  "warm_last_plane_preview_math_ms": {
+    "samples": 3,
+    "median_ms": 223.669,
+    "p95_ms": 313.67,
+    "max_ms": 323.67
+  },
+  "first_result_view_visits_ms": [
+    381.407536988263,
+    456.4823679975234,
+    1070.5730659974506,
+    612.1216809988255
+  ],
+  "warm_result_view_switch_ms": {
+    "samples": 20,
+    "median_ms": 12.161,
+    "p95_ms": 15.543,
+    "max_ms": 16.73
+  },
+  "quasi_worker": {
+    "worker_and_initial_render_ms": 19534.819,
+    "worker_until_completed_slot_ms": 18962.502,
+    "completion_to_settled_render_ms": 572.318,
+    "worker_qt_heartbeat_ms": {
+      "samples": 3427,
+      "median_ms": 5.138,
+      "p95_ms": 8.011,
+      "max_ms": 92.838
+    },
+    "qt_heartbeat_ms": {
+      "samples": 3433,
+      "median_ms": 5.139,
+      "p95_ms": 8.015,
+      "max_ms": 389.205
+    },
+    "event_loop_ticks": 3434,
+    "planes": 5
+  },
+  "quasi_slider_ms": {
+    "samples": 8,
+    "median_ms": 37.914,
+    "p95_ms": 40.03,
+    "max_ms": 40.177
+  },
+  "quasi_slider_changed_pixels": 8394,
+  "quasi_slider_full_draws": 0,
+  "quasi_composite_navigation_unchanged": true,
+  "source_projects_unchanged": true,
+  "environment": {
+    "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "numpy": "2.5.4",
+    "scipy": "1.16.3",
+    "matplotlib": "3.11.2",
+    "qt": "5.15.14",
+    "pyqt": "5.15.11",
+    "blas_threads": 1,
+    "concurrent_test_processes": 0
+  },
+  "caveat": "Measurements describe this Linux offscreen run only. First figure construction and completion painting can temporarily block the main event loop; warm view switches reuse artists."
+}

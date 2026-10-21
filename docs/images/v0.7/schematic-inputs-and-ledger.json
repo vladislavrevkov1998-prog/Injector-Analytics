@@ -1,0 +1,566 @@
+{
+  "narrowing": {
+    "geometry": {
+      "schema_version": 1,
+      "enabled": true,
+      "base_z_mm": 10.0,
+      "outlet_z_mm": 90.0,
+      "primitives": [
+        {
+          "id": "inner",
+          "kind": "line",
+          "wall": "inner",
+          "unit": "mm",
+          "start": [
+            10.0,
+            100.0
+          ],
+          "end": [
+            90.0,
+            115.0
+          ]
+        },
+        {
+          "id": "outer",
+          "kind": "line",
+          "wall": "outer",
+          "unit": "mm",
+          "start": [
+            10.0,
+            160.0
+          ],
+          "end": [
+            90.0,
+            145.0
+          ]
+        }
+      ],
+      "objects": [],
+      "groups": [],
+      "sections": [
+        {
+          "id": "S1",
+          "z_mm": 90.0,
+          "is_outlet": true
+        }
+      ]
+    },
+    "prescribed_inputs": {
+      "carrier_inlet_velocity_m_s": 20.0,
+      "injection_velocity_m_s": 40.0,
+      "relaxation_time_s": 0.005,
+      "film_speed_m_s": 1.0,
+      "transverse_rms_m_s": 0.0,
+      "axial_step_mm": 0.2,
+      "parcels_per_band": 9
+    },
+    "relative_band_transfers": [
+      [
+        0.3333333333333333,
+        0.0,
+        0.0,
+        0.6666666666666667,
+        0.0
+      ],
+      [
+        0.2222222222222222,
+        0.5555555555555556,
+        0.2222222222222222,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.3333333333333333,
+        0.0,
+        0.6666666666666667
+      ]
+    ],
+    "max_row_mass_error": 0.0,
+    "carrier_diagnostics": {
+      "model": "axisymmetric_irrotational_one_way_carrier",
+      "solution_kind": "P1_streamfunction_FEM",
+      "node_count": 6601,
+      "triangle_count": 12800,
+      "max_discrete_wall_normal_velocity_m_s": 1.929123527588672e-12,
+      "algebraic_relative_residual": 3.009068689666332e-16,
+      "mesh_wall_tolerance_mm": 0.02,
+      "carrier_flux_m3_s": 0.9801769079200154,
+      "interpretation": "Prescribed carrier closure; no turbulence, separation or gas backreaction solved"
+    },
+    "parcels": [
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 101.21484300459318,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 3,
+        "wall_capture": true
+      },
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 103.60180178613369,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 3,
+        "wall_capture": true
+      },
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 105.93499054713803,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 3,
+        "wall_capture": true
+      },
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 108.21788720498618,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 3,
+        "wall_capture": true
+      },
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 110.45361017187261,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 3,
+        "wall_capture": true
+      },
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 112.64496832477201,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 3,
+        "wall_capture": true
+      },
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 114.7945023848171,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 0,
+        "wall_capture": false
+      },
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 116.90451944500121,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 0,
+        "wall_capture": false
+      },
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 118.97712198383164,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 0,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 121.19772641798562,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 0,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 123.55835328567092,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 0,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 125.87471725666137,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 128.14921857827392,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 130.38404810405297,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 132.58121200900894,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 134.74255287605158,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 136.86976778431873,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 2,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 138.96442390450554,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 2,
+        "wall_capture": false
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 141.1854572303158,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 2,
+        "wall_capture": false
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 143.52700094407325,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 2,
+        "wall_capture": false
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 145.83095236151573,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 2,
+        "wall_capture": false
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 148.09906594348706,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 4,
+        "wall_capture": true
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 150.33296378372907,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 4,
+        "wall_capture": true
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 152.53414918196734,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 4,
+        "wall_capture": true
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 154.70401847829723,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 4,
+        "wall_capture": true
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 156.8438714135812,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 4,
+        "wall_capture": true
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 158.95492023421818,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 4,
+        "wall_capture": true
+      }
+    ]
+  },
+  "widening": {
+    "geometry": {
+      "schema_version": 1,
+      "enabled": true,
+      "base_z_mm": 10.0,
+      "outlet_z_mm": 90.0,
+      "primitives": [
+        {
+          "id": "inner",
+          "kind": "line",
+          "wall": "inner",
+          "unit": "mm",
+          "start": [
+            10.0,
+            115.0
+          ],
+          "end": [
+            90.0,
+            100.0
+          ]
+        },
+        {
+          "id": "outer",
+          "kind": "line",
+          "wall": "outer",
+          "unit": "mm",
+          "start": [
+            10.0,
+            145.0
+          ],
+          "end": [
+            90.0,
+            160.0
+          ]
+        }
+      ],
+      "objects": [],
+      "groups": [],
+      "sections": [
+        {
+          "id": "S1",
+          "z_mm": 90.0,
+          "is_outlet": true
+        }
+      ]
+    },
+    "prescribed_inputs": {
+      "carrier_inlet_velocity_m_s": 20.0,
+      "injection_velocity_m_s": 40.0,
+      "relaxation_time_s": 0.005,
+      "film_speed_m_s": 1.0,
+      "transverse_rms_m_s": 0.0,
+      "axial_step_mm": 0.2,
+      "parcels_per_band": 9
+    },
+    "relative_band_transfers": [
+      [
+        0.5555555555555556,
+        0.4444444444444444,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        1.0000000000000002,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.4444444444444444,
+        0.5555555555555556,
+        0.0,
+        0.0
+      ]
+    ],
+    "max_row_mass_error": 2.220446049250313e-16,
+    "carrier_diagnostics": {
+      "model": "axisymmetric_irrotational_one_way_carrier",
+      "solution_kind": "P1_streamfunction_FEM",
+      "node_count": 6601,
+      "triangle_count": 12800,
+      "max_discrete_wall_normal_velocity_m_s": 9.232614672782802e-13,
+      "algebraic_relative_residual": 4.636636569401034e-16,
+      "mesh_wall_tolerance_mm": 0.02,
+      "carrier_flux_m3_s": 0.49008845396000766,
+      "interpretation": "Prescribed carrier closure; no turbulence, separation or gas backreaction solved"
+    },
+    "parcels": [
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 115.57825631723873,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 0,
+        "wall_capture": false
+      },
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 116.72617529928752,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 0,
+        "wall_capture": false
+      },
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 117.86291472158096,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 0,
+        "wall_capture": false
+      },
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 118.9887949906769,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 0,
+        "wall_capture": false
+      },
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 120.10412149464314,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 0,
+        "wall_capture": false
+      },
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 121.2091855705114,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 122.30426539304888,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 123.38962679253066,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 1,
+        "inlet_radius_mm": 124.46552400832395,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 125.57644860579728,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 126.72147936846908,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 127.85625609340445,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 128.98104942630567,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 130.09611831257686,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 131.20171069345434,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 132.29806414977423,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 133.38540649811233,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 2,
+        "inlet_radius_mm": 134.46395634353303,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 135.5749075439683,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 136.71747023210554,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 137.85056321168142,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 138.97441810955314,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 1,
+        "wall_capture": false
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 140.089257261219,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 2,
+        "wall_capture": false
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 141.19529422438663,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 2,
+        "wall_capture": false
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 142.29273425660998,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 2,
+        "wall_capture": false
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 143.3817747600208,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 2,
+        "wall_capture": false
+      },
+      {
+        "source_band": 3,
+        "inlet_radius_mm": 144.46260569588395,
+        "relative_band_weight": 0.1111111111111111,
+        "output_category": 2,
+        "wall_capture": false
+      }
+    ]
+  }
+}

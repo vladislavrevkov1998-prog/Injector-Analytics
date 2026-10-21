@@ -143,25 +143,51 @@ def write_sector_csv(path: str, nozzles):
         for n in nozzles:out.writerow([n.id]+[f'{x:.10g}' for x in n.sector_ml])
 
 
-def write_result_csv(path: str, planes):
+def write_result_csv(path: str, planes, cfg=None):
     import json
     planes=list(planes)
     composite=any(getattr(p,'is_composite',False) for p in planes)
+    confined=any(getattr(p,'suspended_cell_mass_kg_s',None) is not None for p in planes)
+    phase_columns=['total_including_film_kg_s','suspended_kg_s','film_inner_kg_s','film_outer_kg_s',
+                   'suspended_flux_kg_m2_s','film_inner_cell_equivalent_kg_m2_s','film_outer_cell_equivalent_kg_m2_s'] if confined else []
     with open(path,'w',encoding='utf-8-sig',newline='') as f:
         out=csv.writer(f,delimiter=';')
         out.writerow(['z_mm','radial_level','theta_node','radius_center_mm',
-                      'theta_deg','cell_area_m2','mass_flow_kg_s','flux_kg_m2_s']+(['calculation_mode','scan_step','time_s','delta_p_kgf_cm2_json'] if composite else []))
+                      'theta_deg','cell_area_m2','mass_flow_kg_s','flux_kg_m2_s']+phase_columns+(['calculation_mode','scan_step','time_s','delta_p_kgf_cm2_json'] if composite else []))
         for p in planes:
             for i,r in enumerate(p.radial_centers_mm):
                 for j,th in enumerate(p.theta_centers_deg):
+                    phases=[]
+                    if confined:
+                        arrays=[getattr(p,name,None) for name in ('suspended_cell_mass_kg_s','film_inner_cell_mass_kg_s','film_outer_cell_mass_kg_s')]
+                        if any(a is None for a in arrays):raise ValueError('Нельзя смешать сечения с разными моделями переноса в одном CSV')
+                        values=[float(a[i,j]) for a in arrays];area=float(p.cell_area_m2[i,j])
+                        phases=[float(p.cell_mass_kg_s[i,j]),*values,*[value/area for value in values]]
                     out.writerow([f'{p.z_mm:.8g}',i+1,j+1,f'{r:.8g}',f'{th:.8g}',
                                   f'{p.cell_area_m2[i,j]:.12g}',
                                   f'{p.cell_mass_kg_s[i,j]:.12g}',
-                                  f'{p.flux_kg_m2_s[i,j]:.12g}']+((['quasistationary',int(p.scan_steps[j]),float(p.scan_times_s[j]),json.dumps(p.scan_pressures[j],ensure_ascii=False)] if p.is_composite else ['stationary','','','']) if composite else []))
-    if not composite and any(p.geometry_notice for p in planes):
+                                  f'{p.flux_kg_m2_s[i,j]:.12g}']+phases+((['quasistationary',int(p.scan_steps[j]),float(p.scan_times_s[j]),json.dumps(p.scan_pressures[j],ensure_ascii=False)] if p.is_composite else ['stationary','','','']) if composite else []))
+    if not composite and any(p.geometry_notice for p in planes) and not confined:
         from .analysis import balance_rows
         target=Path(path).with_name(Path(path).stem+'_balances.csv')
         with target.open('w',encoding='utf-8-sig',newline='') as file:csv.writer(file).writerows(balance_rows(planes))
+    if confined:
+        from .analytics_io import transport_tables
+        from .core import project_to_json
+        tables=transport_tables(planes)
+        for name,rows in tables[1:]:
+            target=Path(path).with_name(Path(path).stem+'_'+name+'.csv')
+            with target.open('w',encoding='utf-8-sig',newline='') as file:csv.writer(file).writerows(rows)
+        metadata=dict(format='fuel-confined-transport-result',version=1,
+            quantity='mass flux; total includes suspended fuel and surface film integrated into boundary cells',
+            phase_model='100% capture at first contact; film is separate from suspended fuel',
+            film_flux='cell-equivalent surface flow divided by cell area; not suspended volumetric density',
+            momentum_units='N = kg/s * m/s; component order z,x,y; carrier and wall/film driving act on fuel',
+            composite_global_balance=None if composite else 'see Transport_balance.csv',
+            settings=project_to_json(cfg,[])['settings'] if cfg is not None else None,
+            notices=sorted({getattr(p,'transport_notice','') for p in planes}))
+        target=Path(path).with_name(Path(path).stem+'_transport.json')
+        target.write_text(json.dumps(metadata,ensure_ascii=False,indent=2,allow_nan=False)+'\n',encoding='utf-8')
 
 
 def import_characteristic_file(path, unit='kg/h', density_kg_m3=800., sheet=None):

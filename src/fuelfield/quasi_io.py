@@ -6,7 +6,7 @@ from dataclasses import replace
 import numpy as np
 from .quasi import QuasiSettings,PressureChannel,finite
 from .data_io import _xlsx_sheets,write_result_csv
-from .analytics_io import write_workbook
+from .analytics_io import write_workbook,transport_tables
 from .analysis import cell_values,UNITS
 
 def mode_path(path):
@@ -73,8 +73,9 @@ def import_pressure_table(mode,table,mappings,time_column=None,time_scale_s=1.,a
 
 def report_tables(result,metric='flux',interval=180.):
     tables=[];cfg=result.cfg
+    confined=(cfg.fuel_transport or {}).get('mode','legacy')=='confined_inertial'
     for index,p in enumerate(result.composites):
-        header=['angle_deg',*[f'R={r:.12g} мм [{UNITS[metric]}]' for r in p.radial_centers_mm],'scan_step','time_s',*[f'delta_p_{key}_kgf_cm2' for key in result.pressures]];rows=[header];values=cell_values(p,metric,cfg.density_kg_m3,interval)
+        header=['angle_deg',*[f'R={r:.12g} мм [{UNITS[metric]}]'+(' total incl. film' if confined else '') for r in p.radial_centers_mm],'scan_step','time_s',*[f'delta_p_{key}_kgf_cm2' for key in result.pressures]];rows=[header];values=cell_values(p,metric,cfg.density_kg_m3,interval)
         for col,angle in enumerate(p.theta_centers_deg):rows.append([float(angle),*[None if np.ma.is_masked(v) else float(v) for v in values[:,col]],int(p.scan_steps[col]),float(p.scan_times_s[col]),*[p.scan_pressures[col][key] for key in result.pressures]])
         tables.append((f'z{index+1} {p.z_mm:g} мм'[:31],rows))
     flows=[['step','time_s','scan_angle_deg',*[f'delta_p_{key}_kgf_cm2' for key in result.pressures],*[f'G_{n.id}_kg_s' for n in result.nozzles]]]
@@ -84,13 +85,15 @@ def report_tables(result,metric='flux',interval=180.):
     for name,obj in [('manifest',result.manifest()),('project',json.loads(result.project_payload))]:
         raw=json.dumps(obj,ensure_ascii=False,allow_nan=False,separators=(',',':'))
         metadata.extend([name,i//16000,raw[i:i+16000]] for i in range(0,len(raw),16000))
-    return [*tables,('Pressure_flows',flows),('Instant_balances',balances),('Metadata',metadata)]
+    return [*tables,*transport_tables(result.composites),('Pressure_flows',flows),('Instant_balances',balances),('Metadata',metadata)]
 
 def write_report(path,result,metric='flux',interval=180.):
     path=Path(path);tables=report_tables(result,metric,interval)
     if path.suffix.lower()=='.xlsx':write_workbook(path,tables);return [path]
     if path.suffix.lower()!='.csv':raise ValueError('Отчёт: CSV или XLSX')
-    write_result_csv(path,result.composites);paths=[path]
+    write_result_csv(path,result.composites,cfg=result.cfg);paths=[path]
+    if any(getattr(p,'suspended_cell_mass_kg_s',None) is not None for p in result.composites):
+        paths.extend(path.with_name(path.stem+suffix) for suffix in ('_Transport_balance.csv','_Fuel_momentum_N.csv','_transport.json'))
     for name,rows in tables[-3:-1]:
         target=path.with_name(path.stem+'_'+name+'.csv')
         with target.open('w',encoding='utf-8-sig',newline='') as f:csv.writer(f).writerows(rows)
