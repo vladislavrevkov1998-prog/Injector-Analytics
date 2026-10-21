@@ -1,7 +1,8 @@
 """Conservative fuel-flux superposition. Units: geometry mm, flows kg/h.
 
-The source-polar midpoint quadrature has strictly normalized discrete mass weights.
-It is an engineering quadrature, not a DPM or interaction model.
+Legacy source-polar kernels retain their independent-section behavior. The
+explicit confined model dispatches to one-way inertial parcels and wall-film
+transport; both paths use normalized mass-flow weights in kg/s.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field, asdict, fields
@@ -113,6 +114,7 @@ class Settings:
     quasistationary: bool = False
     quasi_settings: dict = field(default_factory=dict)
     geometry: dict = field(default_factory=dict)
+    fuel_transport: dict = field(default_factory=lambda:dict(schema_version=1,mode='legacy'))
 
     _extra: dict = field(default_factory=dict,repr=False)
     _project_extra: dict = field(default_factory=dict,repr=False)
@@ -120,9 +122,12 @@ class Settings:
     def __post_init__(self):
         from copy import deepcopy
         self.nozzle_presets=deepcopy(self.nozzle_presets)
+        self.fuel_transport=deepcopy(self.fuel_transport)
         for params in self.nozzle_presets.values():params.setdefault("z_tip_mm",0.)
 
     def validate(self):
+        from .transport_settings import TransportSettings
+        TransportSettings.from_dict(self.fuel_transport).validate()
         if not np.isfinite(self.theta_zero_deg) or self.theta_direction not in (-1,1) or isinstance(self.theta_direction,bool):raise ValueError('Нужны конечный угол нуля и направление +1/-1.')
         if self.display_x_axis not in ('angle','cells'):raise ValueError('Ось X: градусы или окружные ячейки.')
         if not isinstance(self.quasistationary,bool) or not isinstance(self.quasi_settings,dict):
@@ -286,6 +291,11 @@ def sample_kernel(n: Nozzle, z_mm: float, cfg: Settings, *, unit_mass=False):
     Sector 1 is centered toward the track middle line; sectors 2..36 are CCW
     in the chosen XY view from the fuel outlet. Rotation parameter in degrees.
     """
+    from .fuel_transport import transport_enabled
+    if transport_enabled(cfg):
+        from .fuel_transport import confined_samples
+        samples=confined_samples(n,cfg,z_mm,unit_mass=unit_mass)
+        return samples.x_mm,samples.y_mm,samples.weights_kg_s
     n=effective_nozzle(n,cfg)
     if z_mm<n.z_tip_mm:return np.array([]),np.array([]),np.array([])
     rc, h = geometry_at(n, z_mm, cfg)
@@ -346,6 +356,12 @@ class PlaneResult:
     wall_inner_kg_s: float = 0.
     wall_outer_kg_s: float = 0.
     geometry_notice: str = ''
+    suspended_cell_mass_kg_s: object = None
+    film_inner_cell_mass_kg_s: object = None
+    film_outer_cell_mass_kg_s: object = None
+    transport_momentum: object = None
+    transport_notice: str = ''
+    max_travel_time_s: float = 0.
 
     @property
     def rel_balance_error(self):
@@ -356,6 +372,8 @@ class PlaneResult:
 
 def calculate_plane(nozzles: list[Nozzle], cfg: Settings, z_mm: float) -> PlaneResult:
     cfg.validate()
+    from .fuel_transport import transport_enabled
+    if transport_enabled(cfg):return _calculate_confined_plane(nozzles,cfg,z_mm)
     centers, edges = cfg.radial_centers_and_edges(z_mm)
     model=chamber(cfg);variable=bool(model and model.variable)
     if model:model.validate_nozzle_anchors(nozzles,cfg)
@@ -391,13 +409,104 @@ def calculate_plane(nozzles: list[Nozzle], cfg: Settings, z_mm: float) -> PlaneR
                        geometry_notice=WALL_BOUND_NOTICE if variable else '')
 
 
+def confined_cell_masses(samples,cfg,edges):
+    """Conservative phase-aware bins, including the two exact wall surfaces.
+
+    Film is stored in its adjacent boundary cell as a separate phase. It is
+    never classified as escaped fuel or divided by an invented film area.
+    The combined q_f therefore remains total flow / annular cell area.
+    """
+    from .chamber import TOL
+    edges=np.asarray(edges,dtype=float)
+    if (edges.shape!=(cfg.n_radial+1,) or not np.isfinite(edges).all()
+            or np.any(np.diff(edges)<=0)):raise ValueError('Неверная радиальная сетка переноса топлива')
+    x=np.asarray(samples.x_mm,dtype=float);y=np.asarray(samples.y_mm,dtype=float)
+    weights=np.asarray(samples.weights_kg_s,dtype=float);phase=np.asarray(samples.phase)
+    if (x.ndim!=1 or any(a.shape!=x.shape for a in (y,weights,phase))
+            or not np.isfinite(x).all() or not np.isfinite(y).all()
+            or not np.isfinite(weights).all() or np.any(weights<0)
+            or not np.isin(phase,(0,1,2)).all()):raise ValueError('Некорректные частицы переноса топлива')
+    radius=np.hypot(x,y)
+    if np.any(radius<edges[0]-TOL) or np.any(radius>edges[-1]+TOL):
+        raise ValueError('Частица переноса топлива находится вне точных стенок ЖТ')
+    if (np.any(np.abs(radius[phase==1]-edges[0])>TOL)
+            or np.any(np.abs(radius[phase==2]-edges[-1])>TOL)):
+        raise ValueError('Стеночная плёнка не находится на соответствующей стенке ЖТ')
+    radial=np.searchsorted(edges,radius,side='right')-1
+    radial=np.clip(radial,0,cfg.n_radial-1)
+    radial[phase==1]=0;radial[phase==2]=cfg.n_radial-1
+    angular=angular_indices(x,y,cfg);index=radial*cfg.n_angular+angular
+    return tuple(np.bincount(index[phase==identity],weights=weights[phase==identity],
+        minlength=cfg.n_radial*cfg.n_angular).reshape(cfg.n_radial,cfg.n_angular)
+        for identity in (0,1,2))
+
+
+def confined_momentum(samples):
+    """Fuel momentum flux [N], with impulses supplied by carrier and walls.
+
+    No global fuel-only momentum conservation is claimed: the one-way carrier
+    and the wall/film closure exchange momentum with the fuel explicitly.
+    """
+    weights=np.asarray(samples.weights_kg_s,dtype=float)
+    arrays=[np.asarray(getattr(samples,key),dtype=float) for key in
+        ('source_velocity_m_s','velocity_m_s','carrier_delta_v_m_s','wall_delta_v_m_s')]
+    if any(a.shape!=(len(weights),3) or not np.isfinite(a).all() for a in arrays):
+        raise ValueError('Некорректные скорости/импульсы переноса топлива')
+    incoming,outgoing,carrier,wall=[np.sum(weights[:,None]*a,axis=0) for a in arrays]
+    residual=outgoing-incoming-carrier-wall
+    scale=max(*(float(np.linalg.norm(v)) for v in (incoming,outgoing,carrier,wall)),1e-15)
+    return dict(incoming_N=incoming.tolist(),outgoing_N=outgoing.tolist(),
+        carrier_N=carrier.tolist(),wall_N=wall.tolist(),residual_N=residual.tolist(),
+        relative_residual=float(np.linalg.norm(residual))/scale)
+
+
+def _calculate_confined_plane(nozzles,cfg,z_mm):
+    from .fuel_transport import confined_samples,transport_model,validate_transport_source
+    model=transport_model(cfg);model.validate_nozzle_anchors(nozzles,cfg)
+    centers,edges=cfg.radial_centers_and_edges(z_mm)
+    phases=[np.zeros((cfg.n_radial,cfg.n_angular)) for _ in range(3)]
+    momentum={key:np.zeros(3) for key in ('incoming_N','outgoing_N','carrier_N','wall_N')}
+    injected=maximum_time=0.;notices=set()
+    for n in nozzles:
+        n=effective_nozzle(n,cfg)
+        if not n.enabled:continue
+        flow=source_flow_kg_s(n,cfg)
+        if not np.isfinite(flow) or flow<0:raise ValueError(f'Форсунка {n.id}: некорректный расход.')
+        if flow==0:continue
+        validate_transport_source(n,cfg,model)
+        if z_mm<n.z_tip_mm:continue
+        samples=confined_samples(n,cfg,z_mm)
+        source_phases=confined_cell_masses(samples,cfg,edges)
+        if not np.isclose(sum(float(a.sum()) for a in source_phases),flow,rtol=1e-12,atol=1e-15):
+            raise ValueError(f'Форсунка {n.id}: не замкнут баланс переноса топлива')
+        for target,addition in zip(phases,source_phases):target+=addition
+        for key,value in confined_momentum(samples).items():
+            if key in momentum:momentum[key]+=value
+        maximum_time=max(maximum_time,float(np.max(samples.travel_time_s,initial=0.)))
+        if samples.notice:notices.add(str(samples.notice))
+        injected+=flow
+    residual=momentum['outgoing_N']-momentum['incoming_N']-momentum['carrier_N']-momentum['wall_N']
+    scale=max(*(float(np.linalg.norm(v)) for v in momentum.values()),1e-15)
+    momentum={**{key:value.tolist() for key,value in momentum.items()},
+        'residual_N':residual.tolist(),'relative_residual':float(np.linalg.norm(residual))/scale}
+    mass=sum(phases);area=np.repeat((np.pi/cfg.n_angular*np.diff((edges*.001)**2))[:,None],cfg.n_angular,axis=1)
+    notice=' '.join(sorted(notices)) or 'Инерционный перенос топлива в замкнутом тракте; заданный носитель и полный захват в стеночную плёнку.'
+    return PlaneResult(float(z_mm),mass,area,mass/area,centers,edges,grid_angles(cfg),
+        injected,float(mass.sum()),0.,0.,geometry_notice=notice,
+        suspended_cell_mass_kg_s=phases[0],film_inner_cell_mass_kg_s=phases[1],
+        film_outer_cell_mass_kg_s=phases[2],transport_momentum=momentum,
+        transport_notice=notice,max_travel_time_s=maximum_time)
+
+
 def _json_record(obj):
     data=asdict(obj);extra=data.pop('_extra',{});data.pop('_project_extra',None)
     return {**extra,**data}
 
 
 def project_to_json(settings: Settings, nozzles: list[Nozzle]):
-    return {**deepcopy(settings._project_extra),'format':'fuel-field-pilot-v1','version':'0.6.0','schema_version':2,
+    from .transport_settings import TransportSettings
+    confined=TransportSettings.from_dict(settings.fuel_transport).enabled
+    return {**deepcopy(settings._project_extra),'format':'fuel-field-pilot-v1','version':'0.7.0' if confined else '0.6.0','schema_version':3 if confined else 2,
             'settings':_json_record(settings),
             'nozzles':[{**_json_record(n),'r_nozzle_mm':n.r_nozzle_mm} for n in nozzles]}
 
@@ -414,9 +523,13 @@ def project_from_json(data):
     data=deepcopy(data)
     if data.get('format') != 'fuel-field-pilot-v1':raise ValueError('Неподдерживаемый формат проекта')
     schema=data.get('schema_version',1)
-    if isinstance(schema,bool) or not isinstance(schema,int) or schema not in (1,2):raise ValueError('Неподдерживаемая версия схемы проекта')
+    if isinstance(schema,bool) or not isinstance(schema,int) or schema not in (1,2,3):raise ValueError('Неподдерживаемая версия схемы проекта')
     if not isinstance(data.get('settings'),dict) or not isinstance(data.get('nozzles'),list):raise ValueError('Нужны settings-объект и список nozzles')
     cfg=_load_record(Settings,data['settings'])
+    from .transport_settings import TransportSettings
+    transport=TransportSettings.from_dict(cfg.fuel_transport).validate()
+    if transport.enabled and schema!=3:raise ValueError('Инерционный перенос топлива требует схему проекта 3; сохраните настройки новой версией')
+    if schema==3 and not transport.enabled:raise ValueError('Схема проекта 3 требует явно заданную инерционную модель переноса топлива')
     cfg._project_extra={k:v for k,v in data.items() if k not in ('format','version','schema_version','settings','nozzles')}
     nozzles=[]
     for item in data['nozzles']:
@@ -449,6 +562,7 @@ class SmoothField:
     flux_kg_m2_s: np.ndarray
     masked_flux_kg_m2_s: np.ma.MaskedArray
     z_mm: float
+    display_notice: str = ''
 
 
 def _radial_density(r, rc, h, model):
@@ -476,6 +590,10 @@ def evaluate_continuous_field(nozzles: list[Nozzle], cfg: Settings,
     normalized source-quadrature weights in calculate_plane().
     """
     cfg.validate()
+    from .fuel_transport import transport_enabled
+    if transport_enabled(cfg):
+        from .transport_preview import evaluate_transport_field
+        return evaluate_transport_field(nozzles,cfg,z_mm,resolution,bounds_xy,mask_track,unit_mass=unit_mass)
     dim = int(cfg.preview_resolution if resolution is None else resolution)
     if not 64 <= dim <= 1200:
         raise ValueError('Неверное разрешение карты.')
@@ -550,15 +668,17 @@ def polar_epure_coordinates(n: Nozzle, z_mm: float, cfg: Settings,
     """
     n=effective_nozzle(n,cfg)
     if z_mm<n.z_tip_mm:return np.array([]),np.array([])
+    from .fuel_transport import transport_enabled
+    confined=transport_enabled(cfg)
     phi = np.linspace(0,2*np.pi,n_angles+1)
-    amp36 = angular_profile(n,z_mm,cfg)
+    amp36 = angular_profile(n,n.z_tip_mm if confined else z_mm,cfg)
     phase = (phi%(2*np.pi))*36/(2*np.pi)
     left = np.floor(phase).astype(int)
     w = phase-left
     amp = amp36[left%36]*(1-w)+amp36[(left+1)%36]*w
     amp = amp*(source_flow_kg_s(n,cfg)/max(1e-16,flow_reference_kg_s) if include_flow else 1)
     facing = np.deg2rad(n.theta_deg + (180 if n.row=='outer' else 0)
-                           + n.clock_deg + n.rotation_deg_per_mm*(z_mm-n.z_tip_mm))
+                           + n.clock_deg + (0. if confined else n.rotation_deg_per_mm*(z_mm-n.z_tip_mm)))
     x0 = n.radius_mm*np.cos(np.deg2rad(n.theta_deg))
     y0 = n.radius_mm*np.sin(np.deg2rad(n.theta_deg))
     return x0+relative_radius_mm*amp*np.cos(phi+facing), y0+relative_radius_mm*amp*np.sin(phi+facing)

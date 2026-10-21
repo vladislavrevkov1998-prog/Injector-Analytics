@@ -43,6 +43,8 @@ from .graph_links import GraphLinks
 from .regression_gui import RegressionDialog
 from .quasi import calculate_quasi,QuasiSettings,CalculationCancelled,CalculationOutput
 from .quasi_gui import QuasiDialog
+from .transport_gui import TransportDialog
+from .transport_settings import TransportSettings,MODES as TRANSPORT_MODES
 from .quasi_plotting import QuasiFieldAnimator
 from .quasi_io import write_report as write_quasi_report
 from .chamber import chamber,sync_groups,sync_anchors,WALL_BOUND_NOTICE
@@ -297,6 +299,7 @@ class MainWindow(QMainWindow):
         edit.addAction(redo)
         menu=self.menuBar().addMenu('Настройки')
         action=QAction('Испытания и расстановка',self);action.triggered.connect(self.open_settings);menu.addAction(action)
+        self.transport_settings_action=QAction('Перенос топлива внутри ЖТ…',self);self.transport_settings_action.triggered.connect(self.open_transport_settings);menu.addAction(self.transport_settings_action)
 
     def _build_geometry_tab(self):
         page=QWidget();layout=QVBoxLayout(page)
@@ -360,6 +363,8 @@ class MainWindow(QMainWindow):
 
     def open_regression(self):
         self._record_edit()
+        if TransportSettings.from_dict(self.cfg.fuel_transport).enabled:
+            self._error('Идентификация параметров прежнего ядра не применима к инерционному переносу. Параметры τ, скоростей и флуктуаций задаются в «Настройки → Перенос топлива внутри ЖТ». Методика их идентификации требует отдельного топливного эталона.');return
         if self.cfg.quasistationary:self._error('Идентификация v0.4.1 использует стационарное ядро. Для неё выберите стационарный режим; настройки квазистационарного режима сохранятся.');return
         existing=getattr(self,'regression_dialog',None)
         if existing is not None and existing.thread is not None:existing.show();existing.raise_();return
@@ -445,6 +450,17 @@ class MainWindow(QMainWindow):
             if str(n['id']) in (bindings or {}):n['manifold_id']=bindings[str(n['id'])]
         self.apply_project_state(state,'Настройки квазистационарного режима')
 
+    def open_transport_settings(self):
+        self._record_edit()
+        existing=getattr(self,'transport_dialog',None)
+        if existing is not None and existing.isVisible():existing.raise_();existing.activateWindow();return
+        self.transport_dialog=TransportDialog(self);self.transport_dialog.show()
+
+    def apply_transport_settings(self,raw):
+        self._record_edit();cfg=deepcopy(self.cfg)
+        cfg.fuel_transport=TransportSettings.from_dict(raw).validate().to_dict()
+        self.apply_project_state(project_to_json(cfg,self.nozzles),'Модель переноса топлива')
+
     def _build_nozzles_tab(self):
         page=QWidget();layout=QVBoxLayout(page);top=QHBoxLayout()
         for label,slot in [
@@ -475,6 +491,8 @@ class MainWindow(QMainWindow):
         mode_row=QHBoxLayout();self.quasi_check=QCheckBox('Квазистационарный (без галочки — стационарный)');self.mode_widgets['quasistationary']=self.quasi_check;mode_row.addWidget(self.quasi_check)
         self.quasi_settings_button=QPushButton('Настройки режима…');self.quasi_settings_button.clicked.connect(self.open_quasi_settings);mode_row.addWidget(self.quasi_settings_button);mode_row.addStretch();settings.addLayout(mode_row);self.quasi_check.toggled.connect(self._quasi_toggled)
         self.flow_notice=QLabel();self.flow_notice.setWordWrap(True);settings.addWidget(self.flow_notice)
+        transport_row=QHBoxLayout();self.transport_mode_label=QLabel();self.transport_mode_label.setWordWrap(True);transport_row.addWidget(self.transport_mode_label,1)
+        self.transport_settings_button=QPushButton('Перенос топлива…');self.transport_settings_button.clicked.connect(self.open_transport_settings);transport_row.addWidget(self.transport_settings_button);settings.addLayout(transport_row)
         close=QPushButton('Закрыть настройки');close.clicked.connect(self.settings_page.close)
         settings.addWidget(close);settings.addStretch()
         # Retain the group-operation API for existing scripts; assignment in the
@@ -625,7 +643,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         scales.addStretch();lay.addLayout(scales)
         self.balance_label=QLabel('Результатов пока нет. Задайте исходные данные и нажмите «Рассчитать».')
         self.balance_label.setWordWrap(True);lay.addWidget(self.balance_label)
-        note=QLabel('Важно: 6×140 — контрольные ячейки для количественного анализа; подробная карта — непрерывное отображение отдельных ядер. '
+        note=QLabel('Матрица содержит контрольные ячейки для количественного анализа; подробное поле — визуализация. Баланс проверяется по матрице. '
                     'Представление применяется к матрице и окружным эпюрам; подробное поле всегда в кг/(м²·с). '
                     'Индексы при нулевом среднем не определены (пустые ячейки). '
                     'Полярная эпюра показывает угловую ИНТЕНСИВНОСТЬ, не физический контур факела. Контур форсунки — отдельная окружность.')
@@ -695,6 +713,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
 
     def _fill_controls(self):
         restoring=self._restoring;self._restoring=True
+        self.transport_mode_label.setText(TRANSPORT_MODES[TransportSettings.from_dict(self.cfg.fuel_transport).mode])
         for key,w in self.geom_widgets.items():
             value=getattr(self.cfg,key)
             if isinstance(w,QLineEdit):
@@ -1320,6 +1339,20 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
     @staticmethod
     def _balance_text(p,i):
         total=p.injected_kg_s*3600
+        if getattr(p,'transport_notice',''):
+            if p.is_composite:
+                return (f'<b>Квазистационарное сечение {i+1}, z={p.z_mm:g} мм.</b> '
+                    'Накопленная матрица полного потока (взвесь + плёнка); столбцы сняты в разное время. '
+                    'Единый мгновенный баланс для неё не определён. Поле — мгновенный снимок. '
+                    'Плёнка включена в граничные ячейки; это не концентрация взвеси.')
+            phases=[float(np.sum(getattr(p,key)))*3600 for key in
+                ('suspended_cell_mass_kg_s','film_inner_cell_mass_kg_s','film_outer_cell_mass_kg_s')]
+            momentum=getattr(p,'transport_momentum',{}) or {}
+            return (f'<b>Сечение {i+1}, z={p.z_mm:g} мм · перенос внутри ЖТ.</b> '
+                f'Подано {total:.6g} кг/ч; взвесь {phases[0]:.6g}; плёнка внутренняя {phases[1]:.6g}; наружная {phases[2]:.6g} кг/ч. '
+                f'Невязка массы {100*p.rel_balance_error:.3g}%; импульса {momentum.get("relative_residual",0):.3g}. '
+                'Матрица и поле показывают полный поток, включая плёнку в граничных ячейках. '
+                f'Максимальное время переноса {p.max_travel_time_s:.5g} с. Параметризованная модель; см. инструкцию v0.7.')
         if p.is_composite:
             text=f'<b>Квазистационарное сечение {i+1}, z={p.z_mm:g} мм.</b> Накопленная матрица: один угловой столбец на временной шаг. Эпюры — из этой матрицы. Поле ниже — мгновенный снимок; единый мгновенный баланс накопленной матрицы не определён.'
         else:text=(
@@ -1357,8 +1390,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         if not self.results:return
         i=max(0,self.plane_select.currentIndex());p=self.results[i]
         self._reserve_balance_height();self.balance_label.setText(self._balance_text(p,i))
-        if p.geometry_notice:
-            self.balance_label.setToolTip(p.geometry_notice)
+        if p.geometry_notice or getattr(p,'transport_notice',''):
+            self.balance_label.setToolTip(getattr(p,'transport_notice','') or p.geometry_notice)
         else:self.balance_label.setToolTip('')
         self.plot_count.blockSignals(True);self.plot_count.setMaximum(len(p.radial_centers_mm));self.plot_count.blockSignals(False)
         previous=self.compare_radius.currentData()
@@ -1526,6 +1559,12 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             f'Мгновенный баланс: подано {balance["injected_kg_s"]*3600:.7g} кг/ч ({delta} к шагу 0); '
             f'внутри {balance["inside_kg_s"]*3600:.7g}; за внутренней {balance["inner_kg_s"]*3600:.7g}; '
             f'за наружной {balance["outer_kg_s"]*3600:.7g}; wall-bound {balance.get("wall_bound_kg_s",0)*3600:.7g}; невязка {balance["relative_error"]:.3g}.')
+        if 'suspended_kg_s' in balance:
+            self.time_label.setText(
+                f'Шаг {step}/{result.settings.n_steps-1} · t={result.settings.times[step]:.8g} с · угол {result.settings.angles[step]:.8g}° · {pressures}\n'
+                f'Подано {balance["injected_kg_s"]*3600:.7g} кг/ч ({delta}); взвесь {balance["suspended_kg_s"]*3600:.7g}; '
+                f'плёнка внутренняя {balance["film_inner_kg_s"]*3600:.7g}; наружная {balance["film_outer_kg_s"]*3600:.7g} кг/ч; '
+                f'невязка массы {balance["relative_error"]:.3g}. Скорость истечения задана отдельно от давления; задержка переноса пульсаций не моделируется.')
         if canvas is None:
             if self.plots.currentIndex()!=1:return
             canvas=self.plot_stacks[1].currentWidget()
@@ -1593,7 +1632,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         if path:
             try:
                 if self.quasi_result:write_quasi_report(path,self.quasi_result)
-                else:write_result_csv(path,self.results)
+                else:write_result_csv(path,self.results,cfg=self.cfg)
             except Exception as exc:self._error(exc)
 
     def export_png(self):
@@ -1677,6 +1716,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
     def _reset_history(self):
         self.quasi_result=None;self.time_timer.stop();self.time_controls.hide()
         existing=getattr(self,'quasi_dialog',None)
+        if existing is not None:existing.close()
+        existing=getattr(self,'transport_dialog',None)
         if existing is not None:existing.close()
         self.undo_stack.clear()
         self._edit_state=project_to_json(self.cfg,self.nozzles)

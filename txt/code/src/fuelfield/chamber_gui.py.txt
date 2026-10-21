@@ -11,7 +11,7 @@ from PyQt5.QtCore import Qt,QPointF,QRectF
 from PyQt5.QtGui import QColor,QPen,QBrush,QPainterPath,QPainter,QPainterPathStroker
 from PyQt5.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QSplitter,QTabWidget,
     QTableWidgetItem,QPushButton,QLabel,QComboBox,QCheckBox,QGraphicsView,
-    QGraphicsScene,QGraphicsPathItem,QGraphicsEllipseItem,QGraphicsItem,
+    QGraphicsScene,QGraphicsPathItem,QGraphicsEllipseItem,QGraphicsItem,QGraphicsSimpleTextItem,
     QStyledItemDelegate,QInputDialog,QDoubleSpinBox,QDialog,QTextBrowser,QDialogButtonBox,QFileDialog)
 from .chamber import Chamber,Primitive,legacy_geometry,apply_groups,sync_groups,group_angles,UNITS,TOL,WALL_BOUND_NOTICE,number
 from .core import project_to_json
@@ -83,6 +83,12 @@ class Handle(DragGesture,QGraphicsEllipseItem):
         self.setFlags(QGraphicsItem.ItemIsSelectable|QGraphicsItem.ItemIgnoresTransformations)
         self.setPos(QPointF(*point));self.setData(0,identity);self.setToolTip(identity+' · '+{'start':'начало: переместить точку','end':'конец: переместить точку','center':'центр: перенести дугу целиком','position':'положение объекта'}.get(role,role))
         self.setCursor(Qt.SizeAllCursor)
+        self.endpoint_label=None
+        if not object_handle and role in ('start','end') and next(p for p in editor.raw['primitives'] if p['id']==identity)['kind'] in ('line','arc'):
+            label=QGraphicsSimpleTextItem('1' if role=='start' else '2',self)
+            font=label.font();font.setPointSizeF(8.5);label.setFont(font);label.setBrush(QBrush(QColor('#737b85')))
+            label.setPos(7,-18 if role=='start' else 4);label.setAcceptedMouseButtons(Qt.NoButton)
+            label.setData(1,'endpoint-number');label.setToolTip(('1 — начало' if role=='start' else '2 — конец')+' · '+identity);self.endpoint_label=label
     def boundingRect(self):return QRectF(-9,-9,18,18)
     def shape(self):
         path=QPainterPath();path.addEllipse(self.boundingRect());return path
@@ -226,6 +232,7 @@ class GeometryEditor(QWidget):
         for column,values in ((1,{k:v for k,v in WALLS.items() if k!='free'}),(2,KINDS),(11,{k:k for k in UNITS})):
             self.primitive_table.setItemDelegateForColumn(column,Choices(values,self.primitive_table))
         self.object_table.setItemDelegateForColumn(2,Choices({k:v for k,v in WALLS.items() if k!='reference'},self.object_table));self.group_table.setItemDelegateForColumn(2,Choices(MODES,self.group_table))
+        for column in (1,6):self.group_table.setItemDelegateForColumn(column,QStyledItemDelegate(self.group_table))
         numeric=NumericDelegate(self)
         for column in range(3,10):self.primitive_table.setItemDelegateForColumn(column,numeric)
         for column in (4,5,6):self.object_table.setItemDelegateForColumn(column,numeric)
@@ -347,7 +354,7 @@ class GeometryEditor(QWidget):
                 point=(r*math.cos(math.radians(theta)),-r*math.sin(math.radians(theta))) if self.angular.isChecked() else (z,-r)
                 for h in self.handles:
                     if h.object_handle and h.identity==obj['id']:h.setPos(QPointF(*point))
-            rect=self.sketch.scene().itemsBoundingRect();current=self.sketch.sceneRect()
+            rect=self.scene_bounds();current=self.sketch.sceneRect()
             if not current.contains(rect):self.sketch.scene().setSceneRect(current.united(rect).adjusted(-3,-3,3,3))
             self.highlight_selection()
         finally:self.primitive_table.blockSignals(False);self.object_table.blockSignals(False);self.loading=False
@@ -762,12 +769,18 @@ class GeometryEditor(QWidget):
                 point=(r*math.cos(math.radians(theta)),-r*math.sin(math.radians(theta))) if angular else (z,-r)
                 color={'nozzle':'#61866a','hole':'#2a81b3','insert':'#b34e91'}.get(obj['type'],'#777777')
                 handle=Handle(self,obj['id'],'position',point,color,True);scene.addItem(handle);self.handles.append(handle)
-            rect=scene.itemsBoundingRect();pad=max(3.,max(rect.width(),rect.height())*.08);scene.setSceneRect(rect.adjusted(-pad,-pad,pad,pad))
+            rect=self.scene_bounds();pad=max(3.,max(rect.width(),rect.height())*.08);scene.setSceneRect(rect.adjusted(-pad,-pad,pad,pad))
             for handle in self.handles:handle.setSelected(handle.identity==self.selected);handle.setZValue(10 if handle.identity==self.selected else 8)
             self.sync_constraint_glyphs()
             self.highlight_selection()
             if fit:self.fit()
         finally:self.loading=old
+    def scene_bounds(self):
+        # Screen-sized endpoint numbers must not change the physical fit scale.
+        rect=QRectF()
+        for item in self.sketch.scene().items():
+            if item.data(1)!='endpoint-number':rect=rect.united(item.sceneBoundingRect())
+        return rect
     def fit(self):self.sketch.fitInView(self.sketch.sceneRect(),Qt.KeepAspectRatio)
     def sync_constraint_glyphs(self):
         scene=self.sketch.scene();records=[] if self.angular.isChecked() else [c for c in constraint_records(self.raw) if c.get('enabled',True)]
@@ -789,7 +802,7 @@ class GeometryEditor(QWidget):
     def preview_drag(self,identity,role,position,is_object,before,before_nozzles,anchor):
         # Qt never moves a selection group. Every frame is reconstructed from
         # the press snapshot, so passing through an invalid shape cannot lock it.
-        previous=self.raw['primitives']
+        previous=self.raw['primitives'];coherent_frame=self.raw.copy()
         if is_object:self.raw=deepcopy(before);self.working_nozzles=deepcopy(before_nozzles)
         else:self.raw['primitives']=deepcopy(before['primitives'])
         try:
@@ -797,10 +810,15 @@ class GeometryEditor(QWidget):
             if not is_object:
                 changed=next(p for p in self.raw['primitives'] if p['id']==identity);original=next(p for p in before['primitives'] if p['id']==identity)
                 drivers=[(identity,r) for r in ('start','end') if r in changed and r in original and not np.allclose(np.array(changed[r])*UNITS[changed.get('unit','mm')],np.array(original[r])*UNITS[original.get('unit','mm')],rtol=0,atol=TOL)]
-                try:self.raw=apply_constraints(self.raw,drivers=drivers,baseline=before)
-                except ValueError:
-                    self.raw=deepcopy(before);raise
-        except (ValueError,KeyError) as exc:self.message('Черновик: '+str(exc),True)
+                self.raw=apply_constraints(self.raw,drivers=drivers,baseline=before)
+        except (ValueError,KeyError) as exc:
+            # Reconstructing a degenerate arc can fail before the coincidence
+            # solver runs. Keep the last coherent frame, including its peers,
+            # rather than tear the joint or jump back to the press position.
+            # Only the proposed primitives were copied/mutated above, so the
+            # shallow frame snapshot retains their untouched previous list.
+            if not is_object:self.raw=coherent_frame
+            self.message('Перемещение ограничено связями: '+str(exc),True)
         if is_object:
             self.refresh_drag_values(identity,True)
             for h in self.handles:

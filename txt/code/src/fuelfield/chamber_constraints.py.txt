@@ -147,7 +147,7 @@ def validate_constraints(raw):
             if denominator<=TOL*TOL or abs(float(np.dot(radius,direction)))/denominator>1e-9:raise ValueError(c['id']+': касательность не выполнена')
 
 
-def apply_constraints(raw,drivers=(),baseline=None):
+def _apply_constraints(raw,drivers=(),baseline=None):
     result=deepcopy(raw)
     result['schema_version']=2
     if 'constraints' not in result:
@@ -205,6 +205,28 @@ def apply_constraints(raw,drivers=(),baseline=None):
     if baseline is not None:_check_fixed(baseline,result)
     validate_constraints(result)
     return result
+
+
+def apply_constraints(raw,drivers=(),baseline=None):
+    """Solve the usual directed constraints, then a limited free biarc pair.
+
+    Two arcs already tangent to their outer lines have no independent radius
+    freedom while the joint is held. The fallback moves that non-fixed joint,
+    preserving both outer endpoints and tangents, and verifies every original
+    constraint again. It never drops a relation to make a fit succeed.
+    """
+    drivers=tuple(drivers)
+    try:return _apply_constraints(raw,drivers,baseline)
+    except ValueError as original:
+        if 'касатель' not in str(original).lower():raise
+        from .chamber_biarc import candidates
+        records=_records(raw)
+        for c in constraint_records(raw):
+            if c['kind']!='tangent' or not c.get('enabled',True) or any(records[_key(c[k])[0]]['kind']!='arc' for k in ('a','b')):continue
+            for candidate in candidates(raw,c):
+                try:return _apply_constraints(candidate,drivers,baseline or raw)
+                except ValueError:continue
+        raise
 
 
 def add_constraint(raw,kind,a,b):

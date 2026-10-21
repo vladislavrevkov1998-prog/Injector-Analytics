@@ -90,7 +90,8 @@ def draw_detailed_map(fig, field, plane, cfg, nozzles, *, outlines=True,
         draw_polar_nozzle_profiles(ax,cfg,nozzles,plane.z_mm,rose_scale_mm)
     draw_nozzle_markers(ax,cfg,nozzles,polar=False,outlines=outlines,labels=labels)
     ax.set(xlim=(-lim,lim),ylim=(-lim,lim),xlabel='X, мм',ylabel='Y, мм')
-    ax.set_title(f'Подробное поле без агрегирования 6×140 · z={plane.z_mm:g} мм',fontsize=10)
+    title='Полный поток: взвесь + плёнка; визуальное сглаживание' if getattr(plane,'transport_notice','') else 'Подробное поле без агрегирования 6×140'
+    ax.set_title(f'{title} · z={plane.z_mm:g} мм',fontsize=10)
     ax.grid(False)
     fig.colorbar(im,ax=ax,shrink=.8,label='кг/(м²·с)')
     return ax
@@ -110,6 +111,7 @@ def draw_polar_nozzles_map(fig, plane, cfg, nozzles, *, outlines=True,labels=Tru
     ax.legend(handles=[Line2D([0],[0],color='#f59e0b',lw=2,label='Наружный ряд'),
                        Line2D([0],[0],color='#22d3ee',lw=2,label='Внутренний ряд')],
               loc='upper right',fontsize=8)
-    ax.text(.02,.02,'Радиус полярной эпюры ∝ относительной интенсивности, НЕ геометрии факела',
+    note='Исходные 36 долей форсунки; не распределение после переноса' if getattr(plane,'transport_notice','') else 'Радиус полярной эпюры ∝ относительной интенсивности, НЕ геометрии факела'
+    ax.text(.02,.02,note,
             transform=ax.transAxes,fontsize=7,va='bottom',color='#777777')
     return ax

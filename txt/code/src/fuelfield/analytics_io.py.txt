@@ -44,16 +44,52 @@ def _col(i):
     return result
 
 
+def transport_tables(planes):
+    """Separate surface-film flow from suspended fuel; momentum is a flux [N].
+
+    A composite scan combines distinct times. Its phase cells are exportable,
+    but it has no single incoming fuel or momentum balance.
+    """
+    selected=[p for p in planes if getattr(p,'suspended_cell_mass_kg_s',None) is not None]
+    if not selected:return []
+    cells=[['z_mm','radial_level','theta_node','radius_center_mm','theta_deg','cell_area_m2',
+            'total_including_film_kg_s','suspended_kg_s','film_inner_kg_s','film_outer_kg_s',
+            'suspended_flux_kg_m2_s','film_inner_cell_equivalent_kg_m2_s','film_outer_cell_equivalent_kg_m2_s']]
+    balances=[['z_mm','scope','injected_kg_s','total_including_film_kg_s','suspended_kg_s',
+               'film_inner_kg_s','film_outer_kg_s','relative_mass_error','max_travel_time_s','notice']]
+    momentum=[['z_mm','scope','component','incoming_N','outgoing_N','carrier_N','wall_and_film_driving_N','residual_N','relative_residual']]
+    for p in selected:
+        suspended=p.suspended_cell_mass_kg_s;inner=p.film_inner_cell_mass_kg_s;outer=p.film_outer_cell_mass_kg_s
+        for i,r in enumerate(p.radial_centers_mm):
+            for j,th in enumerate(p.theta_centers_deg):
+                area=float(p.cell_area_m2[i,j]);values=[float(a[i,j]) for a in (p.cell_mass_kg_s,suspended,inner,outer)]
+                cells.append([float(p.z_mm),i+1,j+1,float(r),float(th),area,*values,
+                              *[value/area for value in values[1:]]])
+        composite=getattr(p,'is_composite',False)
+        scope='composite_different_times_no_global_balance' if composite else 'instantaneous'
+        balances.append([float(p.z_mm),scope,None if composite else float(p.injected_kg_s),float(p.cell_mass_kg_s.sum()),
+            float(suspended.sum()),float(inner.sum()),float(outer.sum()),None if composite else p.rel_balance_error,
+            getattr(p,'max_travel_time_s',None),getattr(p,'transport_notice','')])
+        ledger=getattr(p,'transport_momentum',None)
+        if ledger and not composite:
+            for k,label in enumerate(('z','x','y')):
+                momentum.append([float(p.z_mm),scope,label,*[float(ledger[key][k]) for key in
+                    ('incoming_N','outgoing_N','carrier_N','wall_N','residual_N')],ledger.get('relative_residual')])
+        else:momentum.append([float(p.z_mm),scope,'not_defined',None,None,None,None,None,None])
+    return [('Fuel_phases',cells),('Transport_balance',balances),('Fuel_momentum_N',momentum)]
+
+
 def write_epures_xlsx(path, planes, cfg, metric='flux', interval=180.):
     if not 1<=len(planes)<=50:raise ValueError('Экспорт требует 1–50 рассчитанных сечений')
     metadata=json.dumps(project_to_json(cfg,[])['settings'],ensure_ascii=False,separators=(',',':'))
-    if len(metadata)>16000 or cfg.geometry:
+    confined=(cfg.fuel_transport or {}).get('mode','legacy')=='confined_inertial'
+    if len(metadata)>16000 or cfg.geometry or confined:
         pointer=json.dumps(dict(metadata_sheet='Metadata',record='settings'),ensure_ascii=False)
         tables=[]
         for index,p in enumerate(planes,1):
             values=cell_values(p,metric,cfg.density_kg_m3,interval)
             headers=['angle_deg']
-            for r in p.radial_centers_mm:headers.extend([f'R={r:.12g} мм [{UNITS[metric]}]',f'x R={r:.12g} [мм]',f'y R={r:.12g} [мм]'])
+            for r in p.radial_centers_mm:headers.extend([f'R={r:.12g} мм [{UNITS[metric]}]'+(' total incl. film' if confined else ''),f'x R={r:.12g} [мм]',f'y R={r:.12g} [мм]'])
             headers+=['z_mm','units','pressure_mode','target_pressure_kgf_cm2','density_kg_m3','interval_s','settings_json']
             rows=[headers]
             for j,angle in enumerate(p.theta_centers_deg):
@@ -62,6 +98,7 @@ def write_epures_xlsx(path, planes, cfg, metric='flux', interval=180.):
                     v=values[k,j];row.extend([None if np.ma.is_masked(v) else float(v),float(r*np.cos(np.deg2rad(angle))),float(r*np.sin(np.deg2rad(angle)))])
                 rows.append(row+[p.z_mm,UNITS[metric],cfg.pressure_mode,cfg.target_pressure_kgf_cm2,cfg.density_kg_m3,interval,pointer])
             tables.append((f'z{index} {p.z_mm:g} мм'[:31],rows))
+        tables.extend(transport_tables(planes))
         tables.append(('Metadata',[['record','part','json']]+[['settings',i//16000,metadata[i:i+16000]] for i in range(0,len(metadata),16000)]))
         tables.append(('Balances',balance_rows(planes)))
         write_workbook(path,tables);return
