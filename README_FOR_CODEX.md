@@ -1,3 +1,7 @@
+> **АКТУАЛЬНОЕ ЗАДАНИЕ (27.10.2026):** исходники в `main` уже v0.7.0; ниже сохранена историческая памятка про перенос v0.1.2. Для текущей разработки v0.8 сначала читать [AGENTS.md](AGENTS.md), [CODEX_START.md](CODEX_START.md), [docs/ROADMAP_v0.8.md](docs/ROADMAP_v0.8.md), [docs/V0.8_AIR_JETS_MODEL.md](docs/V0.8_AIR_JETS_MODEL.md), [docs/V0.8_UI_REGRESSION_SPEC.md](docs/V0.8_UI_REGRESSION_SPEC.md) и [docs/V0.8_CODEX_EXECUTION.md](docs/V0.8_CODEX_EXECUTION.md). Этот документационный коммит не содержит реализации v0.8.
+
+---
+
 # Перенос проекта Fuel Field Pilot в Codex
 
 В комплекте — исходный **работающий пилот v0.1.2**, 16 исходных тестов и согласованное ТЗ следующих версий. **Новая функциональность из ТЗ НЕ реализована этим архивом.**
