@@ -94,7 +94,7 @@ def style_canvas(canvas,theme=None):
             if patch is not None:patch.set_facecolor(palette['panel']);patch.set_edgecolor(palette['border'])
 
 
-def _style_widget(widget,palette):
+def _style_widget(widget,palette,visible_only=False):
     if sip.isdeleted(widget):return
     stylesheet=widget.styleSheet()
     if stylesheet!=getattr(widget,'_ff_styled_stylesheet',None):widget._ff_original_stylesheet=stylesheet
@@ -127,17 +127,21 @@ def _style_widget(widget,palette):
                     target=_qcolor(original.name(),True) if current_theme()=='dark' else original
                     pen.setColor(target);item.setPen(pen);item._ff_last_pen_color=QColor(target)
     if isinstance(widget,QTableWidget):
-        if not getattr(widget,'_ff_theme_table_hook',False):
-            widget._ff_theme_table_hook=True;reference=weakref.ref(widget)
-            def dirty(*args):
-                table=reference()
-                if table is not None and not sip.isdeleted(table) and not getattr(table,'_ff_theme_styling',False):table._ff_theme_table_dirty=True
-            for signal in (widget.model().dataChanged,widget.model().rowsInserted,widget.model().columnsInserted,widget.model().modelReset):signal.connect(dirty)
-        widget._ff_theme_styling=True
+        # Do not connect Python closures to the table's internal C++ model.
+        # Those senders may emit while a long-lived window tree is being
+        # destroyed. Fresh cells are styled at the viewport's next Paint.
+        if visible_only:
+            first_row=widget.rowAt(0);first_col=widget.columnAt(0)
+            if first_row<0 or first_col<0:return
+            last_row=widget.rowAt(max(0,widget.viewport().height()-1))
+            last_col=widget.columnAt(max(0,widget.viewport().width()-1))
+            rows=range(first_row,(last_row+1) if last_row>=0 else widget.rowCount())
+            columns=range(first_col,(last_col+1) if last_col>=0 else widget.columnCount())
+        else:rows=range(widget.rowCount());columns=range(widget.columnCount())
         blocked=widget.blockSignals(True)
         try:
-            for row in range(widget.rowCount()):
-                for col in range(widget.columnCount()):
+            for row in rows:
+                for col in columns:
                     item=widget.item(row,col)
                     if item is None:continue
                     # Appearance must not emit project itemChanged edits.
@@ -159,7 +163,7 @@ def _style_widget(widget,palette):
                         if foreground!=target:item.setForeground(target)
                         item._ff_last_foreground=QBrush(target)
         finally:
-            widget.blockSignals(blocked);widget._ff_theme_styling=False;widget._ff_theme_table_dirty=False
+            widget.blockSignals(blocked)
     if isinstance(widget,FigureCanvasQTAgg):style_canvas(widget)
 
 
@@ -167,7 +171,7 @@ class ThemeWatcher(QObject):
     def eventFilter(self,widget,event):
         if event.type()==QEvent.Paint and isinstance(widget,QWidget):
             parent=widget.parentWidget()
-            if isinstance(parent,QTableWidget) and getattr(parent,'_ff_theme_table_dirty',False):_style_widget(parent,PALETTES[current_theme()])
+            if isinstance(parent,QTableWidget):_style_widget(parent,PALETTES[current_theme()],visible_only=True)
         if event.type()==QEvent.Hide and isinstance(widget,FigureCanvasQTAgg):
             interaction=getattr(widget,'interaction',None)
             if interaction is not None:interaction.suspend()

@@ -147,3 +147,53 @@ class TestCanvasLifecycle(unittest.TestCase):
             del window, canvas
             gc.collect()
         self.assertEqual(sorted(destroyed), list(range(10)))
+
+    def test_table_rebuilds_and_deletion_keep_theme_out_of_edit_signals(self):
+        from PyQt5.QtGui import QColor
+        from PyQt5.QtTest import QSignalSpy
+        from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem
+
+        for cycle in range(400):
+            table = QTableWidget(2, 3)
+            table.resize(420, 180)
+
+            def fill(prefix):
+                for row in range(2):
+                    for column in range(3):
+                        item = QTableWidgetItem(f'{prefix}-{row}-{column}')
+                        item.setBackground(QColor('#eee8f6'))
+                        item.setForeground(QColor('#52617c'))
+                        table.setItem(row, column, item)
+
+            fill('initial')
+            edits = QSignalSpy(table.cellChanged)
+            table.show(); self.app.processEvents()
+            self.assertEqual(len(edits), 0, 'appearance emitted a data edit')
+            table.item(0, 0).setText(f'edited-{cycle}')
+            self.assertEqual(len(edits), 1)
+
+            # Model rows and all their C++ items are destroyed and recreated.
+            table.setRowCount(0); table.setRowCount(2); fill('replacement')
+            self.assertEqual(len(edits), 7)
+            if cycle % 20 == 0:
+                apply_theme(self.app, 'dark' if (cycle // 20) % 2 == 0 else 'light',
+                            persist=False)
+            table.viewport().repaint(); self.app.processEvents()
+            self.assertEqual(len(edits), 7, 'theme/restyling emitted an edit')
+            self.assertEqual(table.item(1, 2).text(), 'replacement-1-2')
+            if current_theme() == 'dark':
+                self.assertLess(table.item(1, 2).background().color().lightnessF(), .3)
+                self.assertGreater(table.item(1, 2).foreground().color().lightnessF(), .5)
+            else:
+                self.assertEqual(table.item(1, 2).background().color().name(), '#eee8f6')
+                self.assertEqual(table.item(1, 2).foreground().color().name(), '#52617c')
+
+            # A deferred appearance callback and Paint may outlive the sender.
+            QApplication.sendEvent(table, QEvent(QEvent.Show))
+            table.viewport().update()
+            table.close(); table.deleteLater()
+            QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+            self.app.processEvents()
+            self.assertTrue(sip.isdeleted(table))
+            del edits, table
+            if cycle % 10 == 0: gc.collect()
