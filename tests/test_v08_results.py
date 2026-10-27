@@ -185,7 +185,10 @@ class TestAirResultView(unittest.TestCase):
         with patch('fuelfield.air_results_gui.compute_mixture', side_effect=mixture), patch('fuelfield.air_results_gui.compute_air_field', return_value=object()), patch('fuelfield.core.calculate_plane', side_effect=AssertionError('fuel rerun')):
             dialog = AirResultsDialog(cfg, [], [p0, p1], Quasi()); dialog.show(); self.app.processEvents()
             self.assertIsNotNone(dialog.current_result); self.assertEqual(calls, [(0, 0)])
+            self.assertEqual(dialog.source_table.rowCount(), 0)
+            dialog.tabs.setCurrentIndex(1); self.app.processEvents()
             self.assertEqual(dialog.source_table.item(0, 0).text(), 's1')
+            dialog.tabs.setCurrentIndex(0); self.app.processEvents()
             dialog.time_slider.setValue(2); dialog.refresh(); self.app.processEvents()
             self.assertIn((0, 2), calls); self.assertIn('t=2', dialog.time_label.text())
             results, planes, times = dialog.export_bundle()
@@ -197,3 +200,63 @@ class TestAirResultView(unittest.TestCase):
             self.assertIn('α', dialog.figure.axes[0].get_title())
             self.assertEqual(cfg.air_model['sources'][0]['future'], {'keep': True})
             dialog.close(); self.app.processEvents()
+
+    def _real_quasi_case(self):
+        cfg, plane, _, _ = case(composite=True)
+        cfg.air_model = dict(enabled=True,total_kg_s=10.,l0=2.,distribution='uniform',max_path_mm=30.,
+            sources=[dict(id='air',kind='other',method='fixed',flow_kg_s=10.,z_mm=0.,radius_mm=250.,mixed_fraction=.4)])
+        class Quasi:
+            settings=SimpleNamespace(n_steps=3,times=np.array([0.,1.,2.]))
+            pressures={'A':np.array([25.,30.,35.])}
+            def snapshot(self,index,step):
+                result=deepcopy(plane);result.is_composite=False
+                result.suspended_cell_mass_kg_s[1,3]+=2.*step
+                result.film_inner_cell_mass_kg_s=result.film_inner_cell_mass_kg_s*(1+step)
+                result.cell_mass_kg_s=result.suspended_cell_mass_kg_s+result.film_inner_cell_mass_kg_s+result.film_outer_cell_mass_kg_s
+                return result
+        return cfg,plane,Quasi()
+
+    def test_hidden_diagnostics_are_deferred_and_reveal_latest_real_timestamp(self):
+        from fuelfield.air_results_gui import AirResultsDialog
+        cfg,plane,quasi=self._real_quasi_case();snapshot=deepcopy(cfg.air_model)
+        dialog=AirResultsDialog(cfg,[],[plane],quasi);dialog.show();self.app.processEvents()
+        try:
+            with patch.object(dialog.details,'setPlainText',wraps=dialog.details.setPlainText) as text, \
+                 patch.object(dialog.source_table,'setItem',wraps=dialog.source_table.setItem) as cells, \
+                 patch('fuelfield.air_results_gui._plain',side_effect=AssertionError('hidden JSON formatting')):
+                for step in (1,2):dialog.time_slider.setValue(step);dialog.refresh();self.app.processEvents()
+                self.assertEqual(text.call_count,0);self.assertEqual(cells.call_count,0)
+            dialog.tabs.setCurrentIndex(1);self.app.processEvents()
+            self.assertEqual(dialog.source_table.item(0,0).text(),'air')
+            item=dialog.source_table.item(0,0)
+            with patch.object(dialog.source_table,'setItem',wraps=dialog.source_table.setItem) as cells:
+                dialog.time_slider.setValue(1);dialog.refresh();self.app.processEvents()
+                self.assertEqual(cells.call_count,0);self.assertIs(dialog.source_table.item(0,0),item)
+            dialog.time_slider.setValue(2);dialog.refresh();dialog.tabs.setCurrentIndex(2);self.app.processEvents()
+            details=json.loads(dialog.details.toPlainText())
+            self.assertEqual(details['pressures_kgf_cm2']['A'],35.)
+            self.assertAlmostEqual(details['film_inner_kg_s'],4.8)
+            self.assertEqual(cfg.air_model,snapshot)
+        finally:dialog.close();dialog.deleteLater();self.app.processEvents()
+
+    def test_time_updates_reuse_mesh_and_show_new_values_and_pixels(self):
+        from fuelfield.air_results_gui import AirResultsDialog
+        cfg,plane,quasi=self._real_quasi_case()
+        dialog=AirResultsDialog(cfg,[],[plane],quasi);dialog.show();self.app.processEvents();dialog.canvas.draw()
+        try:
+            mesh=dialog._mesh;axes=tuple(dialog.figure.axes);before=np.array(dialog.canvas.buffer_rgba()).copy()
+            dialog.time_slider.setValue(2);dialog.refresh();self.app.processEvents();dialog.canvas.draw()
+            self.assertIs(dialog._mesh,mesh);self.assertEqual(tuple(dialog.figure.axes),axes)
+            np.testing.assert_array_equal(np.ma.getdata(mesh.get_array()).reshape(2,8),dialog.current_result.fuel_kg_s)
+            after=np.array(dialog.canvas.buffer_rgba())
+            self.assertGreater(np.count_nonzero(before!=after),200)
+            dialog.metric.setCurrentIndex(dialog.metric.findData('alpha_total'));self.app.processEvents()
+            self.assertEqual(len(dialog.figure.axes),2);self.assertIn('α',dialog.figure.axes[0].get_title())
+            self.assertTrue(np.ma.getmaskarray(dialog._mesh.get_array()).reshape(2,8)[0,0])
+            axes=tuple(dialog.figure.axes)
+            dialog.resize(dialog.width()+140,dialog.height()+90);self.app.processEvents();dialog.canvas.draw()
+            self.assertEqual(tuple(dialog.figure.axes),axes)
+            label=axes[0].xaxis.label.get_window_extent(dialog.canvas.get_renderer())
+            self.assertGreaterEqual(label.x0,0.);self.assertLessEqual(label.x1,dialog.figure.bbox.width)
+            self.assertGreaterEqual(label.y0,0.)
+        finally:dialog.close();dialog.deleteLater();self.app.processEvents()

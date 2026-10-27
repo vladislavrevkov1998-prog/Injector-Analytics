@@ -38,7 +38,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out',type=Path,required=True);parser.add_argument('--screens',type=Path)
     args=parser.parse_args();app=QApplication.instance() or QApplication([]);app.setStyle('Fusion')
-    win=MainWindow();win.show()
+    win=MainWindow();win.show();errors=[];win._error=lambda message:errors.append(str(message))
     raw=json.loads((ROOT/'examples/demo_project_v08_air_synthetic.json').read_text())
     win.apply_project_state(raw,'SYNTHETIC benchmark');win.tabs.setCurrentIndex(3)
     app.processEvents();beats=[];timer=QTimer();timer.setInterval(10);timer.timeout.connect(lambda:beats.append(time.perf_counter()))
@@ -46,15 +46,18 @@ def main():
     while win.thread is not None and time.perf_counter()<deadline:QTest.qWait(5)
     elapsed=time.perf_counter()-start;timer.stop();static_beats=beats.copy()
     if win.thread is not None:win.thread.requestInterruption();raise RuntimeError('Worker timeout')
-    if len(win.results)!=len(win.cfg.z_mm):raise RuntimeError(win.statusBar().currentMessage())
+    if len(win.results)!=len(win.cfg.z_mm):raise RuntimeError('\n'.join(errors) or win.statusBar().currentMessage())
+    print('static_worker_seconds',elapsed,flush=True)
     snapshot=project_to_json(win.cfg,win.nozzles);before=digest(win.results)
     timings=[];air=[]
     for plane in win.results:
         start=time.perf_counter();air.append(compute_mixture(plane,win.cfg,win.nozzles));timings.append(time.perf_counter()-start)
+    print('air_plane_seconds',timings,flush=True)
     editor=AirBalanceDialog(win.cfg,win.nozzles,win);editor.show();app.processEvents()
     moves=[];slider=editor.groups['hole'][0]
     for i in range(200):
         start=time.perf_counter();slider.setValue(2000+i);app.processEvents();moves.append(time.perf_counter()-start)
+    print('group_slider_200_seconds',sum(moves),flush=True)
     result=AirResultsDialog(win.cfg,win.nozzles,win.results,parent=win);result.show()
     result.section.setCurrentIndex(len(win.results)-1);result.metric.setCurrentIndex(result.metric.findData('alpha_total'))
     theme_times={}
@@ -72,6 +75,10 @@ def main():
         raise AssertionError('UI modified physical inputs or completed fuel matrices')
     editor.close();result.close()
     cfg,nozzles=project_from_json(deepcopy(snapshot));cfg.quasistationary=True
+    cfg.pressure_mode='calibrated'
+    cfg.atomizer_types=[dict(id='SYNTHETIC_BENCH',name='SYNTHETIC Q(delta p), not measurements',
+        kind='manual',points=[[25.,.9],[30.,1.],[35.,1.1]],provenance={'source_kind':'synthetic benchmark'})]
+    for nozzle in nozzles:nozzle.atomizer_type_id='SYNTHETIC_BENCH'
     pressures=tuple(float(30.+5.*np.sin(2*np.pi*i/140)) for i in range(140))
     cfg.quasi_settings=QuasiSettings(channels=(PressureChannel('A',pressure=pressures),)).to_dict()
     win.apply_project_state(project_to_json(cfg,nozzles),'SYNTHETIC 140-step benchmark')
@@ -79,13 +86,15 @@ def main():
     while win.thread is not None and time.perf_counter()<deadline:QTest.qWait(5)
     quasi_elapsed=time.perf_counter()-start;timer.stop()
     if win.thread is not None:win.thread.requestInterruption();raise RuntimeError('Quasi worker timeout')
-    if win.quasi_result is None:raise RuntimeError(win.statusBar().currentMessage())
+    if win.quasi_result is None:raise RuntimeError('\n'.join(errors) or win.statusBar().currentMessage())
+    print('quasi_worker_seconds',quasi_elapsed,flush=True)
     result=AirResultsDialog(win.cfg,win.nozzles,win.results,win.quasi_result,win)
     result.show();app.processEvents();quasi_snapshot=project_to_json(win.cfg,win.nozzles);quasi_hash=digest(win.results)
     quasi_moves=[]
     for i in range(200):
         start=time.perf_counter();result.time_slider.setValue(i%140);result.refresh();app.processEvents()
         quasi_moves.append(time.perf_counter()-start)
+    print('quasi_air_slider_200_seconds',sum(quasi_moves),flush=True)
     assert project_to_json(win.cfg,win.nozzles)==quasi_snapshot and digest(win.results)==quasi_hash
     # A separate 1000-source draft exercises the table and a real allocation edit.
     stress=deepcopy(cfg);stress.air_model['sources']=[dict(id=f'stress-{i}',kind='other',method='fraction',

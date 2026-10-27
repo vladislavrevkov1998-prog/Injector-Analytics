@@ -53,6 +53,23 @@ class TestAirEditor(unittest.TestCase):
         self.assertFalse(self.dialog.apply_button.isEnabled())
         self.assertIn('ID',self.dialog.status.text())
 
+    def test_pending_table_input_is_preserved_by_immediate_slider_change(self):
+        self.dialog.unlock_fixed.setChecked(True)
+        col=next(i for i,c in enumerate(COLUMNS) if c[0]=='flow_kg_s')
+        self.dialog.table.item(0,col).setText('3')
+        self.dialog.groups['hole'][0].setValue(6000)
+        self.assertEqual(self.dialog.raw['sources'][0]['flow_kg_s'],3.)
+        self.assertAlmostEqual(self.dialog.raw['sources'][1]['share'],.3)
+        self.assertEqual(self.cfg.air_model['sources'][0]['flow_kg_s'],2.)
+
+    def test_share_below_fixed_budget_restores_both_controls_and_preserves_inputs(self):
+        slider,number=self.dialog.groups['hole'];before=deepcopy(self.dialog.raw['sources'])
+        slider.setValue(1000);self.app.processEvents()
+        self.assertIn('меньше',self.dialog.status.text())
+        self.assertEqual(slider.value(),5000);self.assertAlmostEqual(number.value(),50.)
+        self.assertEqual(self.dialog.raw['sources'],before)
+        self.assertTrue(self.dialog.apply_button.isEnabled())
+
     def test_unknown_swirlers_are_not_copied_from_fuel_flows(self):
         self.ns[0].flow_kg_h=1234.
         self.dialog.add_swirlers()
@@ -60,6 +77,18 @@ class TestAirEditor(unittest.TestCase):
         self.assertEqual(len(sources),140)
         self.assertEqual({s['nozzle_id'] for s in sources},set(range(1,141)))
         self.assertTrue(all(s['method']=='unknown' and s['flow_kg_s'] is None for s in sources))
+
+    def test_linked_coordinates_show_actual_nozzle_and_do_not_overwrite_raw_input(self):
+        source=self.dialog.raw['sources'][0]
+        source.update(kind='swirler',nozzle_id=1,radius_mm=250.,theta_deg=123.)
+        self.dialog.fill();self.dialog.refresh()
+        radius_col=next(i for i,c in enumerate(COLUMNS) if c[0]=='radius_mm')
+        angle_col=next(i for i,c in enumerate(COLUMNS) if c[0]=='theta_deg')
+        self.assertEqual(float(self.dialog.table.item(0,radius_col).text()),self.ns[0].radius_mm)
+        self.assertEqual(float(self.dialog.table.item(0,angle_col).text()),self.ns[0].theta_deg)
+        self.assertFalse(self.dialog.table.item(0,radius_col).flags() & Qt.ItemIsEditable)
+        self.assertEqual(self.dialog.read()['sources'][0]['radius_mm'],250.)
+        self.assertEqual(self.dialog.read()['sources'][0]['theta_deg'],123.)
 
     def test_apply_is_atomic_and_cancel_does_not_touch_input(self):
         received=[];self.dialog.applied.connect(received.append)

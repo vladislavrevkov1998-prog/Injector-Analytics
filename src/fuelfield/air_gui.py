@@ -68,7 +68,7 @@ class AirBalanceDialog(QDialog):
         self.cfg=deepcopy(cfg);self.nozzles=deepcopy(nozzles)
         self.raw=validate_air_model(cfg.air_model)
         self._busy=False;self.balance=None
-        self.setWindowTitle('Воздух v0.8 — источники и расходный баланс');self.resize(1280,840)
+        self.setWindowTitle('Воздух v0.8 — источники и расходный баланс');self.resize(1280,800)
         lay=QVBoxLayout(self);top=QHBoxLayout()
         self.enabled=QCheckBox('Включить воздух');self.enabled.setChecked(self.raw.get('enabled',False))
         self.total=spin(self.raw.get('total_kg_s') or 0.)
@@ -85,23 +85,26 @@ class AirBalanceDialog(QDialog):
         self.area_confirm=QCheckBox('Принимаю гипотезу сходных условий для F / CdF')
         self.area_confirm.setChecked(self.raw.get('area_hypothesis_confirmed',False))
         self.area_fraction=spin(self.raw.get('area_allocation_fraction',1.),1.,4)
-        for w in (self.distribution,QLabel('Взаимодействие 0…1:'),self.interaction,self.area_confirm,
-                  QLabel('Доля остатка для F:'),self.area_fraction):algorithms.addWidget(w)
+        for w in (self.distribution,QLabel('Взаимодействие 0…1:'),self.interaction,self.area_confirm):algorithms.addWidget(w)
         lay.addLayout(algorithms)
         note=QLabel('Методы: fixed — заданный G; fraction — доля от G КС; area / effective_area — остаток по F / CdF; unknown — неизвестен. '
             'Пустое поле = неизвестно. dz, dr, dθ задают направление, не скорость. θ — физический +X/против ЧС. '
             'Эмпирические ширины и вовлечение задаются пользователем; воздух не меняет топливо. Изменения вступают в силу после «Применить».')
         note.setWordWrap(True);lay.addWidget(note)
-        buttons=QHBoxLayout()
+        buttons=QHBoxLayout();parameters=QHBoxLayout()
         for title,slot in [('Добавить источник',self.add_source),('Добавить завихрители (G неизвестен)',self.add_swirlers),
                            ('Связать с геометрией',self.add_geometry),('Удалить выбранные',self.remove_sources),
                            ('Параметры JSON…',self.edit_json),('Справка',self.show_help)]:
-            b=QPushButton(title);b.clicked.connect(slot);buttons.addWidget(b)
-        self.unlock_fixed=QCheckBox('Редактировать заданные G');buttons.addWidget(self.unlock_fixed)
-        lay.addLayout(buttons)
+            b=QPushButton(title);b.clicked.connect(slot)
+            (parameters if title in ('Параметры JSON…','Справка') else buttons).addWidget(b)
+        self.unlock_fixed=QCheckBox('Редактировать заданные G');parameters.addWidget(self.unlock_fixed)
+        parameters.addWidget(QLabel('Доля остатка для F:'));parameters.addWidget(self.area_fraction);parameters.addStretch()
+        lay.addLayout(buttons);lay.addLayout(parameters)
         self.table=QTableWidget(0,len(COLUMNS));self.table.setHorizontalHeaderLabels([x[1] for x in COLUMNS])
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        # Recompute widths only when records are added/rebuilt. Automatic
+        # ResizeToContents rescanned all rows on every slider cell update.
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         lay.addWidget(self.table,1)
         group_row=QHBoxLayout();self.group_units=QComboBox()
         self.group_units.addItem('Доли групп, %','percent');self.group_units.addItem('Расходы групп, кг/с','flow')
@@ -112,7 +115,7 @@ class AirBalanceDialog(QDialog):
             if key=='unassigned':continue
             row=QHBoxLayout();row.addWidget(QLabel(label))
             slider=QSlider(Qt.Horizontal);slider.setRange(0,10000)
-            value=spin(0.,100.,6);row.addWidget(slider,1);row.addWidget(value);lay.addLayout(row)
+            value=spin(0.,100.,6);value.setMinimumWidth(135);row.addWidget(slider,1);row.addWidget(value);lay.addLayout(row)
             self.groups[key]=(slider,value)
             slider.valueChanged.connect(lambda v,k=key:self.group_changed(k,v/10000*(100 if self.group_units.currentData()=='percent' else self.total.value())))
             value.valueChanged.connect(lambda v,k=key:self.group_changed(k,v))
@@ -120,6 +123,7 @@ class AirBalanceDialog(QDialog):
         self.status=QLabel();self.status.setWordWrap(True);lay.addWidget(self.status)
         controls=QDialogButtonBox(QDialogButtonBox.Apply|QDialogButtonBox.Close)
         self.apply_button=controls.button(QDialogButtonBox.Apply);self.apply_button.clicked.connect(self.apply)
+        self.apply_button.setText('Применить');controls.button(QDialogButtonBox.Close).setText('Закрыть')
         controls.rejected.connect(self.reject);lay.addWidget(controls)
         self.timer=QTimer(self);self.timer.setSingleShot(True);self.timer.timeout.connect(self.refresh)
         self.table.itemChanged.connect(lambda:self.timer.start(50))
@@ -141,7 +145,34 @@ class AirBalanceDialog(QDialog):
                 if kind=='bool':item.setText('');item.setCheckState(Qt.Checked if value else Qt.Unchecked)
                 if source.get('method')=='fixed' and key=='flow_kg_s' and not self.unlock_fixed.isChecked():item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 self.table.setItem(row,col,item)
+        try:
+            from .air_sources import resolve_sources
+            self.show_resolved(resolve_sources(self.raw,self.cfg,self.nozzles),self.raw)
+        except (ValueError,TypeError,KeyError):pass  # refresh reports invalid links.
+        self.table.resizeColumnsToContents()
         self.table.blockSignals(False);self._busy=False
+
+    def show_resolved(self,sources,raw):
+        """Linked coordinates show the actual nozzle/object, retaining raw JSON."""
+        resolved={s['id']:s for s in sources};blocked=self.table.blockSignals(True)
+        try:
+            for row,source in enumerate(raw['sources']):
+                linked=source.get('nozzle_id') is not None or source.get('object_id') is not None
+                for key in ('z_mm','radius_mm','theta_deg'):
+                    col=next(i for i,c in enumerate(COLUMNS) if c[0]==key);item=self.table.item(row,col)
+                    if linked:
+                        flags=item.flags() & ~Qt.ItemIsEditable
+                        if item.flags()!=flags:item.setFlags(flags)
+                        tip='Координата из связанной форсунки/геометрии. Изменяется в исходном объекте.'
+                        if item.toolTip()!=tip:item.setToolTip(tip)
+                        if source['id'] in resolved:
+                            value=str(resolved[source['id']][key])
+                            if item.text()!=value:item.setText(value)
+                    else:
+                        flags=item.flags() | Qt.ItemIsEditable
+                        if item.flags()!=flags:item.setFlags(flags)
+                        if item.toolTip():item.setToolTip('')
+        finally:self.table.blockSignals(blocked)
 
     def read(self):
         def precise(key,control):
@@ -156,6 +187,7 @@ class AirBalanceDialog(QDialog):
         for row,source in enumerate(raw['sources']):
             direction=list(source.get('direction',[1.,0.,0.]))
             for col,(key,label,kind) in enumerate(COLUMNS):
+                if key in ('z_mm','radius_mm','theta_deg') and (source.get('nozzle_id') is not None or source.get('object_id') is not None):continue
                 item=self.table.item(row,col);value=item.text().strip()
                 if kind=='bool':value=item.checkState()==Qt.Checked
                 elif kind in ('float','int'):
@@ -168,16 +200,20 @@ class AirBalanceDialog(QDialog):
             source['direction']=direction
         return raw
 
-    def refresh(self,*args):
+    def refresh(self,*args,draft=None,skip_links=False):
         if self._busy:return
         from .air_sources import validate_air_model,resolve_sources
         from .air_balance import solve_balance
         try:
-            raw=self.read();validate_air_model(raw)
+            raw=self.read() if draft is None else deepcopy(draft)
             # Disabling air must remain possible after geometry/nozzle edits.
             # Keep inactive link metadata for repair without using it physically.
             self.raw=raw
-            sources=resolve_sources(raw,self.cfg,self.nozzles) if raw['enabled'] else raw['sources']
+            sources=resolve_sources(raw,self.cfg,self.nozzles) if raw['enabled'] and not skip_links else raw['sources']
+            if raw['enabled'] and not skip_links:self.show_resolved(sources,raw)
+            elif not raw['enabled'] and not skip_links:
+                try:self.show_resolved(resolve_sources(raw,self.cfg,self.nozzles),raw)
+                except (ValueError,TypeError,KeyError):pass
             candidate=deepcopy(raw);candidate['sources']=list(sources)
             try:self.balance=solve_balance(candidate)
             except ValueError:
@@ -186,7 +222,7 @@ class AirBalanceDialog(QDialog):
                 self.apply_button.setEnabled(True);return
             b=self.balance
             self.status.setText(f'Назначено {b.assigned_kg_s:.8g} кг/с; неизвестный остаток {b.unassigned_kg_s:.8g} кг/с; '
-                f'заданные G {b.fixed_kg_s:.8g} кг/с. '+ ' · '.join(map(str,b.diagnostics)))
+                f'заданные G/доли {b.fixed_kg_s:.8g} кг/с. '+ ' · '.join(map(str,b.diagnostics)))
             values={k:0. for k in KINDS}
             for source in raw['sources']:
                 values[source.get('kind','other') if source.get('kind') in KINDS else 'other']+=b.flows.get(source['id'],0.)
@@ -205,18 +241,36 @@ class AirBalanceDialog(QDialog):
     def group_changed(self,key,value):
         if self._busy:return
         try:
-            raw=self.read();total=self.total.value()
+            fast=self.balance is not None and not self.timer.isActive()
+            raw=deepcopy(self.raw) if fast else self.read();total=self.total.value()
             if total<=0:raise ValueError('Задайте положительный G воздуха КС.')
             rows=[s for s in raw['sources'] if s.get('kind')==key and s.get('enabled',True)]
             fixed=sum(float(s.get('flow_kg_s') or 0.) for s in rows if s.get('method')=='fixed')
             requested=value*total/100 if self.group_units.currentData()=='percent' else value
             if requested<fixed-1e-12:raise ValueError('Доля меньше заданных G группы; заданные расходы не изменены.')
+            self._busy=True
+            slider,number=self.groups[key];number.setValue(value);slider.setValue(round(requested/total*10000))
+            self._busy=False
             variable=[s for s in rows if s.get('method')!='fixed']
             if not variable:return
             weights=np.array([max(0.,s.get('share') or 0.) for s in variable]);weights=weights/weights.sum() if weights.sum() else np.full(len(variable),1/len(variable))
             for source,weight in zip(variable,weights):source.update(method='fraction',share=(requested-fixed)/total*float(weight))
-            self.raw=raw;self.fill();self.refresh()
-        except (ValueError,TypeError) as exc:self.status.setText(str(exc))
+            self.raw=raw
+            # A drag changes two cells of each variable source. Rebuilding all
+            # 26 columns also rebuilt the 140 fixed swirler rows every frame.
+            # Preserve those items, their precision and the user's selection.
+            changed={s['id'] for s in variable};self._busy=True
+            blocked=self.table.blockSignals(True)
+            try:
+                for row,source in enumerate(raw['sources']):
+                    if source['id'] not in changed:continue
+                    for key in ('method','share'):
+                        col=next(i for i,c in enumerate(COLUMNS) if c[0]==key)
+                        self.table.item(row,col).setText(str(source[key]))
+            finally:self.table.blockSignals(blocked);self._busy=False
+            self.refresh(draft=raw,skip_links=fast)
+        except (ValueError,TypeError) as exc:
+            self._busy=False;self.refresh();self.status.setText(str(exc))
 
     def select_kind(self,key):
         self.table.clearSelection()

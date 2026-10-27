@@ -17,7 +17,8 @@ class BalanceResult:
 
     @property
     def rel_error(self):
-        return (math.fsum(self.flows.values()) + self.unassigned_kg_s - self.total_kg_s) / max(self.total_kg_s, 1e-15)
+        difference=math.fsum(self.flows.values()) + self.unassigned_kg_s - self.total_kg_s
+        return difference/self.total_kg_s if self.total_kg_s>0 else difference
 
 
 def solve_balance(raw):
@@ -36,7 +37,10 @@ def solve_balance(raw):
         fixed = math.fsum(flows.values())
     except OverflowError:
         raise ValueError('Заданные расходы превышают конечный суммарный расход воздуха через КС') from None
-    tolerance = max(total * 1e-12, 1e-14)
+    # An absolute kg/s floor would permit a known flow many times larger
+    # than a tiny inlet budget. Only relative and floating-point roundoff
+    # allowances apply; a zero inlet cannot supply any positive known flow.
+    tolerance = max(total * 1e-12, math.ulp(total)*8) if total>0 else 0.
     if fixed > total + tolerance:
         raise ValueError('Заданные расходы/доли превышают суммарный расход воздуха через КС; значения не нормированы')
     variable = [s for s in sources if s['method'] in ('area', 'effective_area')]
