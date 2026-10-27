@@ -113,6 +113,19 @@ class TestNativeV08Drag(ThemeTestCase):
 
 
 class TestV08ThemeSurfaces(ThemeTestCase):
+    def test_scene_labels_restore_original_color_and_keep_selection_width(self):
+        from PyQt5.QtGui import QPen
+        from PyQt5.QtWidgets import QGraphicsScene,QGraphicsView
+        scene=QGraphicsScene();view=QGraphicsView(scene);label=scene.addSimpleText('1')
+        label.setBrush(QColor('#737b85'));line=scene.addLine(0,0,10,10,QPen(QColor('#316cb7'),2))
+        view.show();self.app.processEvents();apply_theme(self.app,'dark',persist=False)
+        self.assertGreater(label.brush().color().lightnessF(),.5)
+        pen=line.pen();pen.setWidthF(5);line.setPen(pen)
+        apply_theme(self.app,'light',persist=False)
+        self.assertEqual(label.brush().color().name(),'#737b85')
+        self.assertEqual(line.pen().color().name(),'#316cb7');self.assertEqual(line.pen().widthF(),5.)
+        view.close();view.deleteLater();self.app.processEvents()
+
     def test_fresh_table_cells_are_readable_after_dark_theme_and_restore(self):
         table=QTableWidget(1,1);table.show();self.app.processEvents();apply_theme(self.app,'dark',persist=False)
         item=QTableWidgetItem('12.345');item.setBackground(QColor('#eee8f6'));item.setForeground(QColor('#52617c'));table.setItem(0,0,item)

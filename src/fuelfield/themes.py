@@ -110,13 +110,22 @@ def _style_widget(widget,palette):
         widget.viewport().update()
         for item in widget.scene().items() if widget.scene() is not None else []:
             # QGraphicsTextItem / QGraphicsSimpleTextItem labels, not primitives.
-            if hasattr(item,'setDefaultTextColor'):item.setDefaultTextColor(QColor(palette['text']))
-            elif hasattr(item,'text') and hasattr(item,'setBrush'):item.setBrush(QBrush(QColor(palette['muted'])))
+            if hasattr(item,'setDefaultTextColor'):
+                if not hasattr(item,'_ff_original_text_color'):item._ff_original_text_color=QColor(item.defaultTextColor())
+                original=item._ff_original_text_color
+                item.setDefaultTextColor(_qcolor(original.name(),True) if current_theme()=='dark' else original)
+            elif hasattr(item,'text') and hasattr(item,'setBrush'):
+                if not hasattr(item,'_ff_original_text_brush'):item._ff_original_text_brush=QBrush(item.brush())
+                original=item._ff_original_text_brush
+                item.setBrush(QBrush(_qcolor(original.color().name(),True)) if current_theme()=='dark' else original)
             elif hasattr(item,'pen') and hasattr(item,'setPen'):
                 pen=item.pen()
                 if pen.style()!=0:
-                    if not hasattr(item,'_ff_original_pen'):item._ff_original_pen=QPen(pen)
-                    pen=QPen(item._ff_original_pen);pen.setColor(_qcolor(pen.color().name(),current_theme()=='dark'));item.setPen(pen)
+                    color=pen.color()
+                    if not hasattr(item,'_ff_original_pen_color') or color!=getattr(item,'_ff_last_pen_color',color):item._ff_original_pen_color=QColor(color)
+                    original=item._ff_original_pen_color
+                    target=_qcolor(original.name(),True) if current_theme()=='dark' else original
+                    pen.setColor(target);item.setPen(pen);item._ff_last_pen_color=QColor(target)
     if isinstance(widget,QTableWidget):
         if not getattr(widget,'_ff_theme_table_hook',False):
             widget._ff_theme_table_hook=True;reference=weakref.ref(widget)
@@ -161,7 +170,7 @@ class ThemeWatcher(QObject):
             if isinstance(parent,QTableWidget) and getattr(parent,'_ff_theme_table_dirty',False):_style_widget(parent,PALETTES[current_theme()])
         if event.type()==QEvent.Hide and isinstance(widget,FigureCanvasQTAgg):
             interaction=getattr(widget,'interaction',None)
-            if interaction is not None:interaction.leave(None)
+            if interaction is not None:interaction.suspend()
         if event.type() in (QEvent.Show,QEvent.Polish) and isinstance(widget,QWidget):
             reference=weakref.ref(widget)
             def style_later():

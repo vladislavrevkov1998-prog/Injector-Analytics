@@ -22,6 +22,7 @@ class PlotInteraction:
         self.pressed=set();self.drag=None;self.rectangle=None;self.original={}
         self.oblique=[];self.slope_drag=None;self.link_manager=None
         self._local_history=PlotHistory();self._slope_before=None;self._zoom_before=None;self._axis_generation=0
+        canvas.destroyed.connect(lambda *_:self.suspend())
         self.connections=[canvas.mpl_connect(name,handler) for name,handler in (
             ('draw_event',self._drawn),('motion_notify_event',self.motion),
             ('button_press_event',self.press),('button_release_event',self.release),
@@ -130,6 +131,8 @@ class PlotInteraction:
         self.background=self.canvas.copy_from_bbox(self.canvas.figure.bbox)
 
     def _blit(self):
+        from PyQt5 import sip
+        if sip.isdeleted(self.canvas) or not self.canvas.isVisible():return
         if self.background is None:
             self.canvas.draw_idle();return
         self.canvas.restore_region(self.background)
@@ -182,6 +185,21 @@ class PlotInteraction:
         self._finish_slope(cancel=True);self._hide_hover();self.pressed.clear()
         if self.drag is not None:self._cancel_drag()
         self._blit()
+    def suspend(self):
+        """Cancel a hidden/dying widget's draft without painting or Qt calls.
+
+        A Qt Hide also occurs during deletion. Restoring a chart snapshot here
+        would enqueue draw_idle on a widget whose paint device is going away.
+        Completed guides and the history remain untouched.
+        """
+        if self.slope_drag is not None:
+            point=self.slope_drag[-1]
+            if point is not None and point in self.oblique:
+                self.oblique.remove(point)
+                for artist in point.artists:artist.remove()
+        self.slope_drag=None;self._slope_before=None;self._zoom_before=None
+        self._cancel_drag();self._hide_hover();self.pressed.clear()
+        self.background=None;self.base_background=None
     def _coordinates(self,ax,x,y):
         pixel=(np.clip(x,ax.bbox.x0,ax.bbox.x1),np.clip(y,ax.bbox.y0,ax.bbox.y1))
         return ax.transData.inverted().transform(pixel)
