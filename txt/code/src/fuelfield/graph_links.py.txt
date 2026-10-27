@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import QWidget,QApplication,QMenu,QDialog,QVBoxLayout,QLabe
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.collections import PathCollection
+from .themes import colors,readable_color
 
 
 def series_data(ax,controller=None):
@@ -72,7 +73,7 @@ class LinkOverlay(QWidget):
         self.setAttribute(Qt.WA_TransparentForMouseEvents);self.setAttribute(Qt.WA_NoSystemBackground);self.show()
     def eventFilter(self,watched,event):return self.manager.eventFilter(watched,event)
     def paintEvent(self,event):
-        m=self.manager;p=QPainter(self);p.setRenderHint(QPainter.Antialiasing);p.setPen(QPen(QColor('#76509c'),1.8))
+        m=self.manager;p=QPainter(self);p.setRenderHint(QPainter.Antialiasing);accent=QColor(colors()['accent']);p.setPen(QPen(accent,1.8))
         for ax,controller in m.sources():
             point=m.anchor(ax,controller,True);p.setBrush(Qt.NoBrush);p.drawEllipse(point,6,6)
         for link in m.links:
@@ -80,21 +81,36 @@ class LinkOverlay(QWidget):
             a=m.anchor(link.first,link.first_controller,True);b=m.anchor(link.second,link.second_controller,False)
             p.drawLine(a,b);delta=a-b;length=math.hypot(delta.x(),delta.y())
             if length:
-                unit=delta/length;normal=QPointF(-unit.y(),unit.x());p.setBrush(QColor('#76509c'));p.drawPolygon(QPolygonF([b,b+unit*10+normal*4,b+unit*10-normal*4]))
+                unit=delta/length;normal=QPointF(-unit.y(),unit.x());p.setBrush(accent);p.drawPolygon(QPolygonF([b,b+unit*10+normal*4,b+unit*10-normal*4]))
             middle=(a+b)/2
             if m.hovered is link:
-                p.setBrush(QColor('white'));p.drawRoundedRect(QRectF(middle.x()-10,middle.y()-10,20,20),3,3);p.drawText(int(middle.x()-5),int(middle.y()+5),'+')
+                p.setBrush(QColor(colors()['panel']));p.drawRoundedRect(QRectF(middle.x()-10,middle.y()-10,20,20),3,3);p.drawText(int(middle.x()-5),int(middle.y()+5),'+')
         if m.pending is not None:
-            ax,c=m.pending;p.setPen(QPen(QColor('#76509c'),1.5,Qt.DashLine));p.drawLine(m.anchor(ax,c,True),m.cursor)
+            ax,c=m.pending;p.setPen(QPen(accent,1.5,Qt.DashLine));p.drawLine(m.anchor(ax,c,True),m.cursor)
 
 class GraphLinks:
     def __init__(self,owner):
         self.owner=owner;self.links=[];self.controllers=[];self.pending=None;self.hovered=None;self.cursor=QPointF();self._syncing=False
+        self._history_links={};self._history_sequence=0;self._history_generation=0
         self.owner.result_panels.setMouseTracking(True)
         self.overlay=LinkOverlay(self);QApplication.instance().installEventFilter(self.overlay)
         # Keep a QObject event filter alive with the same lifetime as the window.
 
+    def snapshot(self):
+        identities=tuple(link.history_id for link in self.links)
+        return dict(generation=self._history_generation,links=identities,signature=identities)
+    def accepts_snapshot(self,state):
+        return not sip.isdeleted(self.owner) and state['generation']==self._history_generation and all(identity in self._history_links for identity in state['links']) and all(
+            not sip.isdeleted(c.canvas) and ax in c.canvas.figure.axes
+            for identity in state['links'] for link in [self._history_links[identity]] for ax,c in ((link.first,link.first_controller),(link.second,link.second_controller)))
+    def restore_snapshot(self,state):
+        if not self.accepts_snapshot(state):return
+        self.links=[self._history_links[identity] for identity in state['links']];self.pending=None;self.hovered=None
+        for link in self.links:link.first_controller.link_manager=self;link.second_controller.link_manager=self
+        self.overlay.update()
+
     def reset(self):
+        self._history_generation+=1;self._history_links.clear()
         self.links=[];self.pending=None;self.hovered=None
         for c in self.controllers:c.link_manager=None
         self.controllers=[]
@@ -149,7 +165,9 @@ class GraphLinks:
             menu=QMenu(self.owner);action=menu.addAction('Кривая связи: Pearson r, R² и уравнение');remove=menu.addAction('Удалить link')
             chosen=menu.exec_(event.globalPos())
             if chosen is action:self.analyze(hovered)
-            elif chosen is remove:self.links.remove(hovered);self.overlay.update()
+            elif chosen is remove:
+                with self.owner.graph_history.action('Удаление связи графиков',[self]):
+                    self.links.remove(hovered);self.overlay.update()
             return True
         if self.pending is not None:
             c=self.owner.comparison.interaction
@@ -175,11 +193,14 @@ class GraphLinks:
         if getattr(ax,"_compare_frame",None) is not None and getattr(other,"_compare_frame",None) is not None and ax._compare_frame!=other._compare_frame:raise ValueError("Разные системы отсчёта X. Приведите их к общей системе.")
         if xa and xb and xa!=xb:raise ValueError('Разные единицы X: связь невозможна.')
         if max(a.x[0],b.x[0])>min(a.x[-1],b.x[-1]):raise ValueError('Нет общего диапазона X.')
+        before=self.owner.graph_history.capture([self,c,d])
         # A single partner per graph keeps point/scale synchronization unambiguous.
         self.links=[l for l in self.links if ax not in (l.first,l.second) and other not in (l.first,l.second)]
-        link=Link(ax,other,c,d,a,b);self.links.append(link);c.link_manager=self;d.link_manager=self
+        link=Link(ax,other,c,d,a,b);self._history_sequence+=1;link.history_id=self._history_sequence;self._history_links[link.history_id]=link
+        self.links.append(link);c.link_manager=self;d.link_manager=self
         self.limits(ax);self.overlay.update()
         self.owner.statusBar().showMessage('Link создан. Сравнивается первая серия каждой эпюры; X сопоставляется численно, без экстраполяции.',10000)
+        self.owner.graph_history.record('Связь графиков',before,[self,c,d])
         return link
     def partner(self,ax):
         for l in self.links:

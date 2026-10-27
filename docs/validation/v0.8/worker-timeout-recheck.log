@@ -1,0 +1,7 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_user_project_save_reopen_real_worker_and_balance (test_v021_user.TestUserQt.test_user_project_save_reopen_real_worker_and_balance) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 8.356s
+
+OK

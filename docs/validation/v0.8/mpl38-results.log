@@ -1,0 +1,36 @@
+test_actual_air_kernel_exports_exclude_films_and_preserve_flow (test_v08_results.TestAirReports.test_actual_air_kernel_exports_exclude_films_and_preserve_flow) ... ok
+test_csv_keeps_nan_mask_phases_units_provenance_and_cell_sum (test_v08_results.TestAirReports.test_csv_keeps_nan_mask_phases_units_provenance_and_cell_sum) ... ok
+test_different_z_cannot_be_paired_even_on_the_same_grid (test_v08_results.TestAirReports.test_different_z_cannot_be_paired_even_on_the_same_grid) ... ok
+test_invalid_result_grid_is_rejected (test_v08_results.TestAirReports.test_invalid_result_grid_is_rejected) ... ok
+test_large_source_registry_metadata_is_chunked_for_excel (test_v08_results.TestAirReports.test_large_source_registry_metadata_is_chunked_for_excel) ... ok
+test_reverse_air_is_exported_separately_from_positive_air (test_v08_results.TestAirReports.test_reverse_air_is_exported_separately_from_positive_air) ... ok
+test_xlsx_masks_and_composite_global_ratios_are_blank (test_v08_results.TestAirReports.test_xlsx_masks_and_composite_global_ratios_are_blank) ... ok
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_hidden_diagnostics_are_deferred_and_reveal_latest_real_timestamp (test_v08_results.TestAirResultView.test_hidden_diagnostics_are_deferred_and_reveal_latest_real_timestamp) ... /workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_fontconfig_pattern.py:88: PyparsingDeprecationWarning: 'parseString' deprecated - use 'parse_string'
+  parse = parser.parseString(pattern)
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_fontconfig_pattern.py:92: PyparsingDeprecationWarning: 'resetCache' deprecated - use 'reset_cache'
+  parser.resetCache()
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
+  ParserElement.enablePackrat()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_real_qt_selector_and_quasi_snapshot_do_not_recalculate_fuel (test_v08_results.TestAirResultView.test_real_qt_selector_and_quasi_snapshot_do_not_recalculate_fuel) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_time_updates_reuse_mesh_and_show_new_values_and_pixels (test_v08_results.TestAirResultView.test_time_updates_reuse_mesh_and_show_new_values_and_pixels) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_representable_ratio_survives_overflow_of_product (test_v08_numeric_limits.TestMixtureNumericLimits.test_representable_ratio_survives_overflow_of_product) ... ok
+test_representable_ratio_survives_underflow_of_l0_times_fuel (test_v08_numeric_limits.TestMixtureNumericLimits.test_representable_ratio_survives_underflow_of_l0_times_fuel) ... ok
+test_tiny_air_budget_uses_relative_balance_without_changing_known_inputs (test_v08_numeric_limits.TestMixtureNumericLimits.test_tiny_air_budget_uses_relative_balance_without_changing_known_inputs) ... ok
+test_tiny_and_zero_air_budgets_never_accept_larger_fixed_flows (test_v08_numeric_limits.TestMixtureNumericLimits.test_tiny_and_zero_air_budgets_never_accept_larger_fixed_flows) ... ok
+test_unrepresentable_alpha_has_explicit_mask_and_area_diagnostic (test_v08_numeric_limits.TestMixtureNumericLimits.test_unrepresentable_alpha_has_explicit_mask_and_area_diagnostic) ... ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 4.926s
+
+OK

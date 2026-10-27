@@ -1,0 +1,19 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_held_lmb_changes_actual_line_pixels_before_release (test_v08_ui.TestNativeV08Drag.test_held_lmb_changes_actual_line_pixels_before_release) ... ok
+test_thirty_moves_are_one_command_and_leave_cancels_preview (test_v08_ui.TestNativeV08Drag.test_thirty_moves_are_one_command_and_leave_cancels_preview) ... ok
+test_vertical_line_and_escape_cancel_without_undo_entry (test_v08_ui.TestNativeV08Drag.test_vertical_line_and_escape_cancel_without_undo_entry) ... ok
+test_axis_dialog_is_one_undoable_graph_action (test_v08_ui.TestV08ResultHistory.test_axis_dialog_is_one_undoable_graph_action) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_ctrl_z_and_redo_only_restore_last_graph_action (test_v08_ui.TestV08ResultHistory.test_ctrl_z_and_redo_only_restore_last_graph_action) ... This plugin does not support propagateSizeHints()
+ok
+test_theme_preserves_project_results_and_styles_later_canvas_and_export (test_v08_ui.TestV08ResultHistory.test_theme_preserves_project_results_and_styles_later_canvas_and_export) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_fresh_table_cells_are_readable_after_dark_theme_and_restore (test_v08_ui.TestV08ThemeSurfaces.test_fresh_table_cells_are_readable_after_dark_theme_and_restore) ... ok
+test_scene_labels_restore_original_color_and_keep_selection_width (test_v08_ui.TestV08ThemeSurfaces.test_scene_labels_restore_original_color_and_keep_selection_width) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 64.208s
+
+OK

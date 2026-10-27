@@ -32,6 +32,8 @@ from .characteristics import flow_to_kg_h,flow_from_kg_h
 from .editors import CatalogEditor,PresetEditor
 from .analysis import METRICS,UNITS,EQUATIONS,cell_values,matching_index
 from .plot_interaction import attach_interaction
+from .plot_history import PlotHistory
+from .themes import apply_theme,load_theme,current_theme
 from .numeric_delegate import NumericDelegate
 from .numeric_input import DecimalSpinBox
 from .coordinates import to_global,from_global,grid_angles,plot_x,period,x_label,decorate_axes,polar_ticks
@@ -45,6 +47,8 @@ from .quasi import calculate_quasi,QuasiSettings,CalculationCancelled,Calculatio
 from .quasi_gui import QuasiDialog
 from .transport_gui import TransportDialog
 from .transport_settings import TransportSettings,MODES as TRANSPORT_MODES
+from .air_gui import AirBalanceDialog
+from .air_results_gui import AirResultsDialog
 from .quasi_plotting import QuasiFieldAnimator
 from .quasi_io import write_report as write_quasi_report
 from .chamber import chamber,sync_groups,sync_anchors,WALL_BOUND_NOTICE
@@ -280,6 +284,7 @@ class MainWindow(QMainWindow):
         self._queue_preview()
 
     def _build_menu(self):
+        self.graph_history=PlotHistory(self._graph_history_changed)
         menu=self.menuBar().addMenu('Проект')
         for label,slot,shortcut in [
             ('Новый проект',self.new_project,'Ctrl+N'),
@@ -292,14 +297,47 @@ class MainWindow(QMainWindow):
         menu=self.menuBar().addMenu('Расчёт')
         a=QAction('Рассчитать сечения',self);a.setShortcut('F5');a.triggered.connect(self.run_calc);menu.addAction(a)
         edit=self.menuBar().addMenu('Правка')
-        undo=self.undo_stack.createUndoAction(self,'Отменить')
-        undo.setShortcut('Ctrl+Z');edit.addAction(undo)
-        redo=self.undo_stack.createRedoAction(self,'Повторить')
-        redo.setShortcuts([QKeySequence('Ctrl+Y'),QKeySequence('Ctrl+Shift+Z')])
-        edit.addAction(redo)
+        self.undo_action=QAction('Отменить',self);self.undo_action.setShortcut('Ctrl+Z');self.undo_action.triggered.connect(self._undo_action);edit.addAction(self.undo_action)
+        self.redo_action=QAction('Повторить',self);self.redo_action.setShortcuts([QKeySequence('Ctrl+Y'),QKeySequence('Ctrl+Shift+Z')]);self.redo_action.triggered.connect(self._redo_action);edit.addAction(self.redo_action)
+        for signal in (self.undo_stack.canUndoChanged,self.undo_stack.canRedoChanged,self.undo_stack.undoTextChanged,self.undo_stack.redoTextChanged):signal.connect(self._graph_history_changed)
+        self.tabs.currentChanged.connect(self._graph_history_changed)
         menu=self.menuBar().addMenu('Настройки')
         action=QAction('Испытания и расстановка',self);action.triggered.connect(self.open_settings);menu.addAction(action)
         self.transport_settings_action=QAction('Перенос топлива внутри ЖТ…',self);self.transport_settings_action.triggered.connect(self.open_transport_settings);menu.addAction(self.transport_settings_action)
+        self.air_settings_action=QAction('Воздух и смесеобразование…',self);self.air_settings_action.triggered.connect(self.open_air_balance);menu.addAction(self.air_settings_action)
+        appearance=menu.addMenu('Тема приложения');self.theme_actions={}
+        for key,label in (('light','Светлая'),('dark','Тёмная')):
+            action=QAction(label,self);action.setCheckable(True);action.triggered.connect(lambda checked=False,name=key:self.set_theme(name));appearance.addAction(action);self.theme_actions[key]=action
+        load_theme(QApplication.instance())
+        for key,action in self.theme_actions.items():action.setChecked(key==current_theme())
+        self._graph_history_changed()
+
+    def _graph_history_changed(self,*args):
+        graphics=self.tabs.currentIndex()==3
+        history=self.graph_history if graphics else self.undo_stack
+        undo=history.can_undo() if graphics else history.canUndo()
+        redo=history.can_redo() if graphics else history.canRedo()
+        undo_text=history.undo_text() if graphics else history.undoText()
+        redo_text=history.redo_text() if graphics else history.redoText()
+        self.undo_action.setEnabled(undo);self.redo_action.setEnabled(redo)
+        self.undo_action.setText('Отменить'+(': '+undo_text if undo_text else ''))
+        self.redo_action.setText('Повторить'+(': '+redo_text if redo_text else ''))
+        self.undo_action.setToolTip('На 04 отменяются действия графика. Для отмены исходных данных откройте 01–03.')
+
+    def _undo_action(self):
+        # Result-tab Undo never silently falls through to a physical project edit.
+        if self.tabs.currentIndex()==3:self.graph_history.undo()
+        else:self.undo_stack.undo()
+        self._graph_history_changed()
+
+    def _redo_action(self):
+        if self.tabs.currentIndex()==3:self.graph_history.redo()
+        else:self.undo_stack.redo()
+        self._graph_history_changed()
+
+    def set_theme(self,name):
+        apply_theme(QApplication.instance(),name)
+        for key,action in self.theme_actions.items():action.setChecked(key==name)
 
     def _build_geometry_tab(self):
         page=QWidget();layout=QVBoxLayout(page)
@@ -606,6 +644,49 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                             'G, A — профили; C — нормировка; S — площадь ячейки [м²].'))
         self.tabs.addTab(page,'03 · Математические модели')
 
+    def open_air_balance(self):
+        if self.thread is not None:
+            self.statusBar().showMessage('Дождитесь завершения расчёта перед изменением воздуха.',10000);return
+        existing=getattr(self,'air_dialog',None)
+        if existing is not None:existing.close();existing.deleteLater()
+        self.air_dialog=AirBalanceDialog(self.cfg,self.nozzles,self)
+        self.air_dialog.applied.connect(self.apply_air_model);self.air_dialog.show()
+
+    def apply_air_model(self,raw):
+        from .air_sources import validate_air_model,resolve_sources
+        from .air_balance import solve_balance
+        try:
+            validate_air_model(raw)
+            if raw.get('enabled'):
+                candidate=deepcopy(raw);candidate['sources']=list(resolve_sources(raw,self.cfg,self.nozzles))
+                solve_balance(candidate)
+            state=project_to_json(self.cfg,self.nozzles);state['settings']['air_model']=deepcopy(raw)
+            self.apply_project_state(state,'Баланс и источники воздуха')
+            self._close_air_results()
+            self.statusBar().showMessage('Воздух сохранён. Матрицы воздуха и α доступны для рассчитанных топливных сечений.',15000)
+        except (ValueError,TypeError) as exc:self._error(str(exc))
+
+    def open_air_results(self):
+        if not self.results:self._error('Сначала рассчитайте топливные сечения (F5).');return
+        if not self.cfg.air_model.get('enabled'):
+            self._error('Включите модель и задайте расход в «Баланс воздуха».');return
+        self._close_air_results()
+        try:
+            self.air_results_dialog=AirResultsDialog(self.cfg,self.nozzles,self.results,self.quasi_result,self)
+            self.air_results_dialog.show()
+        except (ValueError,TypeError) as exc:self._error(str(exc))
+
+    def _close_air_results(self):
+        existing=getattr(self,'air_results_dialog',None)
+        if existing is not None:existing.close();existing.deleteLater();self.air_results_dialog=None
+
+    @staticmethod
+    def _fuel_signature(data):
+        # Air is a separate postprocessor. Its edits and project version marker
+        # never invalidate a completed fuel field or change its 36 sectors.
+        return {k:({a:b for a,b in v.items() if a!='air_model' and not a.startswith(('color_','display_'))}
+                   if k=='settings' else v) for k,v in data.items() if k!='version'}
+
     def _build_results_tab(self):
         page=QWidget();lay=QVBoxLayout(page)
         actions=QHBoxLayout()
@@ -660,7 +741,10 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.metric_equation.setToolTip("ṁ — расход контрольной ячейки [кг/с]; S — площадь [м²]; ρ — плотность [кг/м³]; t — интервал [с]. Средние взвешены по площади.")
         representations.insertWidget(2,self.metric_equation)
         axis_row=QHBoxLayout();self.x_axis=QComboBox();self.x_axis.addItem('Градусы: 0…360°','angle');self.x_axis.addItem('Окружные ячейки: 0…N','cells');axis_row.addWidget(QLabel('Ось X эпюр:'));axis_row.addWidget(self.x_axis)
-        self.longitudinal_button=QPushButton('Продольный вид ЖТ');self.longitudinal_button.clicked.connect(self.open_longitudinal);axis_row.addWidget(self.longitudinal_button);axis_row.addStretch();lay.addLayout(axis_row)
+        self.longitudinal_button=QPushButton('Продольный вид ЖТ');self.longitudinal_button.clicked.connect(self.open_longitudinal);axis_row.addWidget(self.longitudinal_button)
+        self.air_balance_button=QPushButton('Баланс воздуха…');self.air_balance_button.clicked.connect(self.open_air_balance);axis_row.addWidget(self.air_balance_button)
+        self.air_results_button=QPushButton('Матрицы воздуха / α…');self.air_results_button.clicked.connect(self.open_air_results);axis_row.addWidget(self.air_results_button)
+        axis_row.addStretch();lay.addLayout(axis_row)
         chart_controls=QHBoxLayout()
         self.plot_count=_integer(6,1,140);self.plot_columns=_integer(2,1,6)
         self.graph_selection=GraphSelection(self.plot_count);self.graph_selection.changed.connect(self._view_changed)
@@ -997,10 +1081,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             return
         if state==self._edit_state:return
         before=self._edit_state
-        physical_before=deepcopy(before);physical_after=deepcopy(state)
-        for data in (physical_before,physical_after):
-            for key in list(data['settings']):
-                if key.startswith(('color_','display_')):del data['settings'][key]
+        physical_before=self._fuel_signature(before);physical_after=self._fuel_signature(state)
         self.cfg=cfg;self.nozzles=nozzles
         self.catalog_editor.refresh_density()
         self._edit_state=deepcopy(state)
@@ -1009,6 +1090,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.geometry_editor.load(self.cfg,self.nozzles)
         if physical_before!=physical_after:self._invalidate_results()
         else:
+            if before['settings'].get('air_model')!=state['settings'].get('air_model'):self._close_air_results()
             if any(before['settings'].get(k)!=state['settings'].get(k) for k in state['settings'] if k.startswith('color_')):self._invalidate_render()
             self._plot_result();self.comparison.draw()
         self._queue_preview()
@@ -1016,8 +1098,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
     def _restore_edit(self,state):
         # Undo preserves results for display-only changes, but invalidates physics edits.
         previous=deepcopy(self._edit_state)
-        physical=lambda data: {**data,'settings':{k:v for k,v in data['settings'].items()
-                                                 if not k.startswith(('color_','display_'))}}
+        physical=self._fuel_signature
         self._restoring=True
         try:
             self.cfg,self.nozzles=project_from_json(deepcopy(state))
@@ -1026,6 +1107,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         finally:self._restoring=False
         if physical(previous)!=physical(state):self._invalidate_results()
         else:
+            if previous['settings'].get('air_model')!=state['settings'].get('air_model'):self._close_air_results()
             if any(previous['settings'].get(k)!=state['settings'].get(k) for k in state['settings'] if k.startswith('color_')):self._invalidate_render()
             self._plot_result();self.comparison.draw()
         self._queue_preview()
@@ -1045,6 +1127,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                 figure_name,canvas_name=names[index];setattr(self,figure_name,canvas.figure);setattr(self,canvas_name,canvas)
 
     def _invalidate_results(self):
+        self._close_air_results()
         self.quasi_result=None;self.time_timer.stop();self.time_controls.hide()
         self._revision+=1
         self.results=[];self.smooth_fields=[]
@@ -1714,6 +1797,9 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         except Exception as exc:self._error(exc)
 
     def _reset_history(self):
+        self._close_air_results()
+        existing=getattr(self,'air_dialog',None)
+        if existing is not None:existing.close();existing.deleteLater();self.air_dialog=None
         self.quasi_result=None;self.time_timer.stop();self.time_controls.hide()
         existing=getattr(self,'quasi_dialog',None)
         if existing is not None:existing.close()

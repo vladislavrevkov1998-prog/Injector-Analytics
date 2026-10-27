@@ -1,0 +1,551 @@
+{
+  "status": "PASS",
+  "method": "Complete discovery; fresh subprocess per module",
+  "jobs": 2,
+  "expected_tests": 633,
+  "tests": 633,
+  "skipped": 0,
+  "wall_seconds": 712.8269560779991,
+  "modules": [
+    {
+      "module": "test_chamber_math",
+      "expected": 33,
+      "tests": 33,
+      "seconds": 1.545,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "51fb242ed721db8779e392b238f81b21aaa9824cf767056fe83554fe334d266e"
+    },
+    {
+      "module": "test_characteristics",
+      "expected": 12,
+      "tests": 12,
+      "seconds": 0.005,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "e2f6b9c554207d40b07bf579b69f1662c01c17dc7929358c20b48d63f4f14b7a"
+    },
+    {
+      "module": "test_coordinate_restore",
+      "expected": 10,
+      "tests": 10,
+      "seconds": 23.053,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "a2e8898f05e8ee1adceadaf67a65625d26c9e5b96aa0cc59a169798882134473"
+    },
+    {
+      "module": "test_core",
+      "expected": 15,
+      "tests": 15,
+      "seconds": 3.22,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "894751a3625da2559bb75d732fdbd9b9260b44d7946f2cec7761fcea759fb88e"
+    },
+    {
+      "module": "test_dityakin",
+      "expected": 13,
+      "tests": 13,
+      "seconds": 13.563,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "c38fc39faf043c064c07df0577b0fb9cc10f9a759423de6447813eee5dcd6222"
+    },
+    {
+      "module": "test_gui_callback",
+      "expected": 1,
+      "tests": 1,
+      "seconds": 0.158,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "8fb11853da120df2e9a84bec7d32994d88d40f118e0b6fba462042b26cfecc44"
+    },
+    {
+      "module": "test_quasi",
+      "expected": 13,
+      "tests": 13,
+      "seconds": 1.148,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "587a384c77aeb0c9826021a96ff2ff97a276217f77242575d8d152ead8c1ad74"
+    },
+    {
+      "module": "test_quasi_gui",
+      "expected": 18,
+      "tests": 18,
+      "seconds": 120.506,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "207ec3f0b9b15d185432a8fce094c9d6d3bf99c2415f12fa1de7350224d1c1b8"
+    },
+    {
+      "module": "test_quasi_io",
+      "expected": 5,
+      "tests": 5,
+      "seconds": 0.66,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "78be6d005da85ac592a43a3dc80003cdf3f50fa59b2e00c89d09d5579bd8e238"
+    },
+    {
+      "module": "test_v013",
+      "expected": 24,
+      "tests": 24,
+      "seconds": 85.722,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "e7a8a5afd94f1110ff2ccc24493514f50be3709b10ad7e8dd7754aa0c18247e5"
+    },
+    {
+      "module": "test_v02",
+      "expected": 28,
+      "tests": 28,
+      "seconds": 34.868,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "60dc7c63c16b7fce3298d971702ed0bd866c4c5ffb888b5f8a3fc4ce30fd4c53"
+    },
+    {
+      "module": "test_v021_user",
+      "expected": 13,
+      "tests": 13,
+      "seconds": 54.641,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "7ea7d5a61312c0d15ec79216638b8a9d4333669dd5a91f33cbddd5579f89ba2e"
+    },
+    {
+      "module": "test_v03",
+      "expected": 17,
+      "tests": 17,
+      "seconds": 58.589,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "d728b4c08c3df17ac1489e19aced3573ab046b6051821221814d8c3012a33f28"
+    },
+    {
+      "module": "test_v031",
+      "expected": 19,
+      "tests": 19,
+      "seconds": 33.063,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "e7385b0216d259cfa2e5d161d5f4583c5de47e55d6247fdd089d5949144340d8"
+    },
+    {
+      "module": "test_v04",
+      "expected": 19,
+      "tests": 19,
+      "seconds": 52.985,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "5518885d4ea247b6d280b3e3b738cef085a3034ad8910c1219016ca8efa5abc0"
+    },
+    {
+      "module": "test_v041",
+      "expected": 13,
+      "tests": 13,
+      "seconds": 58.303,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "702b18a092a9b367c1f9fa35f0c5bedc175f2c468b2b47a12fd5747b7d3675f1"
+    },
+    {
+      "module": "test_v04_geometry",
+      "expected": 7,
+      "tests": 7,
+      "seconds": 2.125,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "2f15cc697d231c1e509c21110ee2b2b97bd4a2956a7c42da62af7445606aae14"
+    },
+    {
+      "module": "test_v061_drag",
+      "expected": 10,
+      "tests": 10,
+      "seconds": 33.505,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "3096964a7f01b1fbfb47a45f88fbf5d40fff0b5b0cbfbc1f43ea9c94b7271af6"
+    },
+    {
+      "module": "test_v061_geometry_math",
+      "expected": 12,
+      "tests": 12,
+      "seconds": 0.236,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "daa3bfc122e68c3a70b1c503eea7352eb7ddd3c18d5cadd3d43f5c95e09faa31"
+    },
+    {
+      "module": "test_v061_import_sections",
+      "expected": 13,
+      "tests": 13,
+      "seconds": 30.81,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "7b2d1cc62d229696b10218a1e0992538f78b2fb2fb5a6ab575e10b1eb0e3cf3a"
+    },
+    {
+      "module": "test_v061_txt",
+      "expected": 3,
+      "tests": 3,
+      "seconds": 13.77,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "7ec10f7facd43baf59ea0e7b7103c6b753ea9995d5190f3886c1bcab968aaf22"
+    },
+    {
+      "module": "test_v062_constraints_io",
+      "expected": 9,
+      "tests": 9,
+      "seconds": 7.926,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "30cf401beef91493518bce44bdd3871fade0fed028095db0a8b02acaf81fbbe1"
+    },
+    {
+      "module": "test_v062_constraints_math",
+      "expected": 26,
+      "tests": 26,
+      "seconds": 1.44,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "7f5616d2ffa7084d3bd42fb8c4ccbeb911f6b6d9a5c0943ed1c7721cf0eda8d8"
+    },
+    {
+      "module": "test_v062_result_latency",
+      "expected": 9,
+      "tests": 9,
+      "seconds": 104.476,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "7190904b73db9de0a15e977e3cbfd42ed675c07d9b4731073ddd33c7d9f9003b"
+    },
+    {
+      "module": "test_v062_sections",
+      "expected": 10,
+      "tests": 10,
+      "seconds": 0.785,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "68d65fcf8ad84b84cc5e63ed8396fb987efe84fa456b5dcb67bf639dcdd805d3"
+    },
+    {
+      "module": "test_v062_sketcher",
+      "expected": 10,
+      "tests": 10,
+      "seconds": 31.862,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "25e8f29171c9d2c34d03e6bc2c18400382494661a99e056dc90050a85c33604a"
+    },
+    {
+      "module": "test_v063_constraints_math",
+      "expected": 13,
+      "tests": 13,
+      "seconds": 1.091,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "cdd30d54e560b942b5f69fad05b2863ef082fa8ce590b06a9db3dbdb6188ea98"
+    },
+    {
+      "module": "test_v063_draft_history",
+      "expected": 12,
+      "tests": 12,
+      "seconds": 30.933,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "63affc5f6d45ee5f8bf29799307b3e44f7e4d6d6a731a2807ebd00a07626b4dd"
+    },
+    {
+      "module": "test_v063_sections",
+      "expected": 6,
+      "tests": 6,
+      "seconds": 0.053,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "1884cbfedaa0d2cf72c68a48a7fa38ca73e73e94698da8c278d5eee0a4f2040a"
+    },
+    {
+      "module": "test_v063_sketcher",
+      "expected": 7,
+      "tests": 7,
+      "seconds": 17.623,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "b42ba8bcd620d99f494d528e470885a480b6cb73281c43aaffae791eecaadbca"
+    },
+    {
+      "module": "test_v064_constraints",
+      "expected": 4,
+      "tests": 4,
+      "seconds": 0.747,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "e34621b6dc5e37ba5c8fc928a866338c8c4774cc7479b12604ffbf694b5f7341"
+    },
+    {
+      "module": "test_v064_labels_groups",
+      "expected": 2,
+      "tests": 2,
+      "seconds": 5.921,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "bf72466f81766f0d068e719634e1dfb933f80233f6aadd28655c958644f16f20"
+    },
+    {
+      "module": "test_v064_sketcher_gestures",
+      "expected": 2,
+      "tests": 2,
+      "seconds": 6.98,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "323c515bc97f9014a2ef6b98e85edf94d77a11360e27b6d6cdfd0a20aae1752c"
+    },
+    {
+      "module": "test_v06_exports",
+      "expected": 4,
+      "tests": 4,
+      "seconds": 22.245,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "b45c8626cae18bee6d461ebc707b87aafed4d43edef074ece26dc7f265d0a40b"
+    },
+    {
+      "module": "test_v06_gui",
+      "expected": 21,
+      "tests": 21,
+      "seconds": 42.003,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "67f69cb6a46a2dca70f840ace910fc31a72518eb551217439aad59ef9f91d07b"
+    },
+    {
+      "module": "test_v06_migrations",
+      "expected": 20,
+      "tests": 20,
+      "seconds": 35.231,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "cac418bff5a24144205dcfc95e2bc6381a86f87ea985b97491c6bfacf48e7ef4"
+    },
+    {
+      "module": "test_v07_carrier",
+      "expected": 12,
+      "tests": 12,
+      "seconds": 0.185,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "ad2d389b50c486dc17ad1262b625228bdceb8fbbf6c4a49c9c0f097af1f1d711"
+    },
+    {
+      "module": "test_v07_contacts",
+      "expected": 23,
+      "tests": 23,
+      "seconds": 1.719,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "2ea23623dc2207ae28e9649f5521a71e3686e73251491c46ccc56fc7e7e5fab8"
+    },
+    {
+      "module": "test_v07_core",
+      "expected": 11,
+      "tests": 11,
+      "seconds": 1.134,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "1a8e7d93d9c884f08e035f9cf16861e532fd1dc5d2cd0f91875c03a808eff82d"
+    },
+    {
+      "module": "test_v07_exports",
+      "expected": 6,
+      "tests": 6,
+      "seconds": 1.308,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "56060e527632794551162904eafa4666719c9df4939afcf7490dcfd3be9bfee8"
+    },
+    {
+      "module": "test_v07_quasi",
+      "expected": 9,
+      "tests": 9,
+      "seconds": 7.837,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "f165c7e0f02ab155f965d0860c5ef662953245e984c609caf24b9e161a6883ab"
+    },
+    {
+      "module": "test_v07_transport",
+      "expected": 17,
+      "tests": 17,
+      "seconds": 18.139,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "7fde56fa10dda4db2f8934495bae462b535c94376717e427e615dfcdf0f61847"
+    },
+    {
+      "module": "test_v07_transport_settings",
+      "expected": 11,
+      "tests": 11,
+      "seconds": 34.37,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "ce1c719bb5c44aefaaa32d3990a87bf86014792b2de72211681b494ce5513aa7"
+    },
+    {
+      "module": "test_v07_ui",
+      "expected": 5,
+      "tests": 5,
+      "seconds": 160.634,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "4a60e379ab90cccfe574efe930cb0b722f002e5c5032130376a7c380c19e6cd3"
+    },
+    {
+      "module": "test_v08_air",
+      "expected": 23,
+      "tests": 23,
+      "seconds": 1.811,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "f68693e1fc7b54a8a265baad2b3cf6cee5b57699fea1ff574332076aa4676fd9"
+    },
+    {
+      "module": "test_v08_air_editor",
+      "expected": 8,
+      "tests": 8,
+      "seconds": 2.347,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "e4f9e037432bbad04aeb657159ae4504773838228395ed01e9fc3273e502d1c1"
+    },
+    {
+      "module": "test_v08_examples",
+      "expected": 2,
+      "tests": 2,
+      "seconds": 2.379,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "841244a2736290a0e83096f8caac88bdab511346c210a923f082d261654dae76"
+    },
+    {
+      "module": "test_v08_independent_math",
+      "expected": 15,
+      "tests": 15,
+      "seconds": 0.297,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "3f11883494482b25e702ed6dc151e5e0263bdc9c7b5291022327bbc8f43dc9fe"
+    },
+    {
+      "module": "test_v08_lifecycle",
+      "expected": 4,
+      "tests": 4,
+      "seconds": 45.263,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "6e941303637f071cb4aab29c187034a0f6144ef5d40fe045f1450470338509e9"
+    },
+    {
+      "module": "test_v08_migrations",
+      "expected": 10,
+      "tests": 10,
+      "seconds": 1.546,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "fdb6acafa0a8ae0abdb1a4b9fe290cb1a8fd3b0acb1ce0ffaff592eaad0646e3"
+    },
+    {
+      "module": "test_v08_numeric_limits",
+      "expected": 5,
+      "tests": 5,
+      "seconds": 0.005,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "ee61128b93414663bfc0098019c3800740393d8f0681b13b2fd74f815014dc11"
+    },
+    {
+      "module": "test_v08_results",
+      "expected": 10,
+      "tests": 10,
+      "seconds": 5.432,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "25e46bc90fa5a0351f2af584605c5f92c146f8534d14cdc80f4d85bf464ffc68"
+    },
+    {
+      "module": "test_v08_theme_restart",
+      "expected": 1,
+      "tests": 1,
+      "seconds": 9.322,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "cf069419b46808ca0e79e1311467769fd702a716b62bbae4f4a9bfa5e9eb614f"
+    },
+    {
+      "module": "test_v08_ui",
+      "expected": 8,
+      "tests": 8,
+      "seconds": 64.208,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS",
+      "log_sha256": "afe5700c18f6f7d3a38b2315b50692d6d124ea7c739a564d79ffdc0b14c9d8ca"
+    }
+  ]
+}

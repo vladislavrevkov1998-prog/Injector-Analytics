@@ -1,0 +1,53 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_blit_pixels_match_full_render_with_marker_overlay_and_clip (test_quasi_gui.TestQuasiGUI.test_blit_pixels_match_full_render_with_marker_overlay_and_clip) ... This plugin does not support propagateSizeHints()
+ok
+test_checkbox_opens_settings_toggle_preserves_config_and_four_tabs (test_quasi_gui.TestQuasiGUI.test_checkbox_opens_settings_toggle_preserves_config_and_four_tabs) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support raise()
+This plugin does not support propagateSizeHints()
+ok
+test_closed_pressure_dialog_does_not_redraw_hidden_charts (test_quasi_gui.TestQuasiGUI.test_closed_pressure_dialog_does_not_redraw_hidden_charts) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_collector_column_preserves_case_and_undo (test_quasi_gui.TestQuasiGUI.test_collector_column_preserves_case_and_undo) ... This plugin does not support propagateSizeHints()
+ok
+test_continuous_slider_movement_displays_intermediate_frames (test_quasi_gui.TestQuasiGUI.test_continuous_slider_movement_displays_intermediate_frames) ... This plugin does not support propagateSizeHints()
+ok
+test_density_change_refreshes_theoretical_curve_only_once (test_quasi_gui.TestQuasiGUI.test_density_change_refreshes_theoretical_curve_only_once) ... This plugin does not support propagateSizeHints()
+ok
+test_f5_writes_composite_main_results_and_epures_from_those_cells (test_quasi_gui.TestQuasiGUI.test_f5_writes_composite_main_results_and_epures_from_those_cells) ... This plugin does not support propagateSizeHints()
+ok
+test_hidden_nozzle_preview_is_deferred_until_tab_two (test_quasi_gui.TestQuasiGUI.test_hidden_nozzle_preview_is_deferred_until_tab_two) ... This plugin does not support propagateSizeHints()
+ok
+test_invalid_configuration_does_not_overwrite_existing_inputs (test_quasi_gui.TestQuasiGUI.test_invalid_configuration_does_not_overwrite_existing_inputs) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_mode_project_roundtrip_then_stationary_dispatch_and_undo (test_quasi_gui.TestQuasiGUI.test_mode_project_roundtrip_then_stationary_dispatch_and_undo) ... This plugin does not support propagateSizeHints()
+ok
+test_native_widget_pixels_change_and_survive_resize_and_tab_roundtrip (test_quasi_gui.TestQuasiGUI.test_native_widget_pixels_change_and_survive_resize_and_tab_roundtrip) ... This plugin does not support propagateSizeHints()
+ok
+test_portable_mode_bindings_apply_atomically_and_cancel_draft (test_quasi_gui.TestQuasiGUI.test_portable_mode_bindings_apply_atomically_and_cancel_draft) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_pressure_charts_are_right_of_table_live_and_one_per_collector (test_quasi_gui.TestQuasiGUI.test_pressure_charts_are_right_of_table_live_and_one_per_collector) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_pressure_charts_paste_once_gaps_and_physical_pressure_units (test_quasi_gui.TestQuasiGUI.test_pressure_charts_paste_once_gaps_and_physical_pressure_units) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_quasi_comparison_project_honors_mode (test_quasi_gui.TestQuasiGUI.test_quasi_comparison_project_honors_mode) ... This plugin does not support propagateSizeHints()
+ok
+test_settings_instruction_and_xlsx_mapping_controls (test_quasi_gui.TestQuasiGUI.test_settings_instruction_and_xlsx_mapping_controls) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_slider_updates_field_without_rebuilding_matrix_or_full_canvas (test_quasi_gui.TestQuasiGUI.test_slider_updates_field_without_rebuilding_matrix_or_full_canvas) ... This plugin does not support propagateSizeHints()
+ok
+test_unchanged_control_focus_does_not_scan_nozzle_table (test_quasi_gui.TestQuasiGUI.test_unchanged_control_focus_does_not_scan_nozzle_table) ... This plugin does not support propagateSizeHints()
+ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 120.506s
+
+OK

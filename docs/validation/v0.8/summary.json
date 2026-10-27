@@ -1,0 +1,60 @@
+{
+  "runtime_source_commit": "e8c56546b1640a90df2fe04d9ad4ad65daa7310c",
+  "tests_source_commit": "6a67b9495b5feb412b3c288d301fa822838ba5fe",
+  "baseline_source_commit": "427dbfedb187065a4835c8c7f88d3fb4ce30ecad",
+  "baseline": {
+    "tests": 547,
+    "seconds": 545.79,
+    "status": "PASS",
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "log_sha256": "85f61bdb395f3a2ea224eae53fef256aaefd3050aff95edd5288c558ec1d49ca"
+  },
+  "final": {
+    "tests": 633,
+    "seconds": 712.8269560779991,
+    "status": "PASS",
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "method": "Complete discovery; fresh subprocess per module",
+    "jobs": 2,
+    "module_count": 54
+  },
+  "backend": "QtAgg",
+  "qt_platform": "offscreen",
+  "command": "QT_QPA_PLATFORM=offscreen XDG_CACHE_HOME=/workspace/artifacts/v08/cache MPLCONFIGDIR=/workspace/artifacts/v08/mpl-cache OPENBLAS_NUM_THREADS=1 python -B tools/run_test_shards.py --jobs 2 --out /workspace/artifacts/v08/final-shards",
+  "prior_monolithic_633": {
+    "tests": 633,
+    "seconds": 1334.727,
+    "status": "FAIL",
+    "failures": 1,
+    "reason": "20-second worker wait; isolated retry PASS in 8.356s; bounded wait raised to 120s"
+  },
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+    "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+    "numpy": "2.5.4",
+    "scipy": "1.16.3",
+    "matplotlib": "3.11.2",
+    "qt": "5.15.14",
+    "pyqt": "5.15.11"
+  },
+  "windows_spyder": "NOT RUN",
+  "physical_jet_calibration": "NOT RUN",
+  "old_drag_defect": "NOT REPRODUCED on tested Linux configurations",
+  "final_alternate_matplotlib38": {
+    "tests": 25,
+    "seconds": 45.069,
+    "status": "PASS",
+    "numpy": "1.26.4",
+    "matplotlib": "3.8.4"
+  },
+  "final_alternate_python313": {
+    "tests": 15,
+    "seconds": 104.403,
+    "status": "PASS",
+    "python": "3.13.5"
+  }
+}
