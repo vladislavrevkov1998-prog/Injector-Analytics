@@ -81,11 +81,11 @@ class AirBalanceDialog(QDialog):
         self.distribution.addItem('По площади ячеек: равномерный поток','uniform')
         self.distribution.addItem('Локальные направленные ядра','directed')
         self.distribution.setCurrentIndex(max(0,self.distribution.findData(self.raw.get('distribution','directed'))))
-        self.interaction=spin(self.raw.get('interaction_strength',0.),1.,4)
+        self.interaction=spin(self.raw.get('interaction_strength',0.),10.,4)
         self.area_confirm=QCheckBox('Принимаю гипотезу сходных условий для F / CdF')
         self.area_confirm.setChecked(self.raw.get('area_hypothesis_confirmed',False))
         self.area_fraction=spin(self.raw.get('area_allocation_fraction',1.),1.,4)
-        for w in (self.distribution,QLabel('Взаимодействие 0…1:'),self.interaction,self.area_confirm):algorithms.addWidget(w)
+        for w in (self.distribution,QLabel('Взаимодействие 0…10:'),self.interaction,self.area_confirm):algorithms.addWidget(w)
         lay.addLayout(algorithms)
         note=QLabel('Методы: fixed — заданный G; fraction — доля от G КС; area / effective_area — остаток по F / CdF; unknown — неизвестен. '
             'Пустое поле = неизвестно. dz, dr, dθ задают направление, не скорость. θ — физический +X/против ЧС. '

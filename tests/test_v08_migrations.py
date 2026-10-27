@@ -170,6 +170,24 @@ class TestAirDraftPersistenceUI(unittest.TestCase):
             dialog.deleteLater()
             self.app.processEvents()
 
+    def test_noop_editor_apply_preserves_full_valid_interaction_range(self):
+        from fuelfield.air_gui import AirBalanceDialog
+        for strength in (0., 2.5, 10.):
+            with self.subTest(strength=strength):
+                cfg = Settings(air_model=dict(enabled=True, total_kg_s=1.,
+                                             interaction_strength=strength, sources=[]))
+                dialog = AirBalanceDialog(cfg, default_nozzles(cfg))
+                try:
+                    received = []
+                    dialog.applied.connect(received.append)
+                    dialog.apply()
+                    self.assertEqual(len(received), 1)
+                    self.assertEqual(received[0]['interaction_strength'], strength)
+                finally:
+                    dialog.close()
+                    dialog.deleteLater()
+                    self.app.processEvents()
+
     def test_noop_editor_apply_preserves_values_below_display_precision(self):
         from fuelfield.air_gui import AirBalanceDialog
         raw = dict(schema_version=1, enabled=True, total_kg_s=1e-13, l0=1e-13,
