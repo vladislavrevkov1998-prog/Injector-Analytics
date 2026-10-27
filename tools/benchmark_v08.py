@@ -69,8 +69,10 @@ def main():
             for key,widget in [('main',win),('balance',editor),('alpha',result)]:
                 widget.grab().save(str(args.screens/f'{key}-{name}.png'))
             win.plots.setCurrentIndex(3);app.processEvents();win.grab().save(str(args.screens/f'epures-{name}.png'))
-            win.plots.setCurrentIndex(0);win.tabs.setCurrentIndex(0);app.processEvents()
-            win.grab().save(str(args.screens/f'sketcher-{name}.png'));win.tabs.setCurrentIndex(3)
+            win.plots.setCurrentIndex(0);win.tabs.setCurrentIndex(0)
+            previous_geometry_page=win.geometry_pages.currentIndex();win.geometry_pages.setCurrentIndex(1);app.processEvents()
+            win.grab().save(str(args.screens/f'sketcher-{name}.png'))
+            win.geometry_pages.setCurrentIndex(previous_geometry_page);win.tabs.setCurrentIndex(3)
     if project_to_json(win.cfg,win.nozzles)!=snapshot or digest(win.results)!=before:
         raise AssertionError('UI modified physical inputs or completed fuel matrices')
     editor.close();result.close()
