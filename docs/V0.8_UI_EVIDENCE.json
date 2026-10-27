@@ -1,0 +1,404 @@
+{
+  "py312-before": {
+    "environment": {
+      "python": "3.12.14",
+      "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+      "matplotlib": "3.11.2",
+      "numpy": "2.5.4",
+      "scipy": "1.16.3",
+      "pyqt": "5.15.11",
+      "qt": "5.15.14",
+      "backend": "qtagg",
+      "qpa": "offscreen",
+      "scale": "1",
+      "source_root": "/workspace/artifacts/v08/baseline-source"
+    },
+    "checks": {
+      "U01": {
+        "pass_check": false,
+        "points_before": 1,
+        "points_after": 1,
+        "result_count_after": 0,
+        "same_result_identity_and_values": false,
+        "same_project": false,
+        "source_index_before": 1,
+        "source_index_after": 0,
+        "f5_and_check_s": 14.051978849000022,
+        "device_pixel_ratio": 1
+      },
+      "U02": {
+        "pass_check": true,
+        "slopes": [
+          2.4987978750128113,
+          -0.747402431228714
+        ],
+        "green_pixels_at_predicted_line": [
+          23,
+          39
+        ],
+        "changed_rgba": [
+          5915,
+          10246
+        ],
+        "draw_count_during_moves": 0,
+        "created_before_release": true,
+        "device_pixel_ratio": 1,
+        "events": [
+          {
+            "type": "button_press_event",
+            "x": 214,
+            "y": 136,
+            "button": "1"
+          },
+          {
+            "type": "motion_notify_event",
+            "x": 400,
+            "y": 290,
+            "button": "1"
+          },
+          {
+            "type": "motion_notify_event",
+            "x": 400,
+            "y": 90,
+            "button": "1"
+          },
+          {
+            "type": "button_release_event",
+            "x": 400,
+            "y": 90,
+            "button": "1"
+          }
+        ]
+      }
+    }
+  },
+  "py312-after": {
+    "environment": {
+      "python": "3.12.14",
+      "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+      "matplotlib": "3.11.2",
+      "numpy": "2.5.4",
+      "scipy": "1.16.3",
+      "pyqt": "5.15.11",
+      "qt": "5.15.14",
+      "backend": "qtagg",
+      "qpa": "offscreen",
+      "scale": "1",
+      "source_root": "/workspace/Injector-Analytics"
+    },
+    "checks": {
+      "U01": {
+        "pass_check": true,
+        "points_before": 1,
+        "points_after": 0,
+        "result_count_after": 1,
+        "same_result_identity_and_values": true,
+        "same_project": true,
+        "source_index_before": 1,
+        "source_index_after": 1,
+        "f5_and_check_s": 11.96981497500002,
+        "device_pixel_ratio": 1
+      },
+      "U02": {
+        "pass_check": true,
+        "slopes": [
+          2.4987978750128113,
+          -0.747402431228714
+        ],
+        "green_pixels_at_predicted_line": [
+          23,
+          41
+        ],
+        "changed_rgba": [
+          5915,
+          10245
+        ],
+        "draw_count_during_moves": 0,
+        "created_before_release": true,
+        "device_pixel_ratio": 1,
+        "events": [
+          {
+            "type": "button_press_event",
+            "x": 214,
+            "y": 136,
+            "button": "1"
+          },
+          {
+            "type": "motion_notify_event",
+            "x": 400,
+            "y": 290,
+            "button": "1"
+          },
+          {
+            "type": "motion_notify_event",
+            "x": 400,
+            "y": 90,
+            "button": "1"
+          },
+          {
+            "type": "button_release_event",
+            "x": 400,
+            "y": 90,
+            "button": "1"
+          }
+        ]
+      }
+    }
+  },
+  "py313-dpi125": {
+    "environment": {
+      "python": "3.13.5",
+      "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+      "matplotlib": "3.11.2",
+      "numpy": "2.5.4",
+      "scipy": "1.16.3",
+      "pyqt": "5.15.11",
+      "qt": "5.15.14",
+      "backend": "qtagg",
+      "qpa": "offscreen",
+      "scale": "1.25",
+      "source_root": "/workspace/Injector-Analytics"
+    },
+    "checks": {
+      "U01": {
+        "pass_check": true,
+        "points_before": 1,
+        "points_after": 0,
+        "result_count_after": 1,
+        "same_result_identity_and_values": true,
+        "same_project": true,
+        "source_index_before": 1,
+        "source_index_after": 1,
+        "f5_and_check_s": 4.338290741999998,
+        "device_pixel_ratio": 1.25
+      },
+      "U02": {
+        "pass_check": true,
+        "slopes": [
+          2.4915708244935684,
+          -0.7497852927711673
+        ],
+        "green_pixels_at_predicted_line": [
+          26,
+          40
+        ],
+        "changed_rgba": [
+          8146,
+          14517
+        ],
+        "draw_count_during_moves": 0,
+        "created_before_release": true,
+        "device_pixel_ratio": 1.25,
+        "events": [
+          {
+            "type": "button_press_event",
+            "x": 267,
+            "y": 170,
+            "button": "1"
+          },
+          {
+            "type": "motion_notify_event",
+            "x": 500,
+            "y": 362,
+            "button": "1"
+          },
+          {
+            "type": "motion_notify_event",
+            "x": 500,
+            "y": 112,
+            "button": "1"
+          },
+          {
+            "type": "button_release_event",
+            "x": 500,
+            "y": 112,
+            "button": "1"
+          }
+        ]
+      }
+    }
+  },
+  "py313-dpi200": {
+    "environment": {
+      "python": "3.13.5",
+      "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+      "matplotlib": "3.11.2",
+      "numpy": "2.5.4",
+      "scipy": "1.16.3",
+      "pyqt": "5.15.11",
+      "qt": "5.15.14",
+      "backend": "qtagg",
+      "qpa": "offscreen",
+      "scale": "2",
+      "source_root": "/workspace/Injector-Analytics"
+    },
+    "checks": {
+      "U02": {
+        "pass_check": true,
+        "slopes": [
+          2.4987978750128113,
+          -0.747402431228714
+        ],
+        "green_pixels_at_predicted_line": [
+          41,
+          68
+        ],
+        "changed_rgba": [
+          17725,
+          31393
+        ],
+        "draw_count_during_moves": 0,
+        "created_before_release": true,
+        "device_pixel_ratio": 2.0,
+        "events": [
+          {
+            "type": "button_press_event",
+            "x": 428,
+            "y": 272,
+            "button": "1"
+          },
+          {
+            "type": "motion_notify_event",
+            "x": 800,
+            "y": 580,
+            "button": "1"
+          },
+          {
+            "type": "motion_notify_event",
+            "x": 800,
+            "y": 180,
+            "button": "1"
+          },
+          {
+            "type": "button_release_event",
+            "x": 800,
+            "y": 180,
+            "button": "1"
+          }
+        ]
+      }
+    }
+  },
+  "mpl38-before": {
+    "environment": {
+      "python": "3.12.14",
+      "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+      "matplotlib": "3.8.4",
+      "numpy": "1.26.4",
+      "scipy": "1.16.3",
+      "pyqt": "5.15.11",
+      "qt": "5.15.14",
+      "backend": "QtAgg",
+      "qpa": "offscreen",
+      "scale": "1",
+      "source_root": "/workspace/artifacts/v08/baseline-source"
+    },
+    "checks": {
+      "U02": {
+        "pass_check": true,
+        "slopes": [
+          2.4987978750128113,
+          -0.747402431228714
+        ],
+        "green_pixels_at_predicted_line": [
+          23,
+          35
+        ],
+        "changed_rgba": [
+          5642,
+          9928
+        ],
+        "draw_count_during_moves": 0,
+        "created_before_release": true,
+        "device_pixel_ratio": 1,
+        "events": [
+          {
+            "type": "button_press_event",
+            "x": 214,
+            "y": 136,
+            "button": "1"
+          },
+          {
+            "type": "motion_notify_event",
+            "x": 400,
+            "y": 290,
+            "button": "1"
+          },
+          {
+            "type": "motion_notify_event",
+            "x": 400,
+            "y": 90,
+            "button": "1"
+          },
+          {
+            "type": "button_release_event",
+            "x": 400,
+            "y": 90,
+            "button": "1"
+          }
+        ]
+      }
+    }
+  },
+  "mpl38-after": {
+    "environment": {
+      "python": "3.12.14",
+      "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+      "matplotlib": "3.8.4",
+      "numpy": "1.26.4",
+      "scipy": "1.16.3",
+      "pyqt": "5.15.11",
+      "qt": "5.15.14",
+      "backend": "QtAgg",
+      "qpa": "offscreen",
+      "scale": "1",
+      "source_root": "/workspace/Injector-Analytics"
+    },
+    "checks": {
+      "U02": {
+        "pass_check": true,
+        "slopes": [
+          2.4987978750128113,
+          -0.747402431228714
+        ],
+        "green_pixels_at_predicted_line": [
+          23,
+          43
+        ],
+        "changed_rgba": [
+          5642,
+          9927
+        ],
+        "draw_count_during_moves": 0,
+        "created_before_release": true,
+        "device_pixel_ratio": 1,
+        "events": [
+          {
+            "type": "button_press_event",
+            "x": 214,
+            "y": 136,
+            "button": "1"
+          },
+          {
+            "type": "motion_notify_event",
+            "x": 400,
+            "y": 290,
+            "button": "1"
+          },
+          {
+            "type": "motion_notify_event",
+            "x": 400,
+            "y": 90,
+            "button": "1"
+          },
+          {
+            "type": "button_release_event",
+            "x": 400,
+            "y": 90,
+            "button": "1"
+          }
+        ]
+      }
+    }
+  }
+}
