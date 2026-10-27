@@ -1,0 +1,25 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_epure_radius_count_and_columns_do_not_evict_other_views (test_v062_result_latency.TestV062ResultNavigation.test_epure_radius_count_and_columns_do_not_evict_other_views) ... This plugin does not support propagateSizeHints()
+ok
+test_hidden_cached_canvases_do_not_render_when_split_resizes_views (test_v062_result_latency.TestV062ResultNavigation.test_hidden_cached_canvases_do_not_render_when_split_resizes_views) ... This plugin does not support propagateSizeHints()
+ok
+test_hidden_comparison_defers_its_navigation_render_until_opened (test_v062_result_latency.TestV062ResultNavigation.test_hidden_comparison_defers_its_navigation_render_until_opened) ... This plugin does not support propagateSizeHints()
+ok
+test_lru_eviction_detaches_links_and_old_axes_dialog_safely (test_v062_result_latency.TestV062ResultNavigation.test_lru_eviction_detaches_links_and_old_axes_dialog_safely) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_metric_changes_do_not_rebuild_true_flux_field_or_polar_profiles (test_v062_result_latency.TestV062ResultNavigation.test_metric_changes_do_not_rebuild_true_flux_field_or_polar_profiles) ... This plugin does not support propagateSizeHints()
+ok
+test_png_export_renders_hidden_cached_views_without_mutating_inputs (test_v062_result_latency.TestV062ResultNavigation.test_png_export_renders_hidden_cached_views_without_mutating_inputs) ... This plugin does not support propagateSizeHints()
+ok
+test_render_cache_limits_are_bounded_and_keep_current_view_valid (test_v062_result_latency.TestV062ResultNavigation.test_render_cache_limits_are_bounded_and_keep_current_view_valid) ... This plugin does not support propagateSizeHints()
+ok
+test_warm_split_z_preserves_cached_axes_points_zoom_and_correct_data (test_v062_result_latency.TestV062ResultNavigation.test_warm_split_z_preserves_cached_axes_points_zoom_and_correct_data) ... This plugin does not support propagateSizeHints()
+ok
+test_warm_views_and_returning_from_other_tabs_reuse_figures (test_v062_result_latency.TestV062ResultNavigation.test_warm_views_and_returning_from_other_tabs_reuse_figures) ... This plugin does not support propagateSizeHints()
+ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 104.476s
+
+OK

@@ -214,7 +214,10 @@ class TestUserQt(unittest.TestCase):
             with patch.object(QFileDialog,'getOpenFileName',return_value=(str(path),'')):self.w.open_project()
         errors=[]
         with patch.object(self.w,'_error',side_effect=errors.append):
-            self.w.run_calc();deadline=time.monotonic()+20
+            # This checks completion and physical output, not a 20 s SLA.
+            # Large Qt suites and slower CI hosts can dispatch completion late;
+            # retain a bounded wait consistent with the other native workers.
+            self.w.run_calc();deadline=time.monotonic()+120
             while self.w.thread is not None and time.monotonic()<deadline:
                 self.app.processEvents();QTest.qWait(10)
         self.assertIsNone(self.w.thread);self.assertEqual(errors,[]);self.assertEqual(len(self.w.results),4)

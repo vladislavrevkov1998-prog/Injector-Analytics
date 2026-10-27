@@ -1,0 +1,7 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_table_rebuilds_and_deletion_keep_theme_out_of_edit_signals (test_v08_lifecycle.TestCanvasLifecycle.test_table_rebuilds_and_deletion_keep_theme_out_of_edit_signals) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 5.946s
+
+OK

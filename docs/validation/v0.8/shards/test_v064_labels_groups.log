@@ -1,0 +1,11 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_labels_follow_each_curve_endpoint_without_claiming_mouse_events (test_v064_labels_groups.TestLabelsAndGroups.test_labels_follow_each_curve_endpoint_without_claiming_mouse_events) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_single_numeric_angle_remains_text_and_accepts_semicolon (test_v064_labels_groups.TestLabelsAndGroups.test_single_numeric_angle_remains_text_and_accepts_semicolon) ... This plugin does not support propagateSizeHints()
+ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 5.921s
+
+OK

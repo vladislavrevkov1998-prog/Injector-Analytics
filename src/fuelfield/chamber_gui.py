@@ -131,14 +131,14 @@ class Sketch(QGraphicsView):
     def drawBackground(self,painter,rect):
         super().drawBackground(painter,rect)
         if not self.editor.grid.isChecked():return
-        step=self.grid_step();pen=QPen(QColor('#e3e8f1'),0);painter.setPen(pen)
+        step=self.grid_step();pen=QPen(self.palette().mid().color(),0);painter.setPen(pen)
         for axis in (0,1):
             low,high=(rect.left(),rect.right()) if axis==0 else (rect.top(),rect.bottom())
             for i in range(math.ceil(low/step),math.floor(high/step)+1):
                 v=i*step
                 painter.drawLine(QPointF(v,rect.top()),QPointF(v,rect.bottom())) if axis==0 else painter.drawLine(QPointF(rect.left(),v),QPointF(rect.right(),v))
     def drawForeground(self,painter,rect):
-        painter.save();painter.resetTransform();painter.setPen(QColor('#64748b'));width=self.viewport().width();height=self.viewport().height()
+        painter.save();painter.resetTransform();painter.setPen(self.palette().text().color());width=self.viewport().width();height=self.viewport().height()
         if self.editor.grid.isChecked():
             step=self.grid_step();visible=self.mapToScene(self.viewport().rect()).boundingRect()
             for i in range(math.ceil(visible.left()/step),math.floor(visible.right()/step)+1):
@@ -147,12 +147,13 @@ class Sketch(QGraphicsView):
             for i in range(math.ceil(visible.top()/step),math.floor(visible.bottom()/step)+1):
                 y=self.mapFromScene(QPointF(0,i*step)).y()
                 if 45<y<height-45:painter.drawText(QPointF(6,y-3),format(-i*step,'.6g'))
-        painter.fillRect(QRectF(0,0,width,26),QColor(250,251,254,235));painter.setPen(QColor('#334155'))
+        hud=self.palette().base().color();hud.setAlpha(235)
+        painter.fillRect(QRectF(0,0,width,26),hud);painter.setPen(self.palette().text().color())
         painter.drawText(QPointF(9,18),'X/Y [мм] · θ против ЧС' if self.editor.angular.isChecked() else 'z → [мм]     R ↑ [мм]')
         if self.editor.selected:
             text=self.editor.selected;painter.drawText(QPointF(max(170,width-painter.fontMetrics().horizontalAdvance(text)-12),18),text)
         if self.pointer is not None:
-            p=self.pointer;painter.fillRect(QRectF(0,height-23,width,23),QColor(250,251,254,235))
+            p=self.pointer;painter.fillRect(QRectF(0,height-23,width,23),hud)
             painter.drawText(QPointF(9,height-7),f'{"X" if self.editor.angular.isChecked() else "z"} = {p.x():.3f}    {"Y" if self.editor.angular.isChecked() else "R"} = {-p.y():.3f} мм')
         if self.editor._first is not None and self.pointer is not None:
             a=self.editor._first;painter.setPen(QPen(QColor('#8a73b3'),1,Qt.DashLine));painter.drawLine(self.mapFromScene(QPointF(a[0],-a[1])),self.mapFromScene(self.pointer))

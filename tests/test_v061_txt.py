@@ -68,7 +68,22 @@ browser.anchorClicked.emit(QUrl('V0.7_LITERATURE_REVIEW.md'))
 assert 'Дитякин' in browser.toPlainText()
 browser.anchorClicked.emit(QUrl('V0.7_GUIDE.md'))
 assert 'Как включить и получить результат' in browser.toPlainText()
-w.transport_dialog.guide_dialog.close();w.transport_dialog.close();w.close()
+w.transport_dialog.guide_dialog.close();w.transport_dialog.close()
+# The restored distribution has no docs/ or repository. Air help and its linked
+# mathematical model must therefore be read from the actual embedded payload.
+w.open_air_balance();w.air_dialog.show_help()
+assert not w.air_dialog.enabled.isChecked()
+assert w.air_dialog.table.rowCount()==0
+browser=w.air_dialog.guide_dialog.findChild(QTextBrowser)
+assert len(browser.toPlainText())>2000
+assert 'L0' in browser.toPlainText()
+assert 'V0.8_IMPLEMENTED_MODEL.md' in browser.toPlainText()
+browser.anchorClicked.emit(QUrl('V0.8_IMPLEMENTED_MODEL.md'))
+assert len(browser.toPlainText())>2000
+assert 'Инструкция отсутствует' not in browser.toPlainText()
+browser.anchorClicked.emit(QUrl('V0.8_GUIDE.md'))
+assert 'Баланс воздуха' in browser.toPlainText()
+w.air_dialog.guide_dialog.close();w.air_dialog.close();w.close()
 print('PORTABLE_OK')
 ''' % (GUIDES,)
             result = subprocess.run([sys.executable, '-B', '-c', code], cwd=destination, capture_output=True, text=True, timeout=60)

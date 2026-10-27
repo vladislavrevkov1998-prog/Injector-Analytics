@@ -31,11 +31,14 @@ def open_axes_settings(canvas,parent=None):
             if any(0<values[prefix+kind]<span/500 for kind in ('major','minor')):error.setText('Не более 500 делений на ось: увеличьте шаг.');return
         ax=axes[selector.currentIndex()]
         if sip.isdeleted(canvas) or ax not in canvas.figure.axes:error.setText('Данные графика изменились. Откройте настройки осей заново.');return
+        controller=getattr(canvas,'interaction',None)
+        before=controller.history().capture(controller.history_controllers()) if controller is not None else None
         ax.set_xlim(values['xmin'],values['xmax']);ax.set_ylim(values['ymin'],values['ymax'])
         for axis,prefix in ((ax.xaxis,'x'),(ax.yaxis,'y')):
             major,minor=values[prefix+'major'],values[prefix+'minor']
             axis.set_major_locator(MultipleLocator(major) if major else AutoLocator());axis.set_minor_locator(MultipleLocator(minor) if minor else NullLocator())
         ax.grid(True,which='major',alpha=.25);ax.grid(True,which='minor',alpha=.12);canvas.draw_idle();error.setText('Применено')
+        if controller is not None:controller.history().record('Настройка осей графика',before,controller.history_controllers())
     selector.currentIndexChanged.connect(fill);fill()
     buttons=QDialogButtonBox(QDialogButtonBox.Apply|QDialogButtonBox.Close);buttons.button(QDialogButtonBox.Apply).clicked.connect(apply);buttons.rejected.connect(dialog.close);layout.addWidget(buttons)
     dialog.widgets=widgets;dialog.selector=selector;dialog.apply_settings=apply;dialog.setAttribute(Qt.WA_DeleteOnClose);dialog.show();return dialog

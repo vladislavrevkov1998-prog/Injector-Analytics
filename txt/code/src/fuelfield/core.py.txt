@@ -115,6 +115,9 @@ class Settings:
     quasi_settings: dict = field(default_factory=dict)
     geometry: dict = field(default_factory=dict)
     fuel_transport: dict = field(default_factory=lambda:dict(schema_version=1,mode='legacy'))
+    # Opt-in, independently versioned air data. Loading an older project never
+    # invents sources or changes the selected fuel model.
+    air_model: dict = field(default_factory=lambda:dict(schema_version=1,enabled=False))
 
     _extra: dict = field(default_factory=dict,repr=False)
     _project_extra: dict = field(default_factory=dict,repr=False)
@@ -123,11 +126,16 @@ class Settings:
         from copy import deepcopy
         self.nozzle_presets=deepcopy(self.nozzle_presets)
         self.fuel_transport=deepcopy(self.fuel_transport)
+        self.air_model=deepcopy(self.air_model)
         for params in self.nozzle_presets.values():params.setdefault("z_tip_mm",0.)
 
     def validate(self):
         from .transport_settings import TransportSettings
+        from .air_sources import validate_air_model
         TransportSettings.from_dict(self.fuel_transport).validate()
+        # Validation must not replace the raw record: unknown nested fields and
+        # absence of optional values belong to the saved operator input.
+        validate_air_model(self.air_model)
         if not np.isfinite(self.theta_zero_deg) or self.theta_direction not in (-1,1) or isinstance(self.theta_direction,bool):raise ValueError('Нужны конечный угол нуля и направление +1/-1.')
         if self.display_x_axis not in ('angle','cells'):raise ValueError('Ось X: градусы или окружные ячейки.')
         if not isinstance(self.quasistationary,bool) or not isinstance(self.quasi_settings,dict):
@@ -506,7 +514,9 @@ def _json_record(obj):
 def project_to_json(settings: Settings, nozzles: list[Nozzle]):
     from .transport_settings import TransportSettings
     confined=TransportSettings.from_dict(settings.fuel_transport).enabled
-    return {**deepcopy(settings._project_extra),'format':'fuel-field-pilot-v1','version':'0.7.0' if confined else '0.6.0','schema_version':3 if confined else 2,
+    air_enabled=isinstance(settings.air_model,dict) and settings.air_model.get('enabled') is True
+    version='0.8.4' if air_enabled else ('0.7.0' if confined else '0.6.0')
+    return {**deepcopy(settings._project_extra),'format':'fuel-field-pilot-v1','version':version,'schema_version':3 if confined else 2,
             'settings':_json_record(settings),
             'nozzles':[{**_json_record(n),'r_nozzle_mm':n.r_nozzle_mm} for n in nozzles]}
 

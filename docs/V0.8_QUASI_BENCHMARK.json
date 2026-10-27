@@ -1,0 +1,91 @@
+{
+  "baseline": {
+    "version": "0.7.0",
+    "python": "3.12.14",
+    "platform": "Linux",
+    "project": "examples/demo_project_user_field.json",
+    "mode": "synthetic 140 steps, two collectors; real user geometry/flows/sectors/types unchanged; portable demonstration bindings",
+    "method": "Linux offscreen; no concurrent tests; 5 warmups excluded; direct callback with Qt painting + QTest slider keys/press/release and Qt held-button mouse moves",
+    "engine_ms": 8200.712,
+    "worker_and_initial_render_ms": 9237.43,
+    "qt_heartbeat_gap_ms": {
+      "samples": 610,
+      "median_ms": 10.404,
+      "p95_ms": 13.301,
+      "max_ms": 733.339
+    },
+    "frame_callback_ms": {
+      "samples": 140,
+      "median_ms": 35.659,
+      "p95_ms": 50.062,
+      "max_ms": 142.291
+    },
+    "real_qt_slider_ms": {
+      "samples": 60,
+      "median_ms": 36.843,
+      "p95_ms": 57.233,
+      "max_ms": 64.666
+    },
+    "full_canvas_draws_during_140_callback_frames": 0,
+    "mouse_drag": {
+      "movements": 100,
+      "displayed_updates": 16,
+      "elapsed_ms": 574.086,
+      "last_step": 139
+    },
+    "cancel_ms": 127.546,
+    "preview_cache_mb": 27.991,
+    "peak_process_rss_mb": 288.863,
+    "maximum_instantaneous_balance_error": 1.7161081670761277e-13,
+    "independent_v041_column_max_absolute_difference_kg_s": 2.3071822230491534e-16,
+    "independent_v041_detailed_field_max_absolute_difference": 5.684341886080802e-14,
+    "accumulated_matrices_unchanged_by_slider": true,
+    "project_unchanged_by_slider": true,
+    "user_source_file_unchanged": true
+  },
+  "current": {
+    "version": "0.8.4",
+    "python": "3.12.14",
+    "platform": "Linux",
+    "project": "examples/demo_project_user_field.json",
+    "mode": "synthetic 140 steps, two collectors; real user geometry/flows/sectors/types unchanged; portable demonstration bindings",
+    "method": "Linux offscreen; no concurrent tests; 5 warmups excluded; direct callback with Qt painting + QTest slider keys/press/release and Qt held-button mouse moves",
+    "engine_ms": 7785.951,
+    "worker_and_initial_render_ms": 8691.602,
+    "qt_heartbeat_gap_ms": {
+      "samples": 597,
+      "median_ms": 10.363,
+      "p95_ms": 12.43,
+      "max_ms": 155.659
+    },
+    "frame_callback_ms": {
+      "samples": 140,
+      "median_ms": 29.563,
+      "p95_ms": 46.022,
+      "max_ms": 606.995
+    },
+    "real_qt_slider_ms": {
+      "samples": 60,
+      "median_ms": 38.0,
+      "p95_ms": 45.163,
+      "max_ms": 56.315
+    },
+    "full_canvas_draws_during_140_callback_frames": 0,
+    "mouse_drag": {
+      "movements": 100,
+      "displayed_updates": 21,
+      "elapsed_ms": 824.766,
+      "last_step": 139
+    },
+    "cancel_ms": 340.606,
+    "preview_cache_mb": 27.991,
+    "peak_process_rss_mb": 295.621,
+    "maximum_instantaneous_balance_error": 1.7161081670761277e-13,
+    "independent_v041_column_max_absolute_difference_kg_s": 2.3071822230491534e-16,
+    "independent_v041_detailed_field_max_absolute_difference": 5.684341886080802e-14,
+    "accumulated_matrices_unchanged_by_slider": true,
+    "project_unchanged_by_slider": true,
+    "user_source_file_unchanged": true
+  },
+  "comparison": "Same unchanged user field, synthetic two-collector140-step protocol; separate runs without concurrent suites"
+}

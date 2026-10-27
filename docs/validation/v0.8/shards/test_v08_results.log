@@ -1,0 +1,25 @@
+test_actual_air_kernel_exports_exclude_films_and_preserve_flow (test_v08_results.TestAirReports.test_actual_air_kernel_exports_exclude_films_and_preserve_flow) ... ok
+test_csv_keeps_nan_mask_phases_units_provenance_and_cell_sum (test_v08_results.TestAirReports.test_csv_keeps_nan_mask_phases_units_provenance_and_cell_sum) ... ok
+test_different_z_cannot_be_paired_even_on_the_same_grid (test_v08_results.TestAirReports.test_different_z_cannot_be_paired_even_on_the_same_grid) ... ok
+test_invalid_result_grid_is_rejected (test_v08_results.TestAirReports.test_invalid_result_grid_is_rejected) ... ok
+test_large_source_registry_metadata_is_chunked_for_excel (test_v08_results.TestAirReports.test_large_source_registry_metadata_is_chunked_for_excel) ... ok
+test_reverse_air_is_exported_separately_from_positive_air (test_v08_results.TestAirReports.test_reverse_air_is_exported_separately_from_positive_air) ... ok
+test_xlsx_masks_and_composite_global_ratios_are_blank (test_v08_results.TestAirReports.test_xlsx_masks_and_composite_global_ratios_are_blank) ... ok
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_hidden_diagnostics_are_deferred_and_reveal_latest_real_timestamp (test_v08_results.TestAirResultView.test_hidden_diagnostics_are_deferred_and_reveal_latest_real_timestamp) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_real_qt_selector_and_quasi_snapshot_do_not_recalculate_fuel (test_v08_results.TestAirResultView.test_real_qt_selector_and_quasi_snapshot_do_not_recalculate_fuel) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_time_updates_reuse_mesh_and_show_new_values_and_pixels (test_v08_results.TestAirResultView.test_time_updates_reuse_mesh_and_show_new_values_and_pixels) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 5.432s
+
+OK

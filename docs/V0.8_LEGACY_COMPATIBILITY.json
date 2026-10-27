@@ -1,0 +1,20 @@
+{
+  "baseline_sha": "944f1f9",
+  "array_count": 72,
+  "byte_identical": true,
+  "differences": [],
+  "aggregate_sha256": "0244102f964b5b4627af00b20105a85c327418a15d2f5f177a8af0a444a2535c",
+  "runtimes": {
+    "baseline": {
+      "runtime_s": 52.816130923,
+      "arrays": 72,
+      "user_project_air_enabled": false
+    },
+    "current": {
+      "runtime_s": 39.905718105999995,
+      "arrays": 72,
+      "user_project_air_enabled": false
+    }
+  },
+  "user_json_sha256": "0589843dc9b8b6939cddba22dd0b0d93927da27323b69bb5c131ae01cb59bc4c"
+}
