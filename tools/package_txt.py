@@ -8,7 +8,7 @@ import subprocess
 import zipfile
 
 GUIDES = ('V0.6_GUIDE.md', 'QUASISTATIONARY_GUIDE.md', 'V0.4.1_IDENTIFICATION_GUIDE.md',
-          'V0.7_GUIDE.md', 'V0.7_LITERATURE_REVIEW.md')
+          'V0.7_GUIDE.md', 'V0.7_LITERATURE_REVIEW.md', 'V0.8_GUIDE.md', 'V0.8_IMPLEMENTED_MODEL.md')
 
 RESTORE = '''# Скопируйте этот текст в IDLE, сохраните рядом с папкой code как restore.py и нажмите F5.
 from pathlib import Path
