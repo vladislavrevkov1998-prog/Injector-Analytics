@@ -1,0 +1,4 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+This plugin does not support propagateSizeHints()
+{"stage": "before", "window_height": 930, "canvas_size": [1454, 287], "axes_bbox": [959.1411892361112, 58.05555555555558, 1154.2, 253.11436631944446], "plot_height": 422, "time_height": 93, "balance_height": 46, "equation_height": 22}
+{"stage": "after", "changed": 75, "canvas_size": [1454, 287], "step": 35}

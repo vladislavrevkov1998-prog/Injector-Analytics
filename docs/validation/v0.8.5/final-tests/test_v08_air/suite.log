@@ -1,0 +1,28 @@
+test_book_oracle_is_recomputed_from_inlet_shares (test_v08_air.AirBalanceTests.test_book_oracle_is_recomputed_from_inlet_shares) ... ok
+test_effective_area_requires_consent_and_explicit_cd (test_v08_air.AirBalanceTests.test_effective_area_requires_consent_and_explicit_cd) ... ok
+test_invalid_inputs_and_duplicate_physical_sources_fail_without_mutation (test_v08_air.AirBalanceTests.test_invalid_inputs_and_duplicate_physical_sources_fail_without_mutation) ... ok
+test_numeric_ledger_with_fixed_fraction_and_residual_area (test_v08_air.AirBalanceTests.test_numeric_ledger_with_fixed_fraction_and_residual_area) ... ok
+test_partial_area_allocation_does_not_create_residual_source (test_v08_air.AirBalanceTests.test_partial_area_allocation_does_not_create_residual_source) ... ok
+test_unknown_source_and_disabled_source_have_no_assigned_mass (test_v08_air.AirBalanceTests.test_unknown_source_and_disabled_source_have_no_assigned_mass) ... ok
+test_interaction_changes_directions_without_registry_order_bias (test_v08_air.AirSpatialTests.test_interaction_changes_directions_without_registry_order_bias) ... ok
+test_kernel_quadrature_refines_toward_independent_continuous_integral (test_v08_air.AirSpatialTests.test_kernel_quadrature_refines_toward_independent_continuous_integral) ... ok
+test_local_basis_round_trip_and_rotation_equivariance (test_v08_air.AirSpatialTests.test_local_basis_round_trip_and_rotation_equivariance) ... ok
+test_no_neighbour_and_zero_penetration_keep_finite_direction (test_v08_air.AirSpatialTests.test_no_neighbour_and_zero_penetration_keep_finite_direction) ... ok
+test_output_sections_do_not_change_physical_paths_or_entrainment (test_v08_air.AirSpatialTests.test_output_sections_do_not_change_physical_paths_or_entrainment) ... ok
+test_physical_step_converges_for_crossing_jets (test_v08_air.AirSpatialTests.test_physical_step_converges_for_crossing_jets) ... ok
+test_positive_local_kernels_normalize_even_when_narrow (test_v08_air.AirSpatialTests.test_positive_local_kernels_normalize_even_when_narrow) ... ok
+test_radial_and_reverse_are_not_silently_turned_downstream (test_v08_air.AirSpatialTests.test_radial_and_reverse_are_not_silently_turned_downstream) ... ok
+test_staged_portions_have_reproducible_nonoverlapping_flow_ledger (test_v08_air.AirSpatialTests.test_staged_portions_have_reproducible_nonoverlapping_flow_ledger) ... ok
+test_uniform_uses_annular_area_and_does_not_mutate_fuel (test_v08_air.AirSpatialTests.test_uniform_uses_annular_area_and_does_not_mutate_fuel) ... ok
+test_wall_layer_follows_analytic_sloping_wall_and_normals_check_sign (test_v08_air.AirSpatialTests.test_wall_layer_follows_analytic_sloping_wall_and_normals_check_sign) ... ok
+test_zero_width_limit_shares_only_adjacent_boundary_cells (test_v08_air.AirSpatialTests.test_zero_width_limit_shares_only_adjacent_boundary_cells) ... ok
+test_alpha_masks_zero_fuel_and_uses_ratio_of_integrals (test_v08_air.MixtureTests.test_alpha_masks_zero_fuel_and_uses_ratio_of_integrals) ... ok
+test_disabled_model_returns_none_without_mutation (test_v08_air.MixtureTests.test_disabled_model_returns_none_without_mutation) ... ok
+test_precomputed_air_requires_same_physical_grid (test_v08_air.MixtureTests.test_precomputed_air_requires_same_physical_grid) ... ok
+test_suspended_only_and_composite_integral_is_undefined (test_v08_air.MixtureTests.test_suspended_only_and_composite_integral_is_undefined) ... ok
+test_unknown_stoichiometry_does_not_block_air (test_v08_air.MixtureTests.test_unknown_stoichiometry_does_not_block_air) ... ok
+
+----------------------------------------------------------------------
+Ran 23 tests in 0.513s
+
+OK

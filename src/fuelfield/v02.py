@@ -38,8 +38,11 @@ def validate_catalog(catalog, presets):
     if set(presets)!=set(NOZZLE_KINDS):
         raise ValueError('Нужны шаблоны охлаждаемой и неохлаждаемой форсунок.')
     for params in presets.values():
-        if set(params)!=set(GEOMETRY_KEYS) or not all(math.isfinite(float(v)) for v in params.values()):
+        if not set(GEOMETRY_KEYS).issubset(params) or not all(math.isfinite(float(params[k])) for k in GEOMETRY_KEYS):
             raise ValueError('Шаблон: нужны все конечные параметры геометрии.')
+        if 'air' in params:
+            from .air_templates import validate_air_template
+            validate_air_template(params['air'])
         if params['h0_mm']<=0 or params['r_nozzle_mm']<params['h0_mm']/2 or abs(params['alpha_deg'])>=179:
             raise ValueError('Шаблон: неверные радиус, толщина или угол.')
         if params['z_ref_mm']<=0 or params['decay_length_mm']<=0 or params['diffusion_deg_sqrt_mm']<0:

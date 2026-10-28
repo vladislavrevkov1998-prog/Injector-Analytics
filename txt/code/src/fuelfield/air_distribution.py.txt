@@ -21,6 +21,10 @@ def cached_paths(sources, flows, cfg, model):
     # Fuel pressures, displayed z lists, colors and metadata do not alter the
     # air trajectory. Effective resolved coordinates do. The cache is bounded
     # and never returns a mutable source/array to an external editor.
+    # trace_jets stores trajectory columns in ID order. Use that same order
+    # for the cache key and refreshed metadata, including cache hits after a
+    # table reorder (S1, S2, ..., S10 is not lexicographic ID order).
+    sources = tuple(sorted(sources, key=lambda source: source['id']))
     records = [{key: source[key] for key in ('id', 'z_mm', 'radius_mm', 'theta_deg',
                 'direction', 'penetration_factor', 'sigma_r_mm', 'sigma_theta_deg', 'kernel', 'wall')} for source in sources]
     key = json.dumps(dict(sources=records, flows=flows, geometry=getattr(cfg, 'geometry', {}),
@@ -137,7 +141,8 @@ class AirFieldResult:
 
 def compute_air_field(plane, cfg, nozzles, *, paths=None):
     raw = getattr(cfg, 'air_model', None)
-    model = validate_air_model(raw)
+    from .air_templates import effective_air_model
+    model = effective_air_model(raw, cfg, nozzles)
     if not model['enabled']:
         return None
     balance = solve_balance(model)
@@ -210,6 +215,7 @@ def compute_air_field(plane, cfg, nozzles, *, paths=None):
                       units='kg/s per cell; lengths mm; global theta degrees +X/CCW',
                       distribution=model['distribution'], normalization='nonnegative cell integrals, sum W = 1',
                       unknown_residual_kg_s=balance.unassigned_kg_s, source_inputs=model['sources'],
+                      resolved_source_inputs=sources,
                       internal_step_mm=model['step_mm'], max_path_mm=model['max_path_mm'],
                       interaction_strength=model['interaction_strength'],
                       radial_edges_mm=np.asarray(plane.radial_edges_mm).tolist(),

@@ -1,0 +1,43 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_arc_body_drag_translates_without_changing_radius_or_other_primitives (test_v061_drag.TestV061FirstClickDrag.test_arc_body_drag_translates_without_changing_radius_or_other_primitives) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_first_click_arc_center_translates_whole_circle_freely (test_v061_drag.TestV061FirstClickDrag.test_first_click_arc_center_translates_whole_circle_freely) ... This plugin does not support propagateSizeHints()
+ok
+test_first_click_arc_endpoint_tracks_cursor_with_coherent_handles (test_v061_drag.TestV061FirstClickDrag.test_first_click_arc_endpoint_tracks_cursor_with_coherent_handles) ... This plugin does not support propagateSizeHints()
+ok
+test_first_click_line_endpoint_does_not_drag_opposite_endpoint (test_v061_drag.TestV061FirstClickDrag.test_first_click_line_endpoint_does_not_drag_opposite_endpoint) ... This plugin does not support propagateSizeHints()
+ok
+test_impossible_radius_keeps_visible_draft_and_valid_calculation_state (test_v061_drag.TestV061FirstClickDrag.test_impossible_radius_keeps_visible_draft_and_valid_calculation_state) ... This plugin does not support propagateSizeHints()
+ok
+test_invalid_drag_stays_visible_at_release_without_resetting_pointer_target (test_v061_drag.TestV061FirstClickDrag.test_invalid_drag_stays_visible_at_release_without_resetting_pointer_target) ... This plugin does not support propagateSizeHints()
+ok
+test_radius_edit_rebuilds_circle_without_disappearing (test_v061_drag.TestV061FirstClickDrag.test_radius_edit_rebuilds_circle_without_disappearing) ... This plugin does not support propagateSizeHints()
+ok
+test_real_drag_shared_arc_vertex_in_mm_and_cm_is_exact_and_atomic (test_v061_drag.TestV061FirstClickDrag.test_real_drag_shared_arc_vertex_in_mm_and_cm_is_exact_and_atomic) ... This plugin does not support propagateSizeHints()
+ok
+test_results_first_entry_and_new_cached_canvases_do_not_grow_window (test_v061_drag.TestV061FirstClickDrag.test_results_first_entry_and_new_cached_canvases_do_not_grow_window) ... This plugin does not support propagateSizeHints()
+FAIL
+test_results_split_canvas_stays_inside_window_with_larger_ui_font (test_v061_drag.TestV061FirstClickDrag.test_results_split_canvas_stays_inside_window_with_larger_ui_font) ... This plugin does not support propagateSizeHints()
+FAIL
+
+======================================================================
+FAIL: test_results_first_entry_and_new_cached_canvases_do_not_grow_window (test_v061_drag.TestV061FirstClickDrag.test_results_first_entry_and_new_cached_canvases_do_not_grow_window)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Injector-Analytics/tests/test_v061_drag.py", line 273, in test_results_first_entry_and_new_cached_canvases_do_not_grow_window
+    self.assertLessEqual(initial_height, 720)
+AssertionError: 791 not less than or equal to 720
+
+======================================================================
+FAIL: test_results_split_canvas_stays_inside_window_with_larger_ui_font (test_v061_drag.TestV061FirstClickDrag.test_results_split_canvas_stays_inside_window_with_larger_ui_font)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Injector-Analytics/tests/test_v061_drag.py", line 255, in test_results_split_canvas_stays_inside_window_with_larger_ui_font
+    self.assertLessEqual(self.w.height(), 720)
+AssertionError: 791 not less than or equal to 720
+
+----------------------------------------------------------------------
+Ran 10 tests in 15.787s
+
+FAILED (failures=2)

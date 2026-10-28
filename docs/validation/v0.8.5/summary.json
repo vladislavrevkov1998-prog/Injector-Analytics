@@ -1,0 +1,58 @@
+{
+  "status": "PASS",
+  "version": "0.8.5",
+  "base_commit": "c0d5e0f11d76d45e2f17cae0deb6a0097a0e3224",
+  "runtime_commit": "2a871a15bb66bfaac4cd7b02a794b4c7b8690763",
+  "full_suite": {
+    "status": "PASS",
+    "method": "Complete discovery; fresh subprocess per module",
+    "jobs": 2,
+    "expected_tests": 686,
+    "tests": 686,
+    "skipped": 0,
+    "wall_seconds": 421.094707709
+  },
+  "baseline_suite": {
+    "status": "PASS",
+    "method": "Complete discovery; fresh subprocess per module",
+    "jobs": 2,
+    "expected_tests": 633,
+    "tests": 633,
+    "skipped": 0,
+    "wall_seconds": 760.9181612289976
+  },
+  "legacy_arrays": 72,
+  "legacy_arrays_byte_identical": true,
+  "user_json_sha256": "0589843dc9b8b6939cddba22dd0b0d93927da27323b69bb5c131ae01cb59bc4c",
+  "native_acceptance_checks": 9,
+  "native_performance_checks": 6,
+  "screenshots": 27,
+  "portable": {
+    "status": "PASS",
+    "archive": "Fuel_Field_Pilot_0.8.5_IDLE_TXT.zip",
+    "sha256": "d15163d63109d2558960ff4263416de3780d0e8e6aa4c83d447cb0b3c9eda463",
+    "source_commit": "0c147697c3083d467e2731812645be180b00d30f",
+    "version": "0.8.5",
+    "archive_entries": 65,
+    "restored_files": 63,
+    "runtime_modules_compared": 60,
+    "restored_outside_repository": true,
+    "platform": "linux",
+    "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+    "smoke": {
+      "embedded_guides": 7,
+      "embedded_images": 5,
+      "fuel_kg_s": 0.10000000000000776,
+      "air_kg_s": 2.0000000000000004,
+      "alpha_total": 9.999999999999226,
+      "joint_f5": true,
+      "circular_alpha": true,
+      "themes": 3
+    },
+    "windows_spyder": "NOT RUN"
+  },
+  "not_run": [
+    "Windows/Spyder/Windows DPI",
+    "Experimental/CFD calibration of empirical air model"
+  ]
+}

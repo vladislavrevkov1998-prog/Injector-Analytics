@@ -122,7 +122,12 @@ def air_tables(results, cfg, planes, *, times_s=None, pressures=None):
         ['normalization', 'Positive per-source spatial kernels normalized by mass flow, not equal cell areas.'],
         ['composite', 'Different columns can represent different times. No single instantaneous section alpha/balance.'],
         ['fuel_model', _json(getattr(cfg, 'fuel_transport', {'mode': 'legacy'}))],
+        ['fuel_pressure_settings', _json(dict(mode=getattr(cfg,'pressure_mode','legacy'),
+            target_pressure_kgf_cm2=getattr(cfg,'target_pressure_kgf_cm2',None),
+            target_applies=not getattr(cfg,'quasistationary',False) and getattr(cfg,'pressure_mode','legacy')=='calibrated',
+            note='Fuel pressure only. Quasi uses per-step channel delta p; legacy uses nozzle reference conditions. No air pressure is inferred.'))],
         ['air_model', _json(getattr(cfg, 'air_model', {}))],
+        ['nozzle_air_templates', _json({kind:preset.get('air', {}) for kind,preset in getattr(cfg,'nozzle_presets',{}).items()})],
         ['provenance', _json([getattr(r, 'provenance', {}) for r in results])],
         ['metadata_chunking', 'Append key__part_0002 etc. to the first value for long JSON entries; chunks <=30000 characters.'],
     ]

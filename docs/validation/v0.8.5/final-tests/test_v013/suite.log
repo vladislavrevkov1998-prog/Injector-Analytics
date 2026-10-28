@@ -1,0 +1,31 @@
+test_all_scales_leave_physics_and_csv_identical (test_v013.TestDisplay.test_all_scales_leave_physics_and_csv_identical) ... ok
+test_clipped_map_retains_walls_and_nozzle_labels (test_v013.TestDisplay.test_clipped_map_retains_walls_and_nozzle_labels) ... ok
+test_old_json_defaults_and_new_preferences_roundtrip (test_v013.TestDisplay.test_old_json_defaults_and_new_preferences_roundtrip) ... ok
+test_saturate_and_clip_preserve_values_and_existing_masks (test_v013.TestDisplay.test_saturate_and_clip_preserve_values_and_existing_masks) ... ok
+test_scale_invalid_bounds_rejected (test_v013.TestDisplay.test_scale_invalid_bounds_rejected) ... ok
+test_shared_auto_scale_ignores_masked_wall_values (test_v013.TestDisplay.test_shared_auto_scale_ignores_masked_wall_values) ... ok
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_checkbox_undo_preserves_coordinates (test_v013.TestQtEditing.test_checkbox_undo_preserves_coordinates) ... ok
+test_group_copy_and_sector_flow_undo_keep_manual_measurement (test_v013.TestQtEditing.test_group_copy_and_sector_flow_undo_keep_manual_measurement) ... ok
+test_group_demo_flow_is_one_command (test_v013.TestQtEditing.test_group_demo_flow_is_one_command) ... ok
+test_higher_resolution_preview_preserves_strict_clip_and_source_data (test_v013.TestQtEditing.test_higher_resolution_preview_preserves_strict_clip_and_source_data) ... ok
+test_invalid_nozzle_paste_rolls_back_whole_operation (test_v013.TestQtEditing.test_invalid_nozzle_paste_rolls_back_whole_operation) ... ok
+test_invalid_sector_does_not_change_values (test_v013.TestQtEditing.test_invalid_sector_does_not_change_values) ... ok
+test_invalid_sector_paste_rolls_back_valid_cells_too (test_v013.TestQtEditing.test_invalid_sector_paste_rolls_back_valid_cells_too) ... ok
+test_lazy_render_and_cache_reuse (test_v013.TestQtEditing.test_lazy_render_and_cache_reuse) ... ok
+test_mathtext_and_keyboard_shortcuts (test_v013.TestQtEditing.test_mathtext_and_keyboard_shortcuts) ... This plugin does not support propagateSizeHints()
+ok
+test_png_export_renders_inactive_views_for_each_plane (test_v013.TestQtEditing.test_png_export_renders_inactive_views_for_each_plane) ... ok
+test_positions_and_import_are_undoable_groups (test_v013.TestQtEditing.test_positions_and_import_are_undoable_groups) ... ok
+test_preview_evaluates_only_selected_source_at_zero (test_v013.TestQtEditing.test_preview_evaluates_only_selected_source_at_zero) ... ok
+test_scale_undo_keeps_results_physics_edit_invalidates (test_v013.TestQtEditing.test_scale_undo_keeps_results_physics_edit_invalidates) ... ok
+test_single_value_fills_selection_one_undo_and_redo (test_v013.TestQtEditing.test_single_value_fills_selection_one_undo_and_redo) ... ok
+test_stale_worker_results_rejected (test_v013.TestQtEditing.test_stale_worker_results_rejected) ... ok
+test_tsv_paste_is_atomic_and_skips_readonly_ids (test_v013.TestQtEditing.test_tsv_paste_is_atomic_and_skips_readonly_ids) ... ok
+test_untouched_json_numbers_are_not_rounded_by_display_edits (test_v013.TestQtEditing.test_untouched_json_numbers_are_not_rounded_by_display_edits) ... ok
+test_worker_startup_and_mass_balance (test_v013.TestQtEditing.test_worker_startup_and_mass_balance) ... ok
+
+----------------------------------------------------------------------
+Ran 24 tests in 80.763s
+
+OK

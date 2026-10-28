@@ -10,6 +10,7 @@ from fuelfield.core import (Settings, calculate_plane, default_nozzles,
                             project_from_json, project_to_json)
 from fuelfield.regression import RegressionSnapshot
 from fuelfield.transport_settings import synthetic_settings
+from fuelfield import __version__
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -94,7 +95,7 @@ class TestAirPersistence(unittest.TestCase):
                     'future_air': {'keep': [None, 140, 36]}}
                 cfg, nozzles = project_from_json(raw)
                 saved = project_to_json(cfg, nozzles)
-                self.assertEqual(saved['version'], '0.8.4')
+                self.assertEqual(saved['version'], __version__)
                 self.assertEqual(saved['schema_version'], schema)
                 self.assertEqual(saved['settings']['air_model'], raw['settings']['air_model'])
                 self.assertEqual(saved['nozzles'], fuel)

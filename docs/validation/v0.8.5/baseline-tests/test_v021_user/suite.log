@@ -1,0 +1,24 @@
+test_capture_from_measured_flow_and_curve_not_constant_sqrt (test_v021_user.TestUserPhysics.test_capture_from_measured_flow_and_curve_not_constant_sqrt) ... ok
+test_local_uniform_field_is_smooth_and_rotationally_symmetric (test_v021_user.TestUserPhysics.test_local_uniform_field_is_smooth_and_rotationally_symmetric) ... ok
+test_requested_anchor_positions_both_rows_and_reordered_ids (test_v021_user.TestUserPhysics.test_requested_anchor_positions_both_rows_and_reordered_ids) ... ok
+test_user_project_all_four_balances_and_common_bench_pressures (test_v021_user.TestUserPhysics.test_user_project_all_four_balances_and_common_bench_pressures) ... ok
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_auto_follow_anchor_38_undo_and_disabled_stays_in_place (test_v021_user.TestUserQt.test_auto_follow_anchor_38_undo_and_disabled_stays_in_place) ... ok
+test_capture_and_status_update_after_manual_sector_volume (test_v021_user.TestUserQt.test_capture_and_status_update_after_manual_sector_volume) ... ok
+test_columns_order_removed_bench_fields_and_header_menu_units (test_v021_user.TestUserQt.test_columns_order_removed_bench_fields_and_header_menu_units) ... This plugin does not support raise()
+This plugin does not support grabbing the keyboard
+ok
+test_direct_cell_types_use_editable_lists_and_presets (test_v021_user.TestUserQt.test_direct_cell_types_use_editable_lists_and_presets) ... ok
+test_dityakin_results_are_below_inputs_and_readonly (test_v021_user.TestUserQt.test_dityakin_results_are_below_inputs_and_readonly) ... ok
+test_manual_write_locks_freezes_and_reverts_to_current_preset (test_v021_user.TestUserQt.test_manual_write_locks_freezes_and_reverts_to_current_preset) ... ok
+test_selection_burst_defers_preview_and_same_source_reuses_it (test_v021_user.TestUserQt.test_selection_burst_defers_preview_and_same_source_reuses_it) ... ok
+test_settings_open_once_and_common_pressures_roundtrip (test_v021_user.TestUserQt.test_settings_open_once_and_common_pressures_roundtrip) ... This plugin does not support propagateSizeHints()
+This plugin does not support raise()
+This plugin does not support raise()
+ok
+test_user_project_save_reopen_real_worker_and_balance (test_v021_user.TestUserQt.test_user_project_save_reopen_real_worker_and_balance) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 72.702s
+
+OK

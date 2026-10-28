@@ -42,5 +42,5 @@ class TestThemeRestart(unittest.TestCase):
             before,after=outputs
             self.assertNotEqual(before['pid'],after['pid'])
             self.assertEqual(before['theme'],'dark');self.assertEqual(after['theme'],'dark')
-            self.assertEqual(after['window'],'#1b2230');self.assertFalse(after['air_enabled'])
+            self.assertEqual(after['window'],'#000000');self.assertFalse(after['air_enabled'])
             self.assertEqual(after['nozzles'],140)

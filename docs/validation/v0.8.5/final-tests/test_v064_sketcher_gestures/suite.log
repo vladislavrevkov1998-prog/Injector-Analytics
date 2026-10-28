@@ -1,0 +1,11 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_clicking_two_non_tangent_arcs_between_fixed_lines_refits_pair_and_undoes_once (test_v064_sketcher_gestures.TestV064ConstrainedGestures.test_clicking_two_non_tangent_arcs_between_fixed_lines_refits_pair_and_undoes_once) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_coincidence_cannot_tear_when_drag_snaps_arc_end_to_its_opposite_end (test_v064_sketcher_gestures.TestV064ConstrainedGestures.test_coincidence_cannot_tear_when_drag_snaps_arc_end_to_its_opposite_end) ... This plugin does not support propagateSizeHints()
+ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 2.309s
+
+OK

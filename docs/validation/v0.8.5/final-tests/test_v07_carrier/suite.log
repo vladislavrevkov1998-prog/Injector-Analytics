@@ -1,0 +1,17 @@
+test_cache_uses_geometry_not_ids_output_sections_or_metadata (test_v07_carrier.TestCarrier.test_cache_uses_geometry_not_ids_output_sections_or_metadata) ... ok
+test_cartesian_rotation_and_broadcast_follow_axisymmetric_velocity (test_v07_carrier.TestCarrier.test_cartesian_rotation_and_broadcast_follow_axisymmetric_velocity) ... ok
+test_curved_wall_sliver_and_vertical_tangent_do_not_reject_valid_points (test_v07_carrier.TestCarrier.test_curved_wall_sliver_and_vertical_tangent_do_not_reject_valid_points) ... ok
+test_cylinder_is_exact_uniform_flow_and_analytic_streamfunction (test_v07_carrier.TestCarrier.test_cylinder_is_exact_uniform_flow_and_analytic_streamfunction) ... ok
+test_finite_points_outside_exact_walls_are_not_projected_inside (test_v07_carrier.TestCarrier.test_finite_points_outside_exact_walls_are_not_projected_inside) ... ok
+test_invalid_parameters_and_excessive_mesh_have_clear_errors (test_v07_carrier.TestCarrier.test_invalid_parameters_and_excessive_mesh_have_clear_errors) ... ok
+test_mesh_refinement_reduces_streamfunction_error (test_v07_carrier.TestCarrier.test_mesh_refinement_reduces_streamfunction_error) ... ok
+test_narrowing_and_widening_preserve_total_volume_flux_at_every_cut (test_v07_carrier.TestCarrier.test_narrowing_and_widening_preserve_total_volume_flux_at_every_cut) ... ok
+test_normal_flux_is_continuous_on_internal_triangle_edges (test_v07_carrier.TestCarrier.test_normal_flux_is_continuous_on_internal_triangle_edges) ... ok
+test_physical_units_and_endpoint_orientation_do_not_change_solution (test_v07_carrier.TestCarrier.test_physical_units_and_endpoint_orientation_do_not_change_solution) ... ok
+test_scaling_geometry_and_inlet_velocity_obey_similarity (test_v07_carrier.TestCarrier.test_scaling_geometry_and_inlet_velocity_obey_similarity) ... ok
+test_sidewalls_have_no_pointwise_normal_flow (test_v07_carrier.TestCarrier.test_sidewalls_have_no_pointwise_normal_flow) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.125s
+
+OK

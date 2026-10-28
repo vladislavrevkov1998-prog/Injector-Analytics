@@ -1,0 +1,22 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_green_preference_roundtrip_uses_the_third_theme_key (test_v085_themes.TestThreeReadableThemes.test_green_preference_roundtrip_uses_the_third_theme_key) ... ok
+test_inherited_colored_warning_and_equation_labels_are_readable_in_dark (test_v085_themes.TestThreeReadableThemes.test_inherited_colored_warning_and_equation_labels_are_readable_in_dark) ... This plugin does not support propagateSizeHints()
+ok
+test_native_checkbox_keeps_a_visible_checkmark_and_boundary (test_v085_themes.TestThreeReadableThemes.test_native_checkbox_keeps_a_visible_checkmark_and_boundary) ... ok
+test_native_tabs_have_visible_selected_inactive_and_disabled_surfaces (test_v085_themes.TestThreeReadableThemes.test_native_tabs_have_visible_selected_inactive_and_disabled_surfaces) ... ok
+test_scene_overlay_opacity_line_width_and_dash_survive_theme_switches (test_v085_themes.TestThreeReadableThemes.test_scene_overlay_opacity_line_width_and_dash_survive_theme_switches) ... ok
+test_sketch_modes_survive_theme_changes_and_new_axes_match_theme (test_v085_themes.TestThreeReadableThemes.test_sketch_modes_survive_theme_changes_and_new_axes_match_theme) ... ok
+test_table_selection_and_enabled_disabled_inputs_remain_readable (test_v085_themes.TestThreeReadableThemes.test_table_selection_and_enabled_disabled_inputs_remain_readable) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_text_and_selection_contrast_and_original_standard_light (test_v085_themes.TestThreeReadableThemes.test_text_and_selection_contrast_and_original_standard_light) ... ok
+test_fresh_table_cells_are_readable_after_dark_theme_and_restore (test_v08_ui.TestV08ThemeSurfaces.test_fresh_table_cells_are_readable_after_dark_theme_and_restore) ... ok
+test_scene_labels_restore_original_color_and_keep_selection_width (test_v08_ui.TestV08ThemeSurfaces.test_scene_labels_restore_original_color_and_keep_selection_width) ... ok
+test_table_rebuilds_and_deletion_keep_theme_out_of_edit_signals (test_v08_lifecycle.TestCanvasLifecycle.test_table_rebuilds_and_deletion_keep_theme_out_of_edit_signals) ... ok
+test_dark_preference_survives_a_real_process_restart_without_legacy_activation (test_v08_theme_restart.TestThemeRestart.test_dark_preference_survives_a_real_process_restart_without_legacy_activation) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 7.965s
+
+OK

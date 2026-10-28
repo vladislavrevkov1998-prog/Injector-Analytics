@@ -1,0 +1,20 @@
+test_continuous_preview_mass_agrees_with_control_grid (test_core.TestDetailedVisualizations.test_continuous_preview_mass_agrees_with_control_grid) ... ok
+test_disabled_nozzle_does_not_add_continuous_flux (test_core.TestDetailedVisualizations.test_disabled_nozzle_does_not_add_continuous_flux) ... ok
+test_polar_rose_respects_sector_one_rotation_and_flow (test_core.TestDetailedVisualizations.test_polar_rose_respects_sector_one_rotation_and_flow) ... ok
+test_piecewise_sector_1_integral (test_core.TestExactMeasuredSectorShares.test_piecewise_sector_1_integral) ... ok
+test_rotated_matrix_conserves_total (test_core.TestPhysicalInterpretation.test_rotated_matrix_conserves_total) ... ok
+test_sector1_points_to_middle_line (test_core.TestPhysicalInterpretation.test_sector1_points_to_middle_line) ... ok
+test_angular_modes_keep_mean (test_core.TestPhysics.test_angular_modes_keep_mean) ... ok
+test_csv_parse (test_core.TestPhysics.test_csv_parse) ... ok
+test_custom_radial_nodes (test_core.TestPhysics.test_custom_radial_nodes) ... ok
+test_disabled_nozzle_changes_only_mass (test_core.TestPhysics.test_disabled_nozzle_changes_only_mass) ... ok
+test_four_planes_conservative (test_core.TestPhysics.test_four_planes_conservative) ... ok
+test_geometry_modes (test_core.TestPhysics.test_geometry_modes) ... ok
+test_mass_from_ml_separate_from_default (test_core.TestPhysics.test_mass_from_ml_separate_from_default) ... ok
+test_positions_and_disable_no_shift (test_core.TestPhysics.test_positions_and_disable_no_shift) ... ok
+test_serialization (test_core.TestPhysics.test_serialization) ... ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 2.377s
+
+OK

@@ -18,6 +18,15 @@ from .plot_interaction import attach_interaction
 from .graph_selection import GraphSelection
 from .quasi import calculate_quasi,CalculationCancelled,CalculationOutput
 from .coordinates import grid_angles,polar_ticks,plot_x,x_label,decorate_axes,from_global
+from .unified_results import AIR_METRICS,air_cell_values,air_summary,build_air_results,draw_air_reference
+
+AIR_KEYS = frozenset(AIR_METRICS)
+
+
+def metric_unit(metric):
+    if metric in AIR_KEYS:
+        return AIR_METRICS[metric][1]
+    return UNITS[metric]
 
 
 class ResultCanvas(FigureCanvasQTAgg):
@@ -58,19 +67,26 @@ class ProjectWorker(QObject):
     failed=pyqtSignal(str)
     finished=pyqtSignal()
     def __init__(self,cfg,nozzles,detailed=False):super().__init__();self.cfg=cfg;self.nozzles=nozzles;self.detailed=detailed;self.fields=[]
+    def _complete(self,planes,quasi_result=None):
+        output=CalculationOutput(planes,quasi_result,self.fields)
+        output.air_results=None
+        if getattr(self.cfg,'air_model',{}).get('enabled',False):
+            output.air_results=build_air_results(self.cfg,self.nozzles,planes,quasi_result,
+                cancel=lambda:QThread.currentThread().isInterruptionRequested())
+        if not QThread.currentThread().isInterruptionRequested():self.completed.emit(output)
     def run(self):
         try:
             if self.cfg.quasistationary:
                 self.quasi_result=calculate_quasi(self.nozzles,self.cfg,preview=self.detailed,cancel=lambda:QThread.currentThread().isInterruptionRequested())
                 if self.detailed:self.fields=[self.quasi_result.smooth(i,0) for i in range(len(self.cfg.z_mm))]
-                self.completed.emit(CalculationOutput(self.quasi_result.composites,self.quasi_result,self.fields));return
+                self._complete(self.quasi_result.composites,self.quasi_result);return
             planes=[]
             for z in self.cfg.z_mm:
                 if QThread.currentThread().isInterruptionRequested():return
                 planes.append(calculate_plane(self.nozzles,self.cfg,z))
                 if QThread.currentThread().isInterruptionRequested():return
                 if self.detailed:self.fields.append(evaluate_continuous_field(self.nozzles,self.cfg,z))
-            self.completed.emit(CalculationOutput(planes,fields=self.fields))
+            self._complete(planes)
         except CalculationCancelled:return
         except Exception as exc:self.failed.emit(str(exc))
         finally:self.finished.emit()
@@ -80,6 +96,7 @@ class ComparisonPanel(QWidget):
     def __init__(self,owner):
         super().__init__(owner);self.owner=owner;self.planes=[];self.cfg=None;self.tables=[];self.thread=None
         self._loading_cfg=None;self._chart_key=None;self.fields=[];self.nozzles=[]
+        self.air_results=None;self.quasi_result=None
         self._chart_cache=OrderedDict();self._syncing=False;self._reuse_chart_canvas=True
         layout=QVBoxLayout(self);top=QHBoxLayout()
         top.addWidget(QLabel('Загрузить:'))
@@ -135,7 +152,7 @@ class ComparisonPanel(QWidget):
         else:
             tables=read_chart_tables(path)
             self._clear_chart_cache()
-            self.tables=tables;self.planes=[];self.cfg=None;self.fields=[];self.nozzles=[]
+            self.tables=tables;self.planes=[];self.cfg=None;self.fields=[];self.nozzles=[];self.air_results=None;self.quasi_result=None
             self.view.blockSignals(True);self.view.setCurrentIndex(0);self.view.blockSignals(False);self.view.setEnabled(False)
             self._populate([t[0] for t in tables]);self.table_controls.show();self.radius.setEnabled(False);self.sync.setEnabled(False);self._plane_changed()
     def _populate(self,labels):
@@ -144,6 +161,7 @@ class ComparisonPanel(QWidget):
         self._clear_chart_cache()
         self.planes=planes;self.cfg=self._loading_cfg;self.tables=[];self.fields=list(getattr(planes,'fields',()));self.nozzles=getattr(self,"_loading_ns",[]);self.view.setEnabled(True)
         self.quasi_result=getattr(planes,'quasi_result',None)
+        self.air_results=getattr(planes,'air_results',None)
         self.table_controls.hide();self.radius.setEnabled(True);self.sync.setEnabled(True)
         self._populate([f'z={p.z_mm:g} мм' for p in planes]);self._plane_changed();self.sync_from_primary()
     def _failed(self,text):
@@ -211,10 +229,13 @@ class ComparisonPanel(QWidget):
         if self.planes and view:
             cfg=self.cfg;p=self.planes[i]
             color=(cfg.color_scale_mode,cfg.color_vmin,cfg.color_vmax,cfg.color_out_of_range,cfg.color_shared_z)
+            if metric in AIR_KEYS:return ('air_field',id(p),id(self.air_results),view,metric,color)
             if view==2:return ('field',id(p),id(self.fields[i]) if i<len(self.fields) else None,color)
             return ('matrix',id(p),cfg.density_kg_m3,metric,interval,cfg.theta_zero_deg,cfg.theta_direction,color)
         if self.tables:source=('table',id(self.tables),i,self.x.currentData(),self.y.currentData(),self.y2.currentData())
-        elif self.planes:source=('project',id(self.planes[i]),self.cfg.density_kg_m3,metric,interval,self.radius.currentData())
+        elif self.planes:
+            source=('project',id(self.planes[i]),self.cfg.density_kg_m3,metric,interval,self.radius.currentData())
+            if metric in AIR_KEYS:source+=(id(self.air_results),)
         else:source=('empty',)
         return source+(self.view.currentIndex(),self.owner.cfg.theta_zero_deg,self.owner.cfg.theta_direction,self.owner.x_axis.currentData(),self.x_reference.currentData(),self.kind.currentIndex(),self.plot_count.value(),self.plot_columns.value(),tuple(self.graph_selection.selected))
 
@@ -227,6 +248,7 @@ class ComparisonPanel(QWidget):
         # A newly loaded file replaces the currently displayed chart in place.
         # Existing plot/link callers may hold that public canvas reference.
         keep=self.canvas
+        if hasattr(keep,'_comparison_notice'):del keep._comparison_notice
         for index in range(self.canvas_stack.count()-1,-1,-1):
             widget=self.canvas_stack.widget(index)
             if widget is keep:continue
@@ -234,6 +256,11 @@ class ComparisonPanel(QWidget):
         self.interaction.clear_artists();self.figure.clear();self._reuse_chart_canvas=True
     def _select_chart(self,canvas,key):
         self.canvas=canvas;self.figure=canvas.figure;self.interaction=canvas.interaction;self._chart_key=key
+        notice=getattr(canvas,'_comparison_notice',None)
+        if notice is not None:
+            self.notice.setText(notice);self._active_air_notice=notice
+        elif self.notice.text()==getattr(self,'_active_air_notice',None):
+            self.notice.setText('Сравнение по данным второго проекта.');self._active_air_notice=None
         self.canvas_stack.setCurrentWidget(canvas);self._refresh_links()
     def _remember_chart(self):
         key=self._state_key();self._chart_cache[key]=self.canvas;self._chart_cache.move_to_end(key)
@@ -246,8 +273,60 @@ class ComparisonPanel(QWidget):
         if self.view.currentIndex()==0:self.axes_dialog=open_axes_settings(self.canvas,self)
     def _refresh_links(self):
         if hasattr(self.owner,'graph_links'):QTimer.singleShot(0,self.owner.graph_links.refresh)
+    def _project_values(self,i,step=None):
+        """Use only the independently loaded project's physical results."""
+        metric=self.owner.metric.currentData()
+        if metric not in AIR_KEYS:
+            plane=self.planes[i]
+            return plane,cell_values(plane,metric,self.cfg.density_kg_m3,self.owner.volume_interval.value())
+        if self.air_results is None:
+            raise ValueError('Во втором проекте нет рассчитанных полей воздуха / α. '
+                'Включите воздух в этом проекте и загрузите JSON повторно.')
+        plane,mixture=self.air_results.state(i,step=step)
+        return plane,air_cell_values(plane,mixture,metric)
+
+    def _draw_unavailable(self,message):
+        self.canvas._comparison_notice=str(message)
+        ax=self.figure.add_subplot(111);ax.set_axis_off()
+        ax.text(.5,.5,str(message),transform=ax.transAxes,ha='center',va='center',wrap=True)
+        self.interaction.axes=[];self.interaction.original={}
+        self._remember_chart();self.canvas.draw_idle()
+
+    def _draw_air_field(self,i):
+        metric=self.owner.metric.currentData()
+        instantaneous=self.view.currentIndex()==2 and self.quasi_result is not None
+        step=0 if instantaneous else None
+        try:
+            p,values=self._project_values(i,step)
+            shared=[self._project_values(k,step)[1] for k in range(len(self.planes))]
+        except (ValueError,TypeError,KeyError) as exc:
+            self._draw_unavailable(exc);return
+        ax=self.figure.add_subplot(111,projection='polar')
+        theta=np.deg2rad(grid_angles(self.cfg,edges=True));th,r=np.meshgrid(theta,p.radial_edges_mm)
+        data,norm,cmap=color_scale(values,self.cfg,shared)
+        pc=ax.pcolormesh(th,r,data,cmap=cmap,norm=norm,shading='flat')
+        ax.set_theta_zero_location('E');ax.set_theta_direction(1);polar_ticks(ax,self.cfg)
+        ax.set_ylim(0,p.radial_edges_mm[-1])
+        scan_angles=(self.quasi_result.settings.global_angles(self.cfg)
+                     if self.quasi_result is not None else None)
+        draw_air_reference(ax,self.cfg,self.nozzles,scan_angles=scan_angles)
+        draw_nozzle_markers(ax,self.cfg,self.nozzles,polar=True,outlines=True,labels=False)
+        label,unit=AIR_METRICS[metric]
+        if instantaneous:
+            stamp=self.quasi_result.settings.times[0]
+            scope=f'Мгновенный снимок второго проекта: шаг 0, t={stamp:g} с'
+        elif getattr(p,'is_composite',False):
+            scope='Составная карта второго проекта: разные времена по столбцам'
+        else:scope='Стационарное сечение второго проекта'
+        ax.set_title(f'{label} · z={p.z_mm:g} мм\n{scope}',fontsize=9,pad=16)
+        self.figure.colorbar(pc,ax=ax,pad=.14,shrink=.68,label=unit)
+        mixture=self.air_results.state(i,step=step)[1]
+        self.canvas._comparison_notice=scope+'. '+air_summary(p,mixture)
+        self.interaction.axes=[];self.interaction.original={};self._remember_chart();self.canvas.draw_idle()
+
     def _draw_field(self,i):
         p=self.planes[i];cfg=self.cfg;metric=self.owner.metric.currentData()
+        if metric in AIR_KEYS:self._draw_air_field(i);return
         if self.view.currentIndex()==1:
             ax=self.figure.add_subplot(111,projection='polar');n=cfg.n_angular
             theta=np.deg2rad(grid_angles(cfg,edges=True));th,r=np.meshgrid(theta,p.radial_edges_mm)
@@ -280,6 +359,7 @@ class ComparisonPanel(QWidget):
         # a warm z reuses the same axes instead of recreating the tick layout.
         if self._reuse_chart_canvas:
             self._reuse_chart_canvas=False;self.interaction.clear_artists();self.figure.clear()
+            if hasattr(self.canvas,'_comparison_notice'):del self.canvas._comparison_notice
         else:
             self.figure=Figure(figsize=(6,5),tight_layout=True);self.canvas=ResultCanvas(self.figure);self.canvas.setMinimumSize(160,0)
             self.interaction=attach_interaction(self.canvas);self.canvas_stack.addWidget(self.canvas)
@@ -299,11 +379,16 @@ class ComparisonPanel(QWidget):
             self.notice.setText('Исходные точки без сглаживания; единицы берутся из заголовков таблицы.')
         elif self.planes:
             p=self.planes[i];start=max(0,self.radius.currentIndex());metric=self.owner.metric.currentData()
-            values=cell_values(p,metric,self.cfg.density_kg_m3,self.owner.volume_interval.value())
+            try:p,values=self._project_values(i)
+            except (ValueError,TypeError,KeyError) as exc:
+                self._draw_unavailable(exc);return
             maximum=len(p.radial_centers_mm);display=plot_x(p.theta_centers_deg,self.owner.cfg,self.owner.x_axis.currentData());order=np.argsort(display)
             for radius in self.graph_selection.selected:
                 k=matching_index(p.radial_centers_mm,radius)
-                series.append((display[order],values[k,order],x_label(self.owner.cfg,self.owner.x_axis.currentData()),UNITS[metric],f'z={p.z_mm:g} мм; R={p.radial_centers_mm[k]:g} мм'))
+                series.append((display[order],values[k,order],x_label(self.owner.cfg,self.owner.x_axis.currentData()),metric_unit(metric),f'z={p.z_mm:g} мм; R={p.radial_centers_mm[k]:g} мм'))
+            if metric in AIR_KEYS:
+                mixture=self.air_results.state(i)[1]
+                self.canvas._comparison_notice='Данные второго проекта. '+air_summary(p,mixture)
         else:maximum=1
         self.plot_count.blockSignals(True);self.plot_count.setMaximum(maximum);self.plot_count.blockSignals(False)
         count=max(1,len(series));cols=min(count,self.plot_columns.value());rows=int(np.ceil(count/cols))
@@ -313,7 +398,7 @@ class ComparisonPanel(QWidget):
             ax.set_xlabel(textwrap.fill(xlabel,28),fontsize=8);ax.set_ylabel(textwrap.fill(ylabel,18),fontsize=8);ax.set_title(title,fontsize=9);ax.grid(alpha=.25);ax.tick_params(labelsize=7)
             ax._compare_x=tx_unit if self.tables else None
             if not self.tables or tx_unit in ('angle_deg','cell_index'):decorate_axes(ax,self.owner.cfg,self.owner.x_axis.currentData())
-            ax._compare_y=UNITS[metric] if not self.tables else ylabel[ylabel.find('[')+1:ylabel.find(']')] if '[' in ylabel and ']' in ylabel else ylabel
+            ax._compare_y=metric_unit(metric) if not self.tables else ylabel[ylabel.find('[')+1:ylabel.find(']')] if '[' in ylabel and ']' in ylabel else ylabel
             if self.tables and secondary in data:
                 other=ax.twinx();self._series(other,tx,data[secondary][table_order],headers[secondary],color='#ad4e21')
                 other._compare_x=ax._compare_x;other._compare_frame=getattr(ax,'_compare_frame',None);other._compare_y=headers[secondary][headers[secondary].find('[')+1:headers[secondary].find(']')] if '[' in headers[secondary] and ']' in headers[secondary] else headers[secondary]

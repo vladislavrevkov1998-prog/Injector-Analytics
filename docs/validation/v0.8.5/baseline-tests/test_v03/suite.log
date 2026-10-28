@@ -1,0 +1,31 @@
+test_all_conversions_and_no_mutation (test_v03.TestQuantities.test_all_conversions_and_no_mutation) ... ok
+test_external_csv_decimal_comma_and_invalid_data (test_v03.TestQuantities.test_external_csv_decimal_comma_and_invalid_data) ... ok
+test_indices_have_area_weighted_mean_one (test_v03.TestQuantities.test_indices_have_area_weighted_mean_one) ... ok
+test_invalid_parameters (test_v03.TestQuantities.test_invalid_parameters) ... ok
+test_matching_physical_values (test_v03.TestQuantities.test_matching_physical_values) ... ok
+test_xlsx_four_sheets_all_levels_values_coordinates_metadata (test_v03.TestQuantities.test_xlsx_four_sheets_all_levels_values_coordinates_metadata) ... ok
+test_xlsx_nondefault_radial_grid (test_v03.TestQuantities.test_xlsx_nondefault_radial_grid) ... ok
+test_zero_mean_is_undefined_not_zero (test_v03.TestQuantities.test_zero_mean_is_undefined_not_zero) ... ok
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_actual_header_mouse_click_opens_unit_menu (test_v03.TestV03Qt.test_actual_header_mouse_click_opens_unit_menu) ... This plugin does not support propagateSizeHints()
+This plugin does not support raise()
+This plugin does not support grabbing the keyboard
+This plugin does not support raise()
+This plugin does not support grabbing the keyboard
+ok
+test_bad_table_does_not_discard_previous_data (test_v03.TestV03Qt.test_bad_table_does_not_discard_previous_data) ... ok
+test_catalog_rename_and_duplicate_names_preserve_ids (test_v03.TestV03Qt.test_catalog_rename_and_duplicate_names_preserve_ids) ... ok
+test_name_assignment_keeps_reference_canonical (test_v03.TestV03Qt.test_name_assignment_keeps_reference_canonical) ... ok
+test_readonly_lavender_and_localized_names_preserve_ids (test_v03.TestV03Qt.test_readonly_lavender_and_localized_names_preserve_ids) ... ok
+test_real_background_json_comparison_and_mismatch (test_v03.TestV03Qt.test_real_background_json_comparison_and_mismatch) ... ok
+test_representations_keep_physics_and_cache_valid (test_v03.TestV03Qt.test_representations_keep_physics_and_cache_valid) ... ok
+test_settings_is_window_and_reopens_without_tabs (test_v03.TestV03Qt.test_settings_is_window_and_reopens_without_tabs) ... This plugin does not support propagateSizeHints()
+This plugin does not support raise()
+This plugin does not support raise()
+ok
+test_table_two_y_axes_and_chart_types (test_v03.TestV03Qt.test_table_two_y_axes_and_chart_types) ... ok
+
+----------------------------------------------------------------------
+Ran 17 tests in 41.575s
+
+OK

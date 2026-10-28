@@ -19,14 +19,16 @@ ROOT = Path(__file__).resolve().parents[1]
 SMOKE = r'''
 import json
 import sys
+import time
 sys.path.insert(0, 'src')
 import numpy as np
 from PyQt5.QtCore import QUrl
+from PyQt5.QtTest import QTest
 from PyQt5.QtWidgets import QApplication, QTextBrowser
 from fuelfield.gui import MainWindow
 from fuelfield.help_text import read_help
 from fuelfield.runtime_help import HELP, IMAGES
-from fuelfield.core import Settings, default_nozzles, calculate_plane
+from fuelfield.core import Settings, default_nozzles, calculate_plane, project_to_json
 from fuelfield.mixture_field import compute_mixture
 app = QApplication([])
 w = MainWindow(); w.show(); app.processEvents()
@@ -43,6 +45,7 @@ assert 'Инструкция отсутствует' not in browser.toPlainText(
 assert len(browser.toPlainText()) > 2000
 w.air_dialog.guide_dialog.close(); w.air_dialog.close()
 cfg = Settings(n_radial=6, n_angular=16, z_mm=[20.])
+cfg.preview_resolution = 200
 ns = default_nozzles(cfg)
 for n in ns:
     n.flow_kg_h = 360. / 140
@@ -59,11 +62,35 @@ np.testing.assert_allclose(mixture.air_total_kg_s.sum(), 2., rtol=1e-12)
 np.testing.assert_allclose(mixture.air_mixed_kg_s.sum(), .5, rtol=1e-12)
 np.testing.assert_allclose(mixture.alpha_section_total, 2./(2.*fuel.sum()), rtol=1e-12)
 np.testing.assert_allclose(mixture.alpha_section_mixed, .5/(2.*fuel.sum()), rtol=1e-12)
+# Exercise the new workflow from this restored copy, including its actual
+# background worker and common circular matrix; never import the source tree.
+errors = []
+w._error = errors.append
+w.apply_project_state(project_to_json(cfg, ns), 'SYNTHETIC portable acceptance')
+w.run_calc()
+deadline = time.monotonic() + 60
+while w.thread is not None and time.monotonic() < deadline:
+    QTest.qWait(10)
+assert w.thread is None and not errors, errors
+assert w.air_results is not None and len(w.results) == 1
+assert not hasattr(w, 'air_results_button')
+state_before = project_to_json(w.cfg, w.nozzles)
+fuel_before = w.results[0].cell_mass_kg_s.copy()
+w.tabs.setCurrentIndex(3)
+w.metric.setCurrentIndex(w.metric.findData('alpha_total'))
+assert set(w.theme_actions) == {'light', 'light_green', 'dark'}
+for theme in w.theme_actions:
+    w.set_theme(theme); app.processEvents()
+    assert project_to_json(w.cfg, w.nozzles) == state_before
+    np.testing.assert_array_equal(w.results[0].cell_mass_kg_s, fuel_before)
+assert w.figmap.axes[0].name == 'polar'
+assert w.geometry_editor.mode_selector.findData('air') >= 0
 w.close(); app.processEvents()
 print('PORTABLE_V08_OK ' + json.dumps(dict(embedded_guides=len(HELP),
     embedded_images=len(IMAGES), fuel_kg_s=float(fuel.sum()),
     air_kg_s=float(mixture.air_total_kg_s.sum()),
-    alpha_total=float(mixture.alpha_section_total))))
+    alpha_total=float(mixture.alpha_section_total),
+    joint_f5=True, circular_alpha=True, themes=3)))
 '''
 
 
