@@ -29,7 +29,7 @@ def finite(value, label, minimum=None, maximum=None):
     return value
 
 
-def normalize_source(raw):
+def normalize_source(raw, *, validate_required=True):
     if not isinstance(raw, dict):
         raise ValueError('Воздушный источник должен быть объектом JSON')
     source = dict(id='', kind='other', enabled=True, group='', method='unknown',
@@ -79,7 +79,11 @@ def normalize_source(raw):
         raise ValueError(identity + ': нулевой направляющий вектор')
     scaled = vector/scale
     source['direction'] = (scaled / np.linalg.norm(scaled)).tolist()
-    if source['enabled']:
+    if source.get('template_mode', 'manual') not in ('manual', 'inherit'):
+        raise ValueError(identity + ': режим параметров manual или inherit')
+    if not isinstance(source.get('air_overrides', []), list) or not all(isinstance(k, str) for k in source.get('air_overrides', [])):
+        raise ValueError(identity + ': air_overrides должен быть списком имён параметров')
+    if source['enabled'] and validate_required:
         if source['method'] == 'fixed' and source['flow_kg_s'] is None:
             raise ValueError(identity + ': фиксированный расход не задан')
         if source['method'] in ('area', 'effective_area') and (source['area_mm2'] is None or source['area_mm2'] <= 0):
@@ -155,7 +159,8 @@ def validate_air_model(raw):
         raise ValueError('Распределение воздуха: directed или uniform')
     if not isinstance(model['sources'], list):
         raise ValueError('Реестр воздуха должен быть списком')
-    model['sources'] = [normalize_source(source) for source in model['sources']]
+    model['sources'] = [normalize_source(source, validate_required=source.get('template_mode', 'manual') != 'inherit')
+                        if isinstance(source, dict) else normalize_source(source) for source in model['sources']]
     ids = [s['id'] for s in model['sources']]
     if len(ids) != len(set(ids)):
         raise ValueError('Повторный ID воздушного источника')
@@ -170,7 +175,8 @@ def resolve_sources(raw, cfg, nozzles):
     """Resolve coordinates, never duplicate a geometry nozzle as a fuel source."""
     from .chamber import chamber
     from .v02 import effective_nozzle
-    model = validate_air_model(raw)
+    from .air_templates import effective_air_model
+    model = effective_air_model(raw, cfg, nozzles)
     geometry = chamber(cfg)
     lookup = {n.id: n for n in nozzles}
     objects = {obj['id']: obj for obj in geometry.objects} if geometry else {}
