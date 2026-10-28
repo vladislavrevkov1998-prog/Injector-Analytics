@@ -1,0 +1,19 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_all_choice_columns_open_real_comboboxes (test_v085_air_table.TestAirTable.test_all_choice_columns_open_real_comboboxes) ... This plugin does not support propagateSizeHints()
+ok
+test_fixed_flow_and_linked_coordinates_cannot_be_overwritten_by_paste (test_v085_air_table.TestAirTable.test_fixed_flow_and_linked_coordinates_cannot_be_overwritten_by_paste) ... This plugin does not support propagateSizeHints()
+ok
+test_inherited_display_edit_creates_only_one_override_and_reset_clears_it (test_v085_air_table.TestAirTable.test_inherited_display_edit_creates_only_one_override_and_reset_clears_it) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_invalid_multirow_paste_rolls_back_every_target (test_v085_air_table.TestAirTable.test_invalid_multirow_paste_rolls_back_every_target) ... This plugin does not support propagateSizeHints()
+ok
+test_reset_template_preserves_protected_manual_flow (test_v085_air_table.TestAirTable.test_reset_template_preserves_protected_manual_flow) ... This plugin does not support propagateSizeHints()
+ok
+test_scalar_paste_fills_multiple_cells_and_tsv_copy_uses_native_keys (test_v085_air_table.TestAirTable.test_scalar_paste_fills_multiple_cells_and_tsv_copy_uses_native_keys) ... This plugin does not support propagateSizeHints()
+ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 1.862s
+
+OK

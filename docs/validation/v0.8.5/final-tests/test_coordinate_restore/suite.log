@@ -1,0 +1,26 @@
+test_140_cells_and_legacy_defaults_and_json_roundtrip (test_coordinate_restore.TestCoordinateMath.test_140_cells_and_legacy_defaults_and_json_roundtrip) ... ok
+test_frame_permutation_preserves_physical_field_and_mass (test_coordinate_restore.TestCoordinateMath.test_frame_permutation_preserves_physical_field_and_mass) ... ok
+test_invalid_frame_is_rejected (test_coordinate_restore.TestCoordinateMath.test_invalid_frame_is_rejected) ... ok
+test_quasi_columns_follow_measurement_frame_at_each_timestamp (test_coordinate_restore.TestCoordinateMath.test_quasi_columns_follow_measurement_frame_at_each_timestamp) ... ok
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_cells_change_x_only_and_split_uses_same_coordinates_and_link (test_coordinate_restore.TestCoordinateUI.test_cells_change_x_only_and_split_uses_same_coordinates_and_link) ... This plugin does not support propagateSizeHints()
+ok
+test_collector_precedes_atomizer_and_real_header_menu_still_opens (test_coordinate_restore.TestCoordinateUI.test_collector_precedes_atomizer_and_real_header_menu_still_opens) ... This plugin does not support propagateSizeHints()
+This plugin does not support raise()
+This plugin does not support grabbing the keyboard
+This plugin does not support raise()
+This plugin does not support grabbing the keyboard
+ok
+test_decimal_typing_locales_padding_and_significant_digits (test_coordinate_restore.TestCoordinateUI.test_decimal_typing_locales_padding_and_significant_digits) ... This plugin does not support propagateSizeHints()
+ok
+test_external_angle_and_cell_tables_and_nonangular_x (test_coordinate_restore.TestCoordinateUI.test_external_angle_and_cell_tables_and_nonangular_x) ... This plugin does not support propagateSizeHints()
+ok
+test_frame_controls_keep_global_positions_and_edit_local_angles (test_coordinate_restore.TestCoordinateUI.test_frame_controls_keep_global_positions_and_edit_local_angles) ... This plugin does not support propagateSizeHints()
+ok
+test_table_editor_preserves_original_precision_and_accepts_fraction (test_coordinate_restore.TestCoordinateUI.test_table_editor_preserves_original_precision_and_accepts_fraction) ... This plugin does not support propagateSizeHints()
+ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 24.272s
+
+OK
