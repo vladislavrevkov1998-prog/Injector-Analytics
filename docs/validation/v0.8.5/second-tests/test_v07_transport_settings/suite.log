@@ -1,0 +1,31 @@
+test_decimal_comma_exponent_and_physical_boundaries (test_v07_transport_settings.TestTransportSettings.test_decimal_comma_exponent_and_physical_boundaries) ... ok
+test_integer_numerics_and_unsupported_modes_are_rejected (test_v07_transport_settings.TestTransportSettings.test_integer_numerics_and_unsupported_modes_are_rejected) ... ok
+test_project_schema3_roundtrip_and_legacy_schema2_preserve_unknowns (test_v07_transport_settings.TestTransportSettings.test_project_schema3_roundtrip_and_legacy_schema2_preserve_unknowns) ... ok
+test_schema_does_not_silently_enable_or_downgrade_the_new_model (test_v07_transport_settings.TestTransportSettings.test_schema_does_not_silently_enable_or_downgrade_the_new_model) ... ok
+test_transport_unknown_fields_survive_without_mutable_aliases (test_v07_transport_settings.TestTransportSettings.test_transport_unknown_fields_survive_without_mutable_aliases) ... ok
+test_unknown_values_are_never_filled_with_guesses (test_v07_transport_settings.TestTransportSettings.test_unknown_values_are_never_filled_with_guesses) ... ok
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_free_numeric_entry_preserves_precision_and_supports_full_uint32_seed (test_v07_transport_settings.TestTransportSettingsUI.test_free_numeric_entry_preserves_precision_and_supports_full_uint32_seed) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_menu_and_tab02_settings_open_the_same_dialog (test_v07_transport_settings.TestTransportSettingsUI.test_menu_and_tab02_settings_open_the_same_dialog) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support raise()
+This plugin does not support raise()
+ok
+test_missing_parameters_block_apply_and_close_leaves_project_unchanged (test_v07_transport_settings.TestTransportSettingsUI.test_missing_parameters_block_apply_and_close_leaves_project_unchanged) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_project_reload_closes_stale_transport_draft (test_v07_transport_settings.TestTransportSettingsUI.test_project_reload_closes_stale_transport_draft) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_synthetic_draft_apply_is_one_undo_and_preserves_unrelated_edits (test_v07_transport_settings.TestTransportSettingsUI.test_synthetic_draft_apply_is_one_undo_and_preserves_unrelated_edits) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 10.896s
+
+OK

@@ -1,0 +1,25 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_explicit_synthetic_settings_apply_then_native_f5_worker (test_v07_ui.TestV07NativeUI.test_explicit_synthetic_settings_apply_then_native_f5_worker) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_native_split_json_worker_exposes_matrix_and_field (test_v07_ui.TestV07NativeUI.test_native_split_json_worker_exposes_matrix_and_field) ... This plugin does not support propagateSizeHints()
+ok
+test_quasi_slider_changes_native_pixels_and_preserves_composite_matrix (test_v07_ui.TestV07NativeUI.test_quasi_slider_changes_native_pixels_and_preserves_composite_matrix) ... This plugin does not support propagateSizeHints()
+FAIL
+test_total_flux_and_phase_accounting_are_visible_without_legacy_loss_claim (test_v07_ui.TestV07NativeUI.test_total_flux_and_phase_accounting_are_visible_without_legacy_loss_claim) ... This plugin does not support propagateSizeHints()
+ok
+test_warm_new_model_views_reuse_real_canvases_without_input_changes (test_v07_ui.TestV07NativeUI.test_warm_new_model_views_reuse_real_canvases_without_input_changes) ... This plugin does not support propagateSizeHints()
+ok
+
+======================================================================
+FAIL: test_quasi_slider_changes_native_pixels_and_preserves_composite_matrix (test_v07_ui.TestV07NativeUI.test_quasi_slider_changes_native_pixels_and_preserves_composite_matrix)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Injector-Analytics/tests/test_v07_ui.py", line 232, in test_quasi_slider_changes_native_pixels_and_preserves_composite_matrix
+    self.assertGreater(int(changed.sum()), 100)
+AssertionError: 75 not greater than 100
+
+----------------------------------------------------------------------
+Ran 5 tests in 41.949s
+
+FAILED (failures=1)

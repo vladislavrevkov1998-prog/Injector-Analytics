@@ -1,0 +1,20 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_delete_later_with_active_drag_does_not_paint_deleted_widget (test_v08_lifecycle.TestCanvasLifecycle.test_delete_later_with_active_drag_does_not_paint_deleted_widget) ... ok
+test_hide_cancels_only_preview_without_any_render_operation (test_v08_lifecycle.TestCanvasLifecycle.test_hide_cancels_only_preview_without_any_render_operation) ... ok
+test_repeated_render_close_and_deferred_theme_callbacks_are_safe (test_v08_lifecycle.TestCanvasLifecycle.test_repeated_render_close_and_deferred_theme_callbacks_are_safe) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_table_rebuilds_and_deletion_keep_theme_out_of_edit_signals (test_v08_lifecycle.TestCanvasLifecycle.test_table_rebuilds_and_deletion_keep_theme_out_of_edit_signals) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 28.222s
+
+OK

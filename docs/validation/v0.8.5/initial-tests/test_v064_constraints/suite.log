@@ -1,0 +1,9 @@
+test_both_outer_line_tangencies_survive_adding_arc_arc (test_v064_constraints.TestBiarcConstrainedPair.test_both_outer_line_tangencies_survive_adding_arc_arc) ... ok
+test_extra_coincident_curve_follows_the_refitted_join (test_v064_constraints.TestBiarcConstrainedPair.test_extra_coincident_curve_follows_the_refitted_join) ... ok
+test_fixed_join_and_fixed_arc_are_not_moved_to_force_tangency (test_v064_constraints.TestBiarcConstrainedPair.test_fixed_join_and_fixed_arc_are_not_moved_to_force_tangency) ... ok
+test_pair_solution_is_invariant_under_small_rotation_scale_and_translation (test_v064_constraints.TestBiarcConstrainedPair.test_pair_solution_is_invariant_under_small_rotation_scale_and_translation) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.804s
+
+OK

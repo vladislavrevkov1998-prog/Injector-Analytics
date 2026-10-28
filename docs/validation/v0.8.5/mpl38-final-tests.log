@@ -1,0 +1,94 @@
+test_air_error_never_emits_partial_completed_fuel (test_v085_unified_results.TestJointCalculation.test_air_error_never_emits_partial_completed_fuel) ... ok
+test_cancelled_air_build_and_disabled_model_do_not_trace (test_v085_unified_results.TestJointCalculation.test_cancelled_air_build_and_disabled_model_do_not_trace) ... ok
+test_quasi_snapshot_alpha_uses_real_pressure_time_and_composite_columns (test_v085_unified_results.TestJointCalculation.test_quasi_snapshot_alpha_uses_real_pressure_time_and_composite_columns) ... ok
+test_stationary_worker_emits_both_fields_with_one_mode (test_v085_unified_results.TestJointCalculation.test_stationary_worker_emits_both_fields_with_one_mode) ... ok
+test_unsorted_source_cache_keeps_spatial_fields_and_refreshed_metadata (test_v085_unified_results.TestJointCalculation.test_unsorted_source_cache_keeps_spatial_fields_and_refreshed_metadata) ... ok
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_air_mode_freeze_survives_other_tabs_and_direct_geometry_edits (test_v085_unified_results.TestUnifiedResultsUI.test_air_mode_freeze_survives_other_tabs_and_direct_geometry_edits) ... This plugin does not support propagateSizeHints()
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_fontconfig_pattern.py:88: PyparsingDeprecationWarning: 'parseString' deprecated - use 'parse_string'
+  parse = parser.parseString(pattern)
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_fontconfig_pattern.py:92: PyparsingDeprecationWarning: 'resetCache' deprecated - use 'reset_cache'
+  parser.resetCache()
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_mathtext.py:2010: PyparsingDeprecationWarning: 'oneOf' deprecated - use 'one_of'
+  p.space          = oneOf(self._space_widths)("space")
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_mathtext.py:2012: PyparsingDeprecationWarning: 'oneOf' deprecated - use 'one_of'
+  p.style_literal  = oneOf(
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_mathtext.py:2020: PyparsingDeprecationWarning: 'leaveWhitespace' deprecated - use 'leave_whitespace'
+  )("sym").leaveWhitespace()
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_mathtext.py:2024: PyparsingDeprecationWarning: 'oneOf' deprecated - use 'one_of'
+  p.start_group    = Optional(r"\math" + oneOf(self._fontnames)("font")) + "{"
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_mathtext.py:2027: PyparsingDeprecationWarning: 'oneOf' deprecated - use 'one_of'
+  p.delim          = oneOf(self._delims)
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_mathtext.py:1984: PyparsingDeprecationWarning: 'setName' deprecated - use 'set_name'
+  val.setName(key)
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_mathtext.py:1987: PyparsingDeprecationWarning: 'setParseAction' deprecated - use 'set_parse_action'
+  val.setParseAction(getattr(self, key))
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_mathtext.py:1748: PyparsingDeprecationWarning: 'setParseAction' deprecated - use 'set_parse_action'
+  return Empty().setParseAction(raise_error)
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_mathtext.py:2080: PyparsingDeprecationWarning: 'endQuoteChar' argument is deprecated, use 'end_quote_char'
+  p.text = cmd(r"\text", QuotedString('{', '\\', endQuoteChar="}"))
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_mathtext.py:2089: PyparsingDeprecationWarning: 'oneOf' deprecated - use 'one_of'
+  + OneOrMore(oneOf(["_", "^"]) - p.placeable)("subsuper")
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_mathtext.py:2138: PyparsingDeprecationWarning: 'unquoteResults' argument is deprecated, use 'unquote_results'
+  p.math_string   = QuotedString('$', '\\', unquoteResults=False)
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_mathtext.py:2139: PyparsingDeprecationWarning: 'leaveWhitespace' deprecated - use 'leave_whitespace'
+  p.non_math      = Regex(r"(?:(?:\\[$])|[^$])*").leaveWhitespace()
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_mathtext.py:2162: PyparsingDeprecationWarning: 'parseString' deprecated - use 'parse_string'
+  result = self._expression.parseString(s)
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_mathtext.py:2189: PyparsingDeprecationWarning: 'parseString' deprecated - use 'parse_string'
+  return self._math_expression.parseString(toks[0][1:-1], parseAll=True)
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/pyparsing/util.py:466: PyparsingDeprecationWarning: 'parseAll' argument is deprecated, use 'parse_all'
+  return fn(self, *args, **kwargs)
+/workspace/.venvs/injector-v08-mpl38/lib/python3.12/site-packages/matplotlib/_mathtext.py:2170: PyparsingDeprecationWarning: 'resetCache' deprecated - use 'reset_cache'
+  ParserElement.resetCache()
+This plugin does not support propagateSizeHints()
+ok
+test_air_only_edit_preserves_fuel_but_requires_joint_f5_and_exports_actual_time (test_v085_unified_results.TestUnifiedResultsUI.test_air_only_edit_preserves_fuel_but_requires_joint_f5_and_exports_actual_time) ... This plugin does not support propagateSizeHints()
+ok
+test_air_template_edit_keeps_completed_fuel_and_invalidates_only_air (test_v085_unified_results.TestUnifiedResultsUI.test_air_template_edit_keeps_completed_fuel_and_invalidates_only_air) ... This plugin does not support propagateSizeHints()
+ok
+test_common_metric_has_circular_alpha_no_extra_window_and_true_geometry (test_v085_unified_results.TestUnifiedResultsUI.test_common_metric_has_circular_alpha_no_extra_window_and_true_geometry) ... This plugin does not support propagateSizeHints()
+ok
+test_existing_time_slider_changes_alpha_pixels_and_keeps_composite (test_v085_unified_results.TestUnifiedResultsUI.test_existing_time_slider_changes_alpha_pixels_and_keeps_composite) ... This plugin does not support propagateSizeHints()
+ok
+test_air_missing_in_loaded_project_never_falls_back_to_fuel (test_v085_air_comparison.TestAirComparison.test_air_missing_in_loaded_project_never_falls_back_to_fuel) ... ok
+test_alpha_epures_use_secondary_mass_and_l0_instead_of_primary_data (test_v085_air_comparison.TestAirComparison.test_alpha_epures_use_secondary_mass_and_l0_instead_of_primary_data) ... ok
+test_invalid_air_budget_does_not_emit_a_partial_fuel_only_project (test_v085_air_comparison.TestAirComparison.test_invalid_air_budget_does_not_emit_a_partial_fuel_only_project) ... ok
+test_quasi_polar_snapshot_uses_own_step_zero_and_real_comb_angles (test_v085_air_comparison.TestAirComparison.test_quasi_polar_snapshot_uses_own_step_zero_and_real_comb_angles) ... ok
+test_quasi_worker_emits_air_with_composite_and_real_snapshot_semantics (test_v085_air_comparison.TestAirComparison.test_quasi_worker_emits_air_with_composite_and_real_snapshot_semantics) ... ok
+test_replacing_only_air_results_cannot_reuse_the_previous_alpha_chart (test_v085_air_comparison.TestAirComparison.test_replacing_only_air_results_cannot_reuse_the_previous_alpha_chart) ... ok
+test_worker_computes_own_air_before_emitting_the_completed_project (test_v085_air_comparison.TestAirComparison.test_worker_computes_own_air_before_emitting_the_completed_project) ... ok
+test_actual_air_kernel_exports_exclude_films_and_preserve_flow (test_v08_results.TestAirReports.test_actual_air_kernel_exports_exclude_films_and_preserve_flow) ... ok
+test_csv_keeps_nan_mask_phases_units_provenance_and_cell_sum (test_v08_results.TestAirReports.test_csv_keeps_nan_mask_phases_units_provenance_and_cell_sum) ... ok
+test_different_z_cannot_be_paired_even_on_the_same_grid (test_v08_results.TestAirReports.test_different_z_cannot_be_paired_even_on_the_same_grid) ... ok
+test_invalid_result_grid_is_rejected (test_v08_results.TestAirReports.test_invalid_result_grid_is_rejected) ... ok
+test_large_source_registry_metadata_is_chunked_for_excel (test_v08_results.TestAirReports.test_large_source_registry_metadata_is_chunked_for_excel) ... ok
+test_reverse_air_is_exported_separately_from_positive_air (test_v08_results.TestAirReports.test_reverse_air_is_exported_separately_from_positive_air) ... ok
+test_xlsx_masks_and_composite_global_ratios_are_blank (test_v08_results.TestAirReports.test_xlsx_masks_and_composite_global_ratios_are_blank) ... ok
+test_hidden_diagnostics_are_deferred_and_reveal_latest_real_timestamp (test_v08_results.TestAirResultView.test_hidden_diagnostics_are_deferred_and_reveal_latest_real_timestamp) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_real_qt_selector_and_quasi_snapshot_do_not_recalculate_fuel (test_v08_results.TestAirResultView.test_real_qt_selector_and_quasi_snapshot_do_not_recalculate_fuel) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_time_updates_reuse_mesh_and_show_new_values_and_pixels (test_v08_results.TestAirResultView.test_time_updates_reuse_mesh_and_show_new_values_and_pixels) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_disabled_stale_links_and_overbudget_draft_remain_saveable (test_v08_migrations.TestAirDraftPersistenceUI.test_disabled_stale_links_and_overbudget_draft_remain_saveable) ... ok
+test_noop_editor_apply_preserves_full_valid_interaction_range (test_v08_migrations.TestAirDraftPersistenceUI.test_noop_editor_apply_preserves_full_valid_interaction_range) ... ok
+test_noop_editor_apply_preserves_values_below_display_precision (test_v08_migrations.TestAirDraftPersistenceUI.test_noop_editor_apply_preserves_values_below_display_precision) ... ok
+test_archived_user_project_load_does_not_activate_air_or_rewrite_sources (test_v08_migrations.TestAirPersistence.test_archived_user_project_load_does_not_activate_air_or_rewrite_sources) ... ok
+test_direct_settings_constructor_does_not_share_mutable_air_input (test_v08_migrations.TestAirPersistence.test_direct_settings_constructor_does_not_share_mutable_air_input) ... ok
+test_disabled_air_metadata_cannot_change_fuel_matrix (test_v08_migrations.TestAirPersistence.test_disabled_air_metadata_cannot_change_fuel_matrix) ... ok
+test_disabled_air_roundtrip_preserves_nested_unknowns_without_aliases (test_v08_migrations.TestAirPersistence.test_disabled_air_roundtrip_preserves_nested_unknowns_without_aliases) ... ok
+test_enabled_air_uses_own_version_without_changing_fuel_schema (test_v08_migrations.TestAirPersistence.test_enabled_air_uses_own_version_without_changing_fuel_schema) ... ok
+test_invalid_air_records_are_diagnosed_without_mutating_input (test_v08_migrations.TestAirPersistence.test_invalid_air_records_are_diagnosed_without_mutating_input) ... ok
+test_schema_1_2_3_without_air_never_enable_air_or_change_fuel_values (test_v08_migrations.TestAirPersistence.test_schema_1_2_3_without_air_never_enable_air_or_change_fuel_values) ... ok
+
+----------------------------------------------------------------------
+Ran 37 tests in 70.309s
+
+OK

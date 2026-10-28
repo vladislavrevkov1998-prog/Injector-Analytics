@@ -1,0 +1,18 @@
+test_absolute_and_gauge_and_units_use_physical_delta (test_quasi.TestQuasi.test_absolute_and_gauge_and_units_use_physical_delta) ... ok
+test_clockwise_nonzero_start_maps_columns_without_reversing_nozzles (test_quasi.TestQuasi.test_clockwise_nonzero_start_maps_columns_without_reversing_nozzles) ... ok
+test_columns_use_own_time_and_all_sources_from_both_collectors (test_quasi.TestQuasi.test_columns_use_own_time_and_all_sources_from_both_collectors) ... ok
+test_constant_matches_v041_all_sections_cells_and_detailed_field (test_quasi.TestQuasi.test_constant_matches_v041_all_sections_cells_and_detailed_field) ... ok
+test_curve_is_absolute_once_even_if_reference_zero (test_quasi.TestQuasi.test_curve_is_absolute_once_even_if_reference_zero) ... ok
+test_disabled_and_before_tip_sources_not_in_snapshot_balance (test_quasi.TestQuasi.test_disabled_and_before_tip_sources_not_in_snapshot_balance) ... ok
+test_invalid_fixed_protocol_and_missing_manifold_are_rejected (test_quasi.TestQuasi.test_invalid_fixed_protocol_and_missing_manifold_are_rejected) ... ok
+test_legacy_json_default_stationary_and_unknowns_survive (test_quasi.TestQuasi.test_legacy_json_default_stationary_and_unknowns_survive) ... ok
+test_manual_and_sector_references_and_explicit_efficiency (test_quasi.TestQuasi.test_manual_and_sector_references_and_explicit_efficiency) ... ok
+test_no_hidden_curve_law_or_extrapolation (test_quasi.TestQuasi.test_no_hidden_curve_law_or_extrapolation) ... ok
+test_no_time_averaging_or_average_pressure_substitution (test_quasi.TestQuasi.test_no_time_averaging_or_average_pressure_substitution) ... ok
+test_nozzle_order_fixed_ids_and_cancel_and_input_immutability (test_quasi.TestQuasi.test_nozzle_order_fixed_ids_and_cancel_and_input_immutability) ... ok
+test_one_four_seven_axial_sections_match_constant_stationary_reference (test_quasi.TestQuasi.test_one_four_seven_axial_sections_match_constant_stationary_reference) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 1.069s
+
+OK

@@ -1,0 +1,6 @@
+test_dark_preference_survives_a_real_process_restart_without_legacy_activation (test_v08_theme_restart.TestThemeRestart.test_dark_preference_survives_a_real_process_restart_without_legacy_activation) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 10.774s
+
+OK

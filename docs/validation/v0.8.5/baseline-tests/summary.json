@@ -1,0 +1,497 @@
+{
+  "status": "PASS",
+  "method": "Complete discovery; fresh subprocess per module",
+  "jobs": 2,
+  "expected_tests": 633,
+  "tests": 633,
+  "skipped": 0,
+  "wall_seconds": 760.9181612289976,
+  "modules": [
+    {
+      "module": "test_chamber_math",
+      "expected": 33,
+      "tests": 33,
+      "seconds": 1.333,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_characteristics",
+      "expected": 12,
+      "tests": 12,
+      "seconds": 0.002,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_coordinate_restore",
+      "expected": 10,
+      "tests": 10,
+      "seconds": 13.252,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_core",
+      "expected": 15,
+      "tests": 15,
+      "seconds": 2.377,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_dityakin",
+      "expected": 13,
+      "tests": 13,
+      "seconds": 6.846,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_gui_callback",
+      "expected": 1,
+      "tests": 1,
+      "seconds": 0.05,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_quasi",
+      "expected": 13,
+      "tests": 13,
+      "seconds": 1.633,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_quasi_gui",
+      "expected": 18,
+      "tests": 18,
+      "seconds": 72.649,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_quasi_io",
+      "expected": 5,
+      "tests": 5,
+      "seconds": 0.48,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v013",
+      "expected": 24,
+      "tests": 24,
+      "seconds": 40.566,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v02",
+      "expected": 28,
+      "tests": 28,
+      "seconds": 26.386,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v021_user",
+      "expected": 13,
+      "tests": 13,
+      "seconds": 72.702,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v03",
+      "expected": 17,
+      "tests": 17,
+      "seconds": 41.575,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v031",
+      "expected": 19,
+      "tests": 19,
+      "seconds": 44.379,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v04",
+      "expected": 19,
+      "tests": 19,
+      "seconds": 66.093,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v041",
+      "expected": 13,
+      "tests": 13,
+      "seconds": 74.118,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v04_geometry",
+      "expected": 7,
+      "tests": 7,
+      "seconds": 5.661,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v061_drag",
+      "expected": 10,
+      "tests": 10,
+      "seconds": 37.257,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v061_geometry_math",
+      "expected": 12,
+      "tests": 12,
+      "seconds": 0.272,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v061_import_sections",
+      "expected": 13,
+      "tests": 13,
+      "seconds": 40.85,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v061_txt",
+      "expected": 3,
+      "tests": 3,
+      "seconds": 11.756,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v062_constraints_io",
+      "expected": 9,
+      "tests": 9,
+      "seconds": 16.708,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v062_constraints_math",
+      "expected": 26,
+      "tests": 26,
+      "seconds": 1.612,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v062_result_latency",
+      "expected": 9,
+      "tests": 9,
+      "seconds": 88.321,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v062_sections",
+      "expected": 10,
+      "tests": 10,
+      "seconds": 0.886,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v062_sketcher",
+      "expected": 10,
+      "tests": 10,
+      "seconds": 15.065,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v063_constraints_math",
+      "expected": 13,
+      "tests": 13,
+      "seconds": 0.405,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v063_draft_history",
+      "expected": 12,
+      "tests": 12,
+      "seconds": 25.619,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v063_sections",
+      "expected": 6,
+      "tests": 6,
+      "seconds": 0.236,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v063_sketcher",
+      "expected": 7,
+      "tests": 7,
+      "seconds": 20.252,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v064_constraints",
+      "expected": 4,
+      "tests": 4,
+      "seconds": 0.966,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v064_labels_groups",
+      "expected": 2,
+      "tests": 2,
+      "seconds": 11.622,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v064_sketcher_gestures",
+      "expected": 2,
+      "tests": 2,
+      "seconds": 8.786,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v06_exports",
+      "expected": 4,
+      "tests": 4,
+      "seconds": 18.031,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v06_gui",
+      "expected": 21,
+      "tests": 21,
+      "seconds": 148.38,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v06_migrations",
+      "expected": 20,
+      "tests": 20,
+      "seconds": 44.434,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v07_carrier",
+      "expected": 12,
+      "tests": 12,
+      "seconds": 0.249,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v07_contacts",
+      "expected": 23,
+      "tests": 23,
+      "seconds": 0.591,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v07_core",
+      "expected": 11,
+      "tests": 11,
+      "seconds": 0.892,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v07_exports",
+      "expected": 6,
+      "tests": 6,
+      "seconds": 0.391,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v07_quasi",
+      "expected": 9,
+      "tests": 9,
+      "seconds": 4.135,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v07_transport",
+      "expected": 17,
+      "tests": 17,
+      "seconds": 63.973,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v07_transport_settings",
+      "expected": 11,
+      "tests": 11,
+      "seconds": 31.191,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v07_ui",
+      "expected": 5,
+      "tests": 5,
+      "seconds": 140.498,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v08_air",
+      "expected": 23,
+      "tests": 23,
+      "seconds": 1.544,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v08_air_editor",
+      "expected": 8,
+      "tests": 8,
+      "seconds": 3.861,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v08_examples",
+      "expected": 2,
+      "tests": 2,
+      "seconds": 1.083,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v08_independent_math",
+      "expected": 15,
+      "tests": 15,
+      "seconds": 0.786,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v08_lifecycle",
+      "expected": 4,
+      "tests": 4,
+      "seconds": 28.222,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v08_migrations",
+      "expected": 10,
+      "tests": 10,
+      "seconds": 0.589,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v08_numeric_limits",
+      "expected": 5,
+      "tests": 5,
+      "seconds": 0.002,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v08_results",
+      "expected": 10,
+      "tests": 10,
+      "seconds": 2.862,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v08_theme_restart",
+      "expected": 1,
+      "tests": 1,
+      "seconds": 10.774,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    {
+      "module": "test_v08_ui",
+      "expected": 8,
+      "tests": 8,
+      "seconds": 83.384,
+      "exit_code": 0,
+      "skipped": 0,
+      "status": "PASS"
+    }
+  ]
+}

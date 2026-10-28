@@ -1,0 +1,15 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+COMPOSITE_SCOPE {'composite_different_times_no_global_balance'}
+COMPOSITE_TIMES [5.0, 5.25, 5.5, 5.75, 6.0, 6.25, 6.5, 6.75] EXPECTED [5.0, 5.25, 5.5, 5.75, 6.0, 6.25, 6.5, 6.75]
+COMPOSITE_PRESSURES 8
+COMPOSITE_SECTION_ALPHA ['', '']
+AIR_ONLY_TEMPLATE True True True
+FUEL_UNCHANGED True
+FROZEN_01 True 305.0 False
+AFTER_UNDO_01 305.0 True
+UNDO_ENABLED_02 True
+AFTER_UNDO_02 440.0 True
+REVERSED_ROTATED_COMPOSITE_EXPORT 48 cells PASS scan_steps [2, 1, 0, 7, 6, 5, 4, 3]
+STATIC_PRESSURE_METADATA calibrated 10.0 cell_pressure None metadata_has_pressure_mode False metadata_has_target_pressure False
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+GLOBAL_FREEZE_RECHECK PASS tabs01-03 Undo blocked; 02 radius/globalR rejected; fuel mass edit allowed

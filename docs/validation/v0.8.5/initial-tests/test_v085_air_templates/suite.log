@@ -1,0 +1,15 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_air_template_apply_does_not_enable_air_or_change_geometry (test_v085_air_templates.TestAirPresetEditor.test_air_template_apply_does_not_enable_air_or_change_geometry) ... ok
+test_fuel_noop_apply_retains_air_future_metadata_and_exact_geometry (test_v085_air_templates.TestAirPresetEditor.test_fuel_noop_apply_retains_air_future_metadata_and_exact_geometry) ... ok
+test_effective_parameters_follow_installed_nozzle_kind_without_mutating_input (test_v085_air_templates.TestAirTemplates.test_effective_parameters_follow_installed_nozzle_kind_without_mutating_input) ... ok
+test_individual_override_survives_template_and_type_changes (test_v085_air_templates.TestAirTemplates.test_individual_override_survives_template_and_type_changes) ... ok
+test_inherited_flow_reaches_the_actual_spatial_matrix_and_budget (test_v085_air_templates.TestAirTemplates.test_inherited_flow_reaches_the_actual_spatial_matrix_and_budget) ... ok
+test_legacy_manual_source_is_never_replaced_by_template (test_v085_air_templates.TestAirTemplates.test_legacy_manual_source_is_never_replaced_by_template) ... ok
+test_missing_required_inherited_value_is_rejected_after_resolution (test_v085_air_templates.TestAirTemplates.test_missing_required_inherited_value_is_rejected_after_resolution) ... ok
+test_templates_and_nested_future_metadata_roundtrip_without_changing_fuel_schema (test_v085_air_templates.TestAirTemplates.test_templates_and_nested_future_metadata_roundtrip_without_changing_fuel_schema) ... ok
+test_unknown_flow_is_not_copied_from_fuel_and_disabled_nozzle_stays_disabled (test_v085_air_templates.TestAirTemplates.test_unknown_flow_is_not_copied_from_fuel_and_disabled_nozzle_stays_disabled) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 0.644s
+
+OK

@@ -1,0 +1,34 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_constant_second_r2_undefined (test_v041.TestCurves.test_constant_second_r2_undefined) ... ok
+test_gaps_no_extrapolation_and_invalid_x (test_v041.TestCurves.test_gaps_no_extrapolation_and_invalid_x) ... ok
+test_statistics_known_equation (test_v041.TestCurves.test_statistics_known_equation) ... ok
+test_axis_limits_ticks_and_guard (test_v041.TestV041Qt.test_axis_limits_ticks_and_guard) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_invalidation_detaches_deleted_canvases_and_axes_dialog (test_v041.TestV041Qt.test_invalidation_detaches_deleted_canvases_and_axes_dialog) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_json_split_matrix_and_summed_field_worker (test_v041.TestV041Qt.test_json_split_matrix_and_summed_field_worker) ... This plugin does not support propagateSizeHints()
+ok
+test_link_real_circle_and_target_click_sync_hover_clear (test_v041.TestV041Qt.test_link_real_circle_and_target_click_sync_hover_clear) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_no_field_calculation_during_linked_hover (test_v041.TestV041Qt.test_no_field_calculation_during_linked_hover) ... This plugin does not support propagateSizeHints()
+ok
+test_numeric_editor_step_preserves_original (test_v041.TestV041Qt.test_numeric_editor_step_preserves_original) ... This plugin does not support propagateSizeHints()
+ok
+test_oblique_line_drag_limit_and_nearest_ignores_guides (test_v041.TestV041Qt.test_oblique_line_drag_limit_and_nearest_ignores_guides) ... This plugin does not support propagateSizeHints()
+ok
+test_original_snapshot_prediction_matches_real_epures (test_v041.TestV041Qt.test_original_snapshot_prediction_matches_real_epures) ... This plugin does not support propagateSizeHints()
+ok
+test_regression_physical_epures_original_and_start_separate (test_v041.TestV041Qt.test_regression_physical_epures_original_and_start_separate) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_xlsx_link_units_and_signed_difference (test_v041.TestV041Qt.test_xlsx_link_units_and_signed_difference) ... This plugin does not support propagateSizeHints()
+ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 92.857s
+
+OK

@@ -1,0 +1,28 @@
+test_arc_contact_accuracy_with_nonradial_cartesian_step (test_v07_contacts.ExactContacts.test_arc_contact_accuracy_with_nonradial_cartesian_step) ... ok
+test_circular_narrow_waists_do_not_depend_on_endpoint_classification (test_v07_contacts.ExactContacts.test_circular_narrow_waists_do_not_depend_on_endpoint_classification) ... ok
+test_constant_z_step_is_supported (test_v07_contacts.ExactContacts.test_constant_z_step_is_supported) ... ok
+test_cylinder_quadratic_respects_azimuth_and_nonradial_motion (test_v07_contacts.ExactContacts.test_cylinder_quadratic_respects_azimuth_and_nonradial_motion) ... ok
+test_cylinders_have_independent_exact_cartesian_intersections (test_v07_contacts.ExactContacts.test_cylinders_have_independent_exact_cartesian_intersections) ... ok
+test_empty_and_bad_inputs_are_explicit (test_v07_contacts.ExactContacts.test_empty_and_bad_inputs_are_explicit) ... ok
+test_endpoint_contact_and_joint_are_included (test_v07_contacts.ExactContacts.test_endpoint_contact_and_joint_are_included) ... ok
+test_piecewise_narrow_waist_is_detected_with_both_endpoints_inside (test_v07_contacts.ExactContacts.test_piecewise_narrow_waist_is_detected_with_both_endpoints_inside) ... ok
+test_positive_time_tangent_is_a_contact (test_v07_contacts.ExactContacts.test_positive_time_tangent_is_a_contact) ... ok
+test_random_arc_steps_match_independent_bracket_reference (test_v07_contacts.ExactContacts.test_random_arc_steps_match_independent_bracket_reference) ... ok
+test_reversed_primitive_and_physical_units_preserve_contact (test_v07_contacts.ExactContacts.test_reversed_primitive_and_physical_units_preserve_contact) ... ok
+test_skipped_start_root_does_not_hide_later_contact (test_v07_contacts.ExactContacts.test_skipped_start_root_does_not_hide_later_contact) ... ok
+test_small_arc_at_large_chamber_radius_is_well_conditioned (test_v07_contacts.ExactContacts.test_small_arc_at_large_chamber_radius_is_well_conditioned) ... ok
+test_squaring_does_not_accept_other_circle_branch (test_v07_contacts.ExactContacts.test_squaring_does_not_accept_other_circle_branch) ... ok
+test_start_wall_enters_leaves_stays_and_tangent_curvature (test_v07_contacts.ExactContacts.test_start_wall_enters_leaves_stays_and_tangent_curvature) ... ok
+test_zero_radial_circle_center_repeated_quartic_root (test_v07_contacts.ExactContacts.test_zero_radial_circle_center_repeated_quartic_root) ... ok
+test_arc_vertical_tangent_speed_and_tangent_orthogonality (test_v07_contacts.ExactWallKinematics.test_arc_vertical_tangent_speed_and_tangent_orthogonality) ... ok
+test_downstream_joint_tangent (test_v07_contacts.ExactWallKinematics.test_downstream_joint_tangent) ... ok
+test_exact_piecewise_arc_length_is_additive (test_v07_contacts.ExactWallKinematics.test_exact_piecewise_arc_length_is_additive) ... ok
+test_geometry_tolerance_at_profile_join_is_not_an_uncovered_wall (test_v07_contacts.ExactWallKinematics.test_geometry_tolerance_at_profile_join_is_not_an_uncovered_wall) ... ok
+test_kinematic_invalid_values_fail_explicitly (test_v07_contacts.ExactWallKinematics.test_kinematic_invalid_values_fail_explicitly) ... ok
+test_line_velocity_is_forward_independent_of_primitive_order (test_v07_contacts.ExactWallKinematics.test_line_velocity_is_forward_independent_of_primitive_order) ... ok
+test_wall_radius_broadcast_and_invalid_identity (test_v07_contacts.ExactWallKinematics.test_wall_radius_broadcast_and_invalid_identity) ... ok
+
+----------------------------------------------------------------------
+Ran 23 tests in 0.540s
+
+OK

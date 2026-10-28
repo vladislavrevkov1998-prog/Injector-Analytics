@@ -1,0 +1,16 @@
+test_cylindrical_drag_matches_the_exact_relaxation_solution (test_v07_core.TestConfinedCore.test_cylindrical_drag_matches_the_exact_relaxation_solution) ... ok
+test_disabled_and_before_tip_sources_are_absent_and_unit_weights_are_normalized (test_v07_core.TestConfinedCore.test_disabled_and_before_tip_sources_are_absent_and_unit_weights_are_normalized) ... ok
+test_exact_outer_wall_film_stays_in_the_last_cell_with_explicit_impulse (test_v07_core.TestConfinedCore.test_exact_outer_wall_film_stays_in_the_last_cell_with_explicit_impulse) ... ok
+test_output_grid_and_measurement_frame_cannot_change_transported_mass (test_v07_core.TestConfinedCore.test_output_grid_and_measurement_frame_cannot_change_transported_mass) ... ok
+test_phase_bins_accept_both_surfaces_and_reject_fuel_outside (test_v07_core.TestConfinedCore.test_phase_bins_accept_both_surfaces_and_reject_fuel_outside) ... ok
+test_rose_keeps_source_shares_and_source_clock_without_downstream_rotation (test_v07_core.TestConfinedCore.test_rose_keeps_source_shares_and_source_clock_without_downstream_rotation) ... ok
+test_source_inside_at_inlet_is_not_lost_when_outlet_rmin_exceeds_it (test_v07_core.TestConfinedCore.test_source_inside_at_inlet_is_not_lost_when_outlet_rmin_exceeds_it) ... ok
+test_working_source_outside_tract_is_rejected_even_before_its_tip (test_v07_core.TestConfinedCore.test_working_source_outside_tract_is_rejected_even_before_its_tip) ... ok
+test_fine_polar_bins_and_smoothing_preserve_each_phase_integral (test_v07_core.TestTransportPreview.test_fine_polar_bins_and_smoothing_preserve_each_phase_integral) ... ok
+test_narrow_channel_wall_film_remains_visible_at_both_preview_resolutions (test_v07_core.TestTransportPreview.test_narrow_channel_wall_film_remains_visible_at_both_preview_resolutions) ... ok
+test_unit_preview_scales_linearly_and_never_changes_audited_matrix (test_v07_core.TestTransportPreview.test_unit_preview_scales_linearly_and_never_changes_audited_matrix) ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.710s
+
+OK

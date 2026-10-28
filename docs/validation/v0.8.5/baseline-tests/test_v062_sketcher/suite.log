@@ -1,0 +1,27 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_endpoint_edit_after_explicit_radius_has_no_stale_derived_radius (test_v062_sketcher.TestV062Sketcher.test_endpoint_edit_after_explicit_radius_has_no_stale_derived_radius) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_fixed_checkbox_blocks_drag_and_table_but_allows_display_units (test_v062_sketcher.TestV062Sketcher.test_fixed_checkbox_blocks_drag_and_table_but_allows_display_units) ... This plugin does not support propagateSizeHints()
+ok
+test_internal_section_does_not_move_existing_walls (test_v062_sketcher.TestV062Sketcher.test_internal_section_does_not_move_existing_walls) ... This plugin does not support propagateSizeHints()
+ok
+test_native_endpoint_drag_after_radius_entry_stays_applied (test_v062_sketcher.TestV062Sketcher.test_native_endpoint_drag_after_radius_entry_stays_applied) ... This plugin does not support propagateSizeHints()
+ok
+test_new_farthest_section_updates_outlet_and_preserves_existing_curves (test_v062_sketcher.TestV062Sketcher.test_new_farthest_section_updates_outlet_and_preserves_existing_curves) ... This plugin does not support propagateSizeHints()
+ok
+test_removing_tangency_reenables_derived_cells_and_radius_edit (test_v062_sketcher.TestV062Sketcher.test_removing_tangency_reenables_derived_cells_and_radius_edit) ... This plugin does not support propagateSizeHints()
+ok
+test_reported_outer_arc_is_repaired_once_by_radius_and_committed (test_v062_sketcher.TestV062Sketcher.test_reported_outer_arc_is_repaired_once_by_radius_and_committed) ... This plugin does not support propagateSizeHints()
+ok
+test_split_rebinds_old_endpoint_and_removes_links_on_delete (test_v062_sketcher.TestV062Sketcher.test_split_rebinds_old_endpoint_and_removes_links_on_delete) ... This plugin does not support propagateSizeHints()
+ok
+test_tangent_dialog_adjusts_arc_and_fixes_line_without_toggle (test_v062_sketcher.TestV062Sketcher.test_tangent_dialog_adjusts_arc_and_fixes_line_without_toggle) ... This plugin does not support propagateSizeHints()
+ok
+test_two_click_coincidence_and_visible_deletion_really_unlink (test_v062_sketcher.TestV062Sketcher.test_two_click_coincidence_and_visible_deletion_really_unlink) ... This plugin does not support propagateSizeHints()
+ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 15.065s
+
+OK

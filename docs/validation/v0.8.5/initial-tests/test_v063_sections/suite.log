@@ -1,0 +1,11 @@
+test_completed_arc_end_with_vertical_tangent_needs_no_extension (test_v063_sections.TestDrawnProfileOutlet.test_completed_arc_end_with_vertical_tangent_needs_no_extension) ... ok
+test_completed_profiles_are_not_extended_or_changed (test_v063_sections.TestDrawnProfileOutlet.test_completed_profiles_are_not_extended_or_changed) ... ok
+test_does_not_silently_trim_hand_drawn_geometry_beyond_new_section (test_v063_sections.TestDrawnProfileOutlet.test_does_not_silently_trim_hand_drawn_geometry_beyond_new_section) ... ok
+test_numeric_section_coordinates_are_normalized_when_marking_outlet (test_v063_sections.TestDrawnProfileOutlet.test_numeric_section_coordinates_are_normalized_when_marking_outlet) ... ok
+test_only_shorter_wall_is_extended_from_its_actual_terminal (test_v063_sections.TestDrawnProfileOutlet.test_only_shorter_wall_is_extended_from_its_actual_terminal) ... ok
+test_real_gap_overlap_and_discontinuity_still_rejected_atomically (test_v063_sections.TestDrawnProfileOutlet.test_real_gap_overlap_and_discontinuity_still_rejected_atomically) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.093s
+
+OK

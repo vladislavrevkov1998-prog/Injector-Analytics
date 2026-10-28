@@ -1,0 +1,24 @@
+{
+  "status": "PASS",
+  "archive": "Fuel_Field_Pilot_0.8.5_IDLE_TXT.zip",
+  "sha256": "7998f1d320bb8f4d13e554c53bd8b252f318a87e073eb11508c7f303ab0f3fe4",
+  "source_commit": "f3932107024bf24b8b75852ad2d57819e1346095",
+  "version": "0.8.5",
+  "archive_entries": 65,
+  "restored_files": 63,
+  "runtime_modules_compared": 60,
+  "restored_outside_repository": true,
+  "platform": "linux",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "smoke": {
+    "embedded_guides": 7,
+    "embedded_images": 5,
+    "fuel_kg_s": 0.10000000000000776,
+    "air_kg_s": 2.0000000000000004,
+    "alpha_total": 9.999999999999226,
+    "joint_f5": true,
+    "circular_alpha": true,
+    "themes": 3
+  },
+  "windows_spyder": "NOT RUN"
+}

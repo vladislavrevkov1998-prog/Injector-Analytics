@@ -1,0 +1,50 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_140_member_group_selection_and_normalized_angles (test_v06_gui.TestV06GeometryUI.test_140_member_group_selection_and_normalized_angles) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_arc_center_drag_remains_exact_and_table_tracks_it (test_v06_gui.TestV06GeometryUI.test_arc_center_drag_remains_exact_and_table_tracks_it) ... This plugin does not support propagateSizeHints()
+ok
+test_arc_table_center_edit_updates_analytic_sketch_and_undo (test_v06_gui.TestV06GeometryUI.test_arc_table_center_edit_updates_analytic_sketch_and_undo) ... This plugin does not support propagateSizeHints()
+ok
+test_arc_unit_edit_preserves_physical_scene_and_analytic_shape (test_v06_gui.TestV06GeometryUI.test_arc_unit_edit_preserves_physical_scene_and_analytic_shape) ... This plugin does not support propagateSizeHints()
+ok
+test_coordinate_edit_retains_scene_rows_and_avoids_hidden_editor_reloads (test_v06_gui.TestV06GeometryUI.test_coordinate_edit_retains_scene_rows_and_avoids_hidden_editor_reloads) ... This plugin does not support propagateSizeHints()
+ok
+test_incremental_wall_edit_updates_bound_hole_row_and_existing_handle (test_v06_gui.TestV06GeometryUI.test_incremental_wall_edit_updates_bound_hole_row_and_existing_handle) ... This plugin does not support propagateSizeHints()
+ok
+test_incremental_wall_edit_updates_section_markers_to_actual_bounds (test_v06_gui.TestV06GeometryUI.test_incremental_wall_edit_updates_section_markers_to_actual_bounds) ... This plugin does not support propagateSizeHints()
+ok
+test_invalid_arc_draft_keeps_valid_project_and_can_be_repaired (test_v06_gui.TestV06GeometryUI.test_invalid_arc_draft_keeps_valid_project_and_can_be_repaired) ... This plugin does not support propagateSizeHints()
+ok
+test_longitudinal_view_uses_physical_profiles_and_selected_section_values (test_v06_gui.TestV06GeometryUI.test_longitudinal_view_uses_physical_profiles_and_selected_section_values) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_manual_section_order_and_outlet_deletion_honor_object_domain (test_v06_gui.TestV06GeometryUI.test_manual_section_order_and_outlet_deletion_honor_object_domain) ... This plugin does not support propagateSizeHints()
+ok
+test_object_table_and_angular_drag_change_nozzle_without_data_loss (test_v06_gui.TestV06GeometryUI.test_object_table_and_angular_drag_change_nozzle_without_data_loss) ... This plugin does not support propagateSizeHints()
+ok
+test_objects_groups_and_uneven_steps_preserve_existing_nozzle_records (test_v06_gui.TestV06GeometryUI.test_objects_groups_and_uneven_steps_preserve_existing_nozzle_records) ... This plugin does not support propagateSizeHints()
+ok
+test_peer_splitter_and_editable_types_visible_at_1280 (test_v06_gui.TestV06GeometryUI.test_peer_splitter_and_editable_types_visible_at_1280) ... This plugin does not support propagateSizeHints()
+ok
+test_real_save_open_restores_geometry_and_unknown_fields (test_v06_gui.TestV06GeometryUI.test_real_save_open_restores_geometry_and_unknown_fields) ... This plugin does not support propagateSizeHints()
+ok
+test_reopening_same_project_discards_invalid_geometry_draft (test_v06_gui.TestV06GeometryUI.test_reopening_same_project_discards_invalid_geometry_draft) ... This plugin does not support propagateSizeHints()
+ok
+test_sketch_double_click_creates_point_line_and_exact_arc (test_v06_gui.TestV06GeometryUI.test_sketch_double_click_creates_point_line_and_exact_arc) ... This plugin does not support propagateSizeHints()
+ok
+test_sketch_drag_updates_table_and_commits_once (test_v06_gui.TestV06GeometryUI.test_sketch_drag_updates_table_and_commits_once) ... This plugin does not support propagateSizeHints()
+ok
+test_table_and_scene_selection_are_linked_both_ways (test_v06_gui.TestV06GeometryUI.test_table_and_scene_selection_are_linked_both_ways) ... This plugin does not support propagateSizeHints()
+ok
+test_table_point_edit_updates_sketch_and_one_undo_redo (test_v06_gui.TestV06GeometryUI.test_table_point_edit_updates_sketch_and_one_undo_redo) ... This plugin does not support propagateSizeHints()
+ok
+test_wall_endpoint_joint_update_is_atomic (test_v06_gui.TestV06GeometryUI.test_wall_endpoint_joint_update_is_atomic) ... This plugin does not support propagateSizeHints()
+ok
+test_wheel_zoom_middle_pan_and_fit_do_not_edit_project (test_v06_gui.TestV06GeometryUI.test_wheel_zoom_middle_pan_and_fit_do_not_edit_project) ... This plugin does not support propagateSizeHints()
+ok
+
+----------------------------------------------------------------------
+Ran 21 tests in 40.106s
+
+OK

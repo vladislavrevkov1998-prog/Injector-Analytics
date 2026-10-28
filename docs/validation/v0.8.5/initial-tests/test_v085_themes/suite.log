@@ -1,0 +1,18 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_green_preference_roundtrip_uses_the_third_theme_key (test_v085_themes.TestThreeReadableThemes.test_green_preference_roundtrip_uses_the_third_theme_key) ... ok
+test_inherited_colored_warning_and_equation_labels_are_readable_in_dark (test_v085_themes.TestThreeReadableThemes.test_inherited_colored_warning_and_equation_labels_are_readable_in_dark) ... This plugin does not support propagateSizeHints()
+ok
+test_native_checkbox_keeps_a_visible_checkmark_and_boundary (test_v085_themes.TestThreeReadableThemes.test_native_checkbox_keeps_a_visible_checkmark_and_boundary) ... ok
+test_native_tabs_have_visible_selected_inactive_and_disabled_surfaces (test_v085_themes.TestThreeReadableThemes.test_native_tabs_have_visible_selected_inactive_and_disabled_surfaces) ... ok
+test_scene_overlay_opacity_line_width_and_dash_survive_theme_switches (test_v085_themes.TestThreeReadableThemes.test_scene_overlay_opacity_line_width_and_dash_survive_theme_switches) ... ok
+test_sketch_modes_survive_theme_changes_and_new_axes_match_theme (test_v085_themes.TestThreeReadableThemes.test_sketch_modes_survive_theme_changes_and_new_axes_match_theme) ... ok
+test_table_selection_and_enabled_disabled_inputs_remain_readable (test_v085_themes.TestThreeReadableThemes.test_table_selection_and_enabled_disabled_inputs_remain_readable) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_text_and_selection_contrast_and_original_standard_light (test_v085_themes.TestThreeReadableThemes.test_text_and_selection_contrast_and_original_standard_light) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.669s
+
+OK

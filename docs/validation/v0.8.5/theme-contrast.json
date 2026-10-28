@@ -1,0 +1,26 @@
+{
+  "light": {
+    "text/panel": 14.285,
+    "muted/panel": 6.251,
+    "selection_text/accent": 4.994,
+    "tab_text/tab": 12.714,
+    "tab_selected_text/tab_selected": 14.285,
+    "disabled_text/disabled_panel": 5.564
+  },
+  "light_green": {
+    "text/panel": 13.16,
+    "muted/panel": 6.291,
+    "selection_text/accent": 4.733,
+    "tab_text/tab": 11.699,
+    "tab_selected_text/tab_selected": 9.787,
+    "disabled_text/disabled_panel": 5.861
+  },
+  "dark": {
+    "text/panel": 15.328,
+    "muted/panel": 4.528,
+    "selection_text/accent": 4.801,
+    "tab_text/tab": 15.328,
+    "tab_selected_text/tab_selected": 4.801,
+    "disabled_text/disabled_panel": 5.394
+  }
+}

@@ -1,0 +1,10 @@
+test_gas_column_units_import_and_time_grid_not_silently_changed (test_quasi_io.TestQuasiIO.test_gas_column_units_import_and_time_grid_not_silently_changed) ... ok
+test_mode_tag_distinct_format_bindings_and_roundtrip (test_quasi_io.TestQuasiIO.test_mode_tag_distinct_format_bindings_and_roundtrip) ... ok
+test_nonuniform_missing_duplicate_time_and_wrong_count_rejected (test_quasi_io.TestQuasiIO.test_nonuniform_missing_duplicate_time_and_wrong_count_rejected) ... ok
+test_real_xlsx_mapping_constant_time_and_provenance (test_quasi_io.TestQuasiIO.test_real_xlsx_mapping_constant_time_and_provenance) ... ok
+test_xlsx_and_csv_matrix_time_and_audit_exports (test_quasi_io.TestQuasiIO.test_xlsx_and_csv_matrix_time_and_audit_exports) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.211s
+
+OK

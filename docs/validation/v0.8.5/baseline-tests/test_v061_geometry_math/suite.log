@@ -1,0 +1,17 @@
+test_invalid_radius_and_degenerate_chord_reject (test_v061_geometry_math.TestArcTranslationAndRadius.test_invalid_radius_and_degenerate_chord_reject) ... ok
+test_near_semicircle_resize_is_invariant_under_unit_change (test_v061_geometry_math.TestArcTranslationAndRadius.test_near_semicircle_resize_is_invariant_under_unit_change) ... ok
+test_resize_preserves_both_endpoints_and_requested_radius (test_v061_geometry_math.TestArcTranslationAndRadius.test_resize_preserves_both_endpoints_and_requested_radius) ... ok
+test_resize_upper_and_lower_semicircle_continues_minor_arc_side (test_v061_geometry_math.TestArcTranslationAndRadius.test_resize_upper_and_lower_semicircle_continues_minor_arc_side) ... ok
+test_translation_preserves_radius_sweep_and_all_metadata (test_v061_geometry_math.TestArcTranslationAndRadius.test_translation_preserves_radius_sweep_and_all_metadata) ... ok
+test_collision_of_endpoints_is_diagnosed (test_v061_geometry_math.TestFreeArcEndpoints.test_collision_of_endpoints_is_diagnosed) ... ok
+test_endpoint_follows_cursor_opposite_fixed_and_bulge_preserved (test_v061_geometry_math.TestFreeArcEndpoints.test_endpoint_follows_cursor_opposite_fixed_and_bulge_preserved) ... ok
+test_endpoint_motion_commutes_with_rigid_transform (test_v061_geometry_math.TestFreeArcEndpoints.test_endpoint_motion_commutes_with_rigid_transform) ... ok
+test_shared_endpoint_can_adapt_two_circular_neighbors_in_different_units (test_v061_geometry_math.TestFreeArcEndpoints.test_shared_endpoint_can_adapt_two_circular_neighbors_in_different_units) ... ok
+test_inconsistent_circle_remains_control_polygon (test_v061_geometry_math.TestInvalidDraftVisibility.test_inconsistent_circle_remains_control_polygon) ... ok
+test_invalid_arc_preview_and_sagitta_use_physical_units (test_v061_geometry_math.TestInvalidDraftVisibility.test_invalid_arc_preview_and_sagitta_use_physical_units) ... ok
+test_nonmonotone_arc_has_exact_visible_preview_and_diagnostic (test_v061_geometry_math.TestInvalidDraftVisibility.test_nonmonotone_arc_has_exact_visible_preview_and_diagnostic) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.272s
+
+OK

@@ -1,0 +1,8 @@
+test_archive_reconstructs_runtime_and_opens_all_guides_without_repository (test_v061_txt.TestTxtDistribution.test_archive_reconstructs_runtime_and_opens_all_guides_without_repository) ... ok
+test_corrupt_input_and_existing_modifications_fail_before_writes (test_v061_txt.TestTxtDistribution.test_corrupt_input_and_existing_modifications_fail_before_writes) ... ok
+test_zip_bytes_are_reproducible (test_v061_txt.TestTxtDistribution.test_zip_bytes_are_reproducible) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 6.529s
+
+OK

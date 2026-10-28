@@ -1,0 +1,9 @@
+test_air_error_never_emits_partial_completed_fuel (test_v085_unified_results.TestJointCalculation.test_air_error_never_emits_partial_completed_fuel) ... ok
+test_cancelled_air_build_and_disabled_model_do_not_trace (test_v085_unified_results.TestJointCalculation.test_cancelled_air_build_and_disabled_model_do_not_trace) ... ok
+test_quasi_snapshot_alpha_uses_real_pressure_time_and_composite_columns (test_v085_unified_results.TestJointCalculation.test_quasi_snapshot_alpha_uses_real_pressure_time_and_composite_columns) ... ok
+test_stationary_worker_emits_both_fields_with_one_mode (test_v085_unified_results.TestJointCalculation.test_stationary_worker_emits_both_fields_with_one_mode) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.494s
+
+OK

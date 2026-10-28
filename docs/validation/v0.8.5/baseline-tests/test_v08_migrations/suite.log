@@ -1,0 +1,16 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_disabled_stale_links_and_overbudget_draft_remain_saveable (test_v08_migrations.TestAirDraftPersistenceUI.test_disabled_stale_links_and_overbudget_draft_remain_saveable) ... ok
+test_noop_editor_apply_preserves_full_valid_interaction_range (test_v08_migrations.TestAirDraftPersistenceUI.test_noop_editor_apply_preserves_full_valid_interaction_range) ... ok
+test_noop_editor_apply_preserves_values_below_display_precision (test_v08_migrations.TestAirDraftPersistenceUI.test_noop_editor_apply_preserves_values_below_display_precision) ... ok
+test_archived_user_project_load_does_not_activate_air_or_rewrite_sources (test_v08_migrations.TestAirPersistence.test_archived_user_project_load_does_not_activate_air_or_rewrite_sources) ... ok
+test_direct_settings_constructor_does_not_share_mutable_air_input (test_v08_migrations.TestAirPersistence.test_direct_settings_constructor_does_not_share_mutable_air_input) ... ok
+test_disabled_air_metadata_cannot_change_fuel_matrix (test_v08_migrations.TestAirPersistence.test_disabled_air_metadata_cannot_change_fuel_matrix) ... ok
+test_disabled_air_roundtrip_preserves_nested_unknowns_without_aliases (test_v08_migrations.TestAirPersistence.test_disabled_air_roundtrip_preserves_nested_unknowns_without_aliases) ... ok
+test_enabled_air_uses_own_version_without_changing_fuel_schema (test_v08_migrations.TestAirPersistence.test_enabled_air_uses_own_version_without_changing_fuel_schema) ... ok
+test_invalid_air_records_are_diagnosed_without_mutating_input (test_v08_migrations.TestAirPersistence.test_invalid_air_records_are_diagnosed_without_mutating_input) ... ok
+test_schema_1_2_3_without_air_never_enable_air_or_change_fuel_values (test_v08_migrations.TestAirPersistence.test_schema_1_2_3_without_air_never_enable_air_or_change_fuel_values) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.589s
+
+OK
