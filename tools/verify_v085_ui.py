@@ -34,6 +34,11 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
+# Fontconfig and Matplotlib need writable caches before their first import.
+for variable, folder in (('XDG_CACHE_HOME','cache'),('MPLCONFIGDIR','mpl-cache')):
+    os.environ.setdefault(variable,str(ROOT.parent/'artifacts/v085'/folder))
+    Path(os.environ[variable]).mkdir(parents=True,exist_ok=True)
 
 import matplotlib
 import numpy as np
@@ -111,7 +116,8 @@ class Proof:
             environment=dict(python=platform.python_version(), platform=platform.platform(),
                 numpy=np.__version__, scipy=scipy.__version__, matplotlib=matplotlib.__version__,
                 pyqt=PYQT_VERSION_STR, qt=QT_VERSION_STR, qpa=self.app.platformName(),
-                device_pixel_ratio=self.window.devicePixelRatioF()),
+                device_pixel_ratio=self.window.devicePixelRatioF(),
+                cache_and_threads={key:os.environ.get(key) for key in ('XDG_CACHE_HOME','MPLCONFIGDIR','OPENBLAS_NUM_THREADS')}),
             method='Real MainWindow, F5 QAction and CalcWorker QThread; native Qt event loop; no test imports; timings are observations without SLA thresholds.',
             limitations=['Linux offscreen only; Windows/Spyder NOT RUN', 'Air and pressure overrides are explicitly synthetic; no physical-model validation'],
             checks={}, screenshots=[])
@@ -155,7 +161,7 @@ class Proof:
                 interaction_strength=0., max_path_mm=80., step_mm=4.,
                 provenance={'origin': 'SYNTHETIC v0.8.5 UI performance input; not measured'},
                 sources=[dict(id='SYNTHETIC_S' + str(n.id), kind='swirler', nozzle_id=n.id,
-                    method='fixed', flow_kg_s=.005, direction=[1., .04, .10],
+                    enabled=bool(n.enabled), method='fixed', flow_kg_s=.005, direction=[1., .04, .10],
                     sigma_r_mm=12., sigma_theta_deg=5., spread_mm_per_mm=.04,
                     mixed_fraction=.2, mixing_length_mm=60., confidence='synthetic') for n in nozzles])
             mode = json.loads((ROOT / 'examples/demo_user_field_140_two_collectors.quasi.json').read_text())
@@ -502,6 +508,9 @@ class Proof:
         changed = {str(path.relative_to(ROOT)):sha_file(path) for path in self.source_paths}
         same = changed==self.source_hashes
         self.report['checks']['source_files_read_only'] = dict(pass_check=same,sha256_before=self.source_hashes,sha256_after=changed)
+        runtime_now = {path.name:sha_file(path) for path in sorted((ROOT/'src/fuelfield').glob('*.py'))}
+        self.report['checks']['runtime_sources_stable_during_run'] = dict(
+            pass_check=runtime_now==self.report['runtime_source_sha256'],modules=len(runtime_now))
         self.report['pass_check'] = all(check['pass_check'] for check in self.report['checks'].values()) and not self.errors and not self.callback_exceptions
         self.save()
         sys.excepthook = self.previous_excepthook
