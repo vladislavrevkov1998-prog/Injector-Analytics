@@ -397,6 +397,7 @@ class PresetEditor(QWidget):
             raw=values[key];text='' if raw is None else json.dumps(raw,ensure_ascii=False) if isinstance(raw,(list,dict)) else str(raw)
             item=QTableWidgetItem(text);item.setData(Qt.UserRole,(text,deepcopy(raw)));self.air_table.setItem(row,1,item)
         self.air_table.blockSignals(False)
+        self.air_table.resizeColumnToContents(0)
 
     def apply(self):
         try:

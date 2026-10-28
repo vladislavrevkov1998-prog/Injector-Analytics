@@ -216,6 +216,21 @@ class TestUnifiedResultsUI(unittest.TestCase):
         self.w.apply_geometry_state(candidate,'SYNTHETIC forbidden geometry')
         self.assertEqual(project_to_json(self.w.cfg,self.w.nozzles),frozen)
 
+    def test_air_controls_fit_laptop_height_in_all_three_themes(self):
+        from PyQt5.QtGui import QFont
+        font=QFont(self.w.font());font.setPointSize(13);self.w.setFont(font)
+        self.w.tabs.setCurrentIndex(0);self.w.geometry_pages.setCurrentIndex(1)
+        self.w.geometry_editor.mode_selector.setCurrentIndex(1)
+        before=project_to_json(self.w.cfg,self.w.nozzles)
+        for theme in self.w.theme_actions:
+            with self.subTest(theme=theme):
+                self.w.set_theme(theme);self.w.resize(1280,720);self.app.processEvents()
+                self.assertLessEqual(self.w.height(),720)
+                panel=self.w.geometry_editor.air_panel
+                self.assertTrue(panel.apply_button.isVisible())
+                self.assertLess(panel.apply_button.mapTo(self.w,panel.apply_button.rect().bottomRight()).y(),self.w.height())
+                self.assertEqual(project_to_json(self.w.cfg,self.w.nozzles),before)
+
 
 if __name__ == '__main__':
     unittest.main()

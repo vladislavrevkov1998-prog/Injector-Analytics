@@ -102,7 +102,16 @@ class AirFlowPanel(QWidget):
         self.paths = None
         self.last_diagnostic = ''
         self._displayed = {}
-        layout = QVBoxLayout(self)
+        # QTabWidget includes hidden tabs in its minimum size. Scroll all
+        # parameter content so this page cannot force the whole application
+        # taller than a laptop display; keep Apply/Reset within reach.
+        outer = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        scroll.setWidget(content)
+        outer.addWidget(scroll, 1)
         self.source_selector = QComboBox()
         self.source_selector.setMinimumContentsLength(14)
         self.source_selector.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
@@ -154,10 +163,7 @@ class AirFlowPanel(QWidget):
         for key, label in [('free', 'Свободно'), ('inner', 'Внутренняя'), ('outer', 'Наружная')]: self.wall.addItem(label, key)
         self.wall.currentIndexChanged.connect(self.schedule_change)
         form.addRow('Стенка', self.wall)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(form_widget)
-        layout.addWidget(scroll, 1)
+        layout.addWidget(form_widget)
         self.vector_label = QLabel()
         self.vector_label.setWordWrap(True)
         layout.addWidget(self.vector_label)
@@ -170,13 +176,13 @@ class AirFlowPanel(QWidget):
         self.apply_button = QPushButton('Применить воздух')
         self.apply_button.clicked.connect(self.apply)
         actions.addWidget(self.add_button); actions.addWidget(self.apply_button)
-        layout.addLayout(actions)
+        outer.addLayout(actions)
         self.reset_button = QPushButton('Отменить воздушный черновик')
         self.reset_button.clicked.connect(lambda:self.set_context(force=True))
         secondary_actions=QHBoxLayout();secondary_actions.addWidget(self.reset_button)
         self.balance_button = QPushButton('Баланс / этапы E(z)…')
         self.balance_button.clicked.connect(editor.owner.open_air_balance)
-        secondary_actions.addWidget(self.balance_button);layout.addLayout(secondary_actions)
+        secondary_actions.addWidget(self.balance_button);outer.addLayout(secondary_actions)
         self.timer = QTimer(self)
         self.timer.setSingleShot(True)
         self.timer.timeout.connect(self.update_draft)
