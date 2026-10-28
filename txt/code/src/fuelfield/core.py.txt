@@ -512,10 +512,11 @@ def _json_record(obj):
 
 
 def project_to_json(settings: Settings, nozzles: list[Nozzle]):
+    from . import __version__
     from .transport_settings import TransportSettings
     confined=TransportSettings.from_dict(settings.fuel_transport).enabled
     air_enabled=isinstance(settings.air_model,dict) and settings.air_model.get('enabled') is True
-    version='0.8.4' if air_enabled else ('0.7.0' if confined else '0.6.0')
+    version=__version__ if air_enabled else ('0.7.0' if confined else '0.6.0')
     return {**deepcopy(settings._project_extra),'format':'fuel-field-pilot-v1','version':version,'schema_version':3 if confined else 2,
             'settings':_json_record(settings),
             'nozzles':[{**_json_record(n),'r_nozzle_mm':n.r_nozzle_mm} for n in nozzles]}

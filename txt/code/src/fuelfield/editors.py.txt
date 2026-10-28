@@ -4,7 +4,7 @@ from copy import deepcopy
 from pathlib import Path
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QFormLayout,QComboBox,
-    QLineEdit,QPushButton,QLabel,QTableWidgetItem,QMessageBox,QFileDialog,QInputDialog,QDoubleSpinBox)
+    QLineEdit,QPushButton,QLabel,QTableWidgetItem,QMessageBox,QFileDialog,QInputDialog,QDoubleSpinBox,QTabWidget)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from .characteristics import ExperimentalCharacteristic,flow_to_kg_h,flow_from_kg_h
@@ -330,10 +330,44 @@ class PresetEditor(QWidget):
         self.selector=QComboBox()
         for key,label in NOZZLE_KINDS.items():self.selector.addItem(label,key)
         layout.addWidget(self.selector)
+        self.medium_tabs=QTabWidget();layout.addWidget(self.medium_tabs)
+        fuel=QWidget();fuel_layout=QVBoxLayout(fuel);self.medium_tabs.addTab(fuel,'Топливо')
         self.table=table_class(len(GEOMETRY_KEYS),2)
         self.table.setHorizontalHeaderLabels(['Параметр','Значение шаблона'])
-        self.table.horizontalHeader().setStretchLastSection(True);layout.addWidget(self.table)
-        button=QPushButton('Применить шаблон');button.clicked.connect(self.apply);layout.addWidget(button)
+        self.table.horizontalHeader().setStretchLastSection(True);fuel_layout.addWidget(self.table)
+        button=QPushButton('Применить шаблон топлива');button.clicked.connect(self.apply);fuel_layout.addWidget(button)
+        air=QWidget();air_layout=QVBoxLayout(air);self.medium_tabs.addTab(air,'Воздух')
+        from .air_templates import AIR_TEMPLATE_FIELDS
+        from .air_table import AirSourceTable,AirChoices
+        from .air_gui import CHOICES
+        self.air_fields=AIR_TEMPLATE_FIELDS
+        self.air_table=AirSourceTable(len(AIR_TEMPLATE_FIELDS),2)
+        self.air_table.setHorizontalHeaderLabels(['Параметр воздуха одного завихрителя','Значение шаблона'])
+        self.air_table.horizontalHeader().setStretchLastSection(True);air_layout.addWidget(self.air_table)
+        # Enum rows use an ordinary combo editor; numerical rows retain the
+        # same compact numeric editor and Excel-style copy/paste.
+        from .numeric_delegate import NumericDelegate
+        class TemplateDelegate(NumericDelegate):
+            def createEditor(delegate,parent,option,index):
+                key=self.air_fields[index.row()]
+                if key in CHOICES:
+                    box=QComboBox(parent)
+                    for value,label in CHOICES[key].items():box.addItem(label,value)
+                    if index.data() and box.findData(index.data())<0:box.addItem(str(index.data()),index.data())
+                    return box
+                return super().createEditor(parent,option,index)
+            def setEditorData(delegate,editor,index):
+                if isinstance(editor,QComboBox):editor.setCurrentIndex(max(0,editor.findData(index.data())))
+                else:super().setEditorData(editor,index)
+            def setModelData(delegate,editor,model,index):
+                if isinstance(editor,QComboBox):model.setData(index,editor.currentData())
+                else:super().setModelData(editor,model,index)
+        self.air_table.setItemDelegate(TemplateDelegate(self.air_table))
+        self.air_table.validate_changes=self.validate_air_changes
+        self.air_status=QLabel('Неизвестный расход оставляйте пустым; топливный расход в воздух не копируется.')
+        self.air_status.setWordWrap(True);air_layout.addWidget(self.air_status)
+        self.air_table.pasteRejected.connect(self.air_status.setText)
+        button=QPushButton('Применить шаблон воздуха');button.clicked.connect(self.apply_air);air_layout.addWidget(button)
         self.selector.currentIndexChanged.connect(self.load)
         note=QLabel('Начальные шаблоны демонстрационные. Изменения затрагивают только параметры без индивидуального override. '
                     'Для выбранных форсунок сброс overrides доступен на вкладке 02.')
@@ -347,13 +381,54 @@ class PresetEditor(QWidget):
             self.table.setItem(row,0,label)
             value=QTableWidgetItem(f'{params[key]:.12g}');value.setData(256,(value.text(),params[key]))
             self.table.setItem(row,1,value)
+        from .air_templates import validate_air_template
+        import json
+        values=validate_air_template(params.get('air',{}))
+        labels={'method':'Метод расхода','flow_kg_s':'G одного завихрителя, кг/с','share':'Доля G КС, 0…1',
+                'area_mm2':'Площадь F, мм²','cd':'Коэффициент Cd','direction':'Направление [dz, dr, dθ]',
+                'penetration_factor':'Пробивная способность P, безразмерная','kernel':'Пространственное ядро',
+                'sigma_r_mm':'Начальная σR, мм','sigma_theta_deg':'Начальная σθ, °',
+                'spread_mm_per_mm':'Расширение, мм/мм','mixed_fraction':'Начальное вовлечение, 0…1',
+                'mixing_length_mm':'Длина вовлечения, мм','entrainment_points':'Точки [z,E], JSON',
+                'entrainment_stages':'Порции вовлечения, JSON','confidence':'Доверие к вводу'}
+        self.air_table.blockSignals(True)
+        for row,key in enumerate(self.air_fields):
+            label=QTableWidgetItem(labels[key]);label.setFlags(Qt.ItemIsEnabled);self.air_table.setItem(row,0,label)
+            raw=values[key];text='' if raw is None else json.dumps(raw,ensure_ascii=False) if isinstance(raw,(list,dict)) else str(raw)
+            item=QTableWidgetItem(text);item.setData(Qt.UserRole,(text,deepcopy(raw)));self.air_table.setItem(row,1,item)
+        self.air_table.blockSignals(False)
+        self.air_table.resizeColumnToContents(0)
 
     def apply(self):
         try:
-            params={}
+            params=deepcopy(self.owner.cfg.nozzle_presets[self.selector.currentData()])
             for row,key in enumerate(GEOMETRY_KEYS):
                 item=self.table.item(row,1);original=item.data(256)
                 params[key]=original[1] if original and original[0]==item.text() else float(item.text().replace(',','.'))
             presets=deepcopy(self.owner.cfg.nozzle_presets);presets[self.selector.currentData()]=params
             validate_catalog(self.owner.cfg.atomizer_types,presets);self.changed.emit(presets)
         except ValueError as exc:QMessageBox.warning(self,'Шаблон',str(exc))
+
+    def read_air(self,changes=None):
+        import json
+        from .air_templates import validate_air_template
+        pending={(row,col):text for row,col,text in (changes or [])}
+        current=deepcopy(self.owner.cfg.nozzle_presets[self.selector.currentData()].get('air',{}))
+        for row,key in enumerate(self.air_fields):
+            item=self.air_table.item(row,1);text=pending.get((row,1),item.text()).strip();original=item.data(256)
+            if original and text==original[0]:value=deepcopy(original[1])
+            elif key in ('direction','entrainment_points','entrainment_stages'):value=json.loads(text or '[]')
+            elif key in ('method','kernel','confidence'):value=text
+            else:value=None if not text else float(text.replace(',','.'))
+            current[key]=value
+        return validate_air_template(current)
+
+    def validate_air_changes(self,changes):self.read_air(changes)
+
+    def apply_air(self):
+        try:
+            presets=deepcopy(self.owner.cfg.nozzle_presets)
+            presets[self.selector.currentData()]['air']=self.read_air()
+            validate_catalog(self.owner.cfg.atomizer_types,presets);self.changed.emit(presets)
+            self.air_status.setText('Воздушный шаблон применён. Завихрители без индивидуальной правки используют тип своей форсунки.')
+        except (ValueError,TypeError) as exc:QMessageBox.warning(self,'Шаблон воздуха',str(exc))

@@ -1,8 +1,8 @@
 {
   "status": "PASS",
   "archive": "Fuel_Field_Pilot_0.8.5_IDLE_TXT.zip",
-  "sha256": "7998f1d320bb8f4d13e554c53bd8b252f318a87e073eb11508c7f303ab0f3fe4",
-  "source_commit": "f3932107024bf24b8b75852ad2d57819e1346095",
+  "sha256": "d15163d63109d2558960ff4263416de3780d0e8e6aa4c83d447cb0b3c9eda463",
+  "source_commit": "0c147697c3083d467e2731812645be180b00d30f",
   "version": "0.8.5",
   "archive_entries": 65,
   "restored_files": 63,

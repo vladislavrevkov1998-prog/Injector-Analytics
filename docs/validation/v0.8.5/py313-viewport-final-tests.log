@@ -1,0 +1,29 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-agent'
+test_quasi_slider_changes_native_pixels_and_preserves_composite_matrix (test_v07_ui.TestV07NativeUI.test_quasi_slider_changes_native_pixels_and_preserves_composite_matrix) ... This plugin does not support propagateSizeHints()
+ok
+test_air_error_never_emits_partial_completed_fuel (test_v085_unified_results.TestJointCalculation.test_air_error_never_emits_partial_completed_fuel) ... ok
+test_cancelled_air_build_and_disabled_model_do_not_trace (test_v085_unified_results.TestJointCalculation.test_cancelled_air_build_and_disabled_model_do_not_trace) ... ok
+test_quasi_snapshot_alpha_uses_real_pressure_time_and_composite_columns (test_v085_unified_results.TestJointCalculation.test_quasi_snapshot_alpha_uses_real_pressure_time_and_composite_columns) ... ok
+test_stationary_worker_emits_both_fields_with_one_mode (test_v085_unified_results.TestJointCalculation.test_stationary_worker_emits_both_fields_with_one_mode) ... ok
+test_unsorted_source_cache_keeps_spatial_fields_and_refreshed_metadata (test_v085_unified_results.TestJointCalculation.test_unsorted_source_cache_keeps_spatial_fields_and_refreshed_metadata) ... ok
+test_air_controls_fit_laptop_height_in_all_three_themes (test_v085_unified_results.TestUnifiedResultsUI.test_air_controls_fit_laptop_height_in_all_three_themes) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_air_mode_freeze_survives_other_tabs_and_direct_geometry_edits (test_v085_unified_results.TestUnifiedResultsUI.test_air_mode_freeze_survives_other_tabs_and_direct_geometry_edits) ... This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+ok
+test_air_only_edit_preserves_fuel_but_requires_joint_f5_and_exports_actual_time (test_v085_unified_results.TestUnifiedResultsUI.test_air_only_edit_preserves_fuel_but_requires_joint_f5_and_exports_actual_time) ... This plugin does not support propagateSizeHints()
+ok
+test_air_template_edit_keeps_completed_fuel_and_invalidates_only_air (test_v085_unified_results.TestUnifiedResultsUI.test_air_template_edit_keeps_completed_fuel_and_invalidates_only_air) ... This plugin does not support propagateSizeHints()
+ok
+test_common_metric_has_circular_alpha_no_extra_window_and_true_geometry (test_v085_unified_results.TestUnifiedResultsUI.test_common_metric_has_circular_alpha_no_extra_window_and_true_geometry) ... This plugin does not support propagateSizeHints()
+ok
+test_existing_time_slider_changes_alpha_pixels_and_keeps_composite (test_v085_unified_results.TestUnifiedResultsUI.test_existing_time_slider_changes_alpha_pixels_and_keeps_composite) ... This plugin does not support propagateSizeHints()
+ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 130.959s
+
+OK

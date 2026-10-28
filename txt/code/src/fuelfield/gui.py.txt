@@ -30,10 +30,11 @@ from .v02 import (GEOMETRY_KEYS,NOZZLE_KINDS,effective_nozzle,flow_status,
                   validate_nozzles,follow_row,capture_report)
 from .characteristics import flow_to_kg_h,flow_from_kg_h
 from .editors import CatalogEditor,PresetEditor
-from .analysis import METRICS,UNITS,EQUATIONS,cell_values,matching_index
+from .analysis import METRICS as FUEL_METRICS,UNITS as FUEL_UNITS,EQUATIONS as FUEL_EQUATIONS,cell_values,matching_index
+from .unified_results import AIR_METRICS,AIR_EQUATIONS,air_cell_values,build_air_results,draw_air_reference,air_summary
 from .plot_interaction import attach_interaction
 from .plot_history import PlotHistory
-from .themes import apply_theme,load_theme,current_theme
+from .themes import apply_theme,load_theme,current_theme,THEME_LABELS
 from .numeric_delegate import NumericDelegate
 from .numeric_input import DecimalSpinBox
 from .coordinates import to_global,from_global,grid_angles,plot_x,period,x_label,decorate_axes,polar_ticks
@@ -48,13 +49,16 @@ from .quasi_gui import QuasiDialog
 from .transport_gui import TransportDialog
 from .transport_settings import TransportSettings,MODES as TRANSPORT_MODES
 from .air_gui import AirBalanceDialog
-from .air_results_gui import AirResultsDialog
 from .quasi_plotting import QuasiFieldAnimator
 from .quasi_io import write_report as write_quasi_report
 from .chamber import chamber,sync_groups,sync_anchors,WALL_BOUND_NOTICE
 from .chamber_gui import GeometryEditor
 from .chamber_plotting import LongitudinalDialog
 from . import __version__
+
+METRICS={**FUEL_METRICS,**{key:label for key,(label,unit) in AIR_METRICS.items()}}
+UNITS={**FUEL_UNITS,**{key:unit for key,(label,unit) in AIR_METRICS.items()}}
+EQUATIONS={**FUEL_EQUATIONS,**AIR_EQUATIONS}
 
 FIELDS = [
     ('id','ID'),('enabled','Установлена'),('nozzle_kind','Тип форсунки'),
@@ -214,7 +218,10 @@ class CalcWorker(QObject):
         try:
             if self.settings.quasistationary:
                 self.quasi_result=calculate_quasi(self.nozzles,self.settings,cancel=lambda:QThread.currentThread().isInterruptionRequested(),progress=self.progress.emit)
-                self.completed.emit(CalculationOutput([(p,self.quasi_result.smooth(i,0)) for i,p in enumerate(self.quasi_result.composites)],self.quasi_result));return
+                output=CalculationOutput([(p,self.quasi_result.smooth(i,0)) for i,p in enumerate(self.quasi_result.composites)],self.quasi_result)
+                output.air_results=build_air_results(self.settings,self.nozzles,self.quasi_result.composites,self.quasi_result,
+                    cancel=lambda:QThread.currentThread().isInterruptionRequested(),progress=self.progress.emit)
+                self.completed.emit(output);return
             result=[]
             for i,z in enumerate(self.settings.z_mm):
                 if QThread.currentThread().isInterruptionRequested():self.cancelled.emit();return
@@ -224,7 +231,10 @@ class CalcWorker(QObject):
                 preview=evaluate_continuous_field(self.nozzles,self.settings,z)
                 result.append((plane,preview))
             if QThread.currentThread().isInterruptionRequested():self.cancelled.emit();return
-            self.completed.emit(result)
+            output=CalculationOutput(result)
+            output.air_results=build_air_results(self.settings,self.nozzles,[p for p,field in result],
+                cancel=lambda:QThread.currentThread().isInterruptionRequested(),progress=self.progress.emit)
+            self.completed.emit(output)
         except CalculationCancelled:self.cancelled.emit()
         except Exception:
             self.failed.emit(traceback.format_exc())
@@ -249,6 +259,7 @@ class MainWindow(QMainWindow):
         self.results=[]
         self.smooth_fields=[]
         self.quasi_result=None
+        self.air_results=None;self._air_generation=0
         self.time_timer=QTimer(self);self.time_timer.setSingleShot(True);self.time_timer.setInterval(16);self.time_timer.timeout.connect(self._update_time_field)
         self.sector_id=None
         self.project_file=None
@@ -306,31 +317,36 @@ class MainWindow(QMainWindow):
         self.transport_settings_action=QAction('Перенос топлива внутри ЖТ…',self);self.transport_settings_action.triggered.connect(self.open_transport_settings);menu.addAction(self.transport_settings_action)
         self.air_settings_action=QAction('Воздух и смесеобразование…',self);self.air_settings_action.triggered.connect(self.open_air_balance);menu.addAction(self.air_settings_action)
         appearance=menu.addMenu('Тема приложения');self.theme_actions={}
-        for key,label in (('light','Светлая'),('dark','Тёмная')):
+        for key,label in THEME_LABELS.items():
             action=QAction(label,self);action.setCheckable(True);action.triggered.connect(lambda checked=False,name=key:self.set_theme(name));appearance.addAction(action);self.theme_actions[key]=action
         load_theme(QApplication.instance())
         for key,action in self.theme_actions.items():action.setChecked(key==current_theme())
+        selector=getattr(self.geometry_editor,'mode_selector',None)
+        if selector is not None:selector.currentIndexChanged.connect(self._graph_history_changed)
         self._graph_history_changed()
 
     def _graph_history_changed(self,*args):
         graphics=self.tabs.currentIndex()==3
+        frozen=self.tabs.currentIndex()!=3 and getattr(self.geometry_editor,'is_air_mode',False)
         history=self.graph_history if graphics else self.undo_stack
         undo=history.can_undo() if graphics else history.canUndo()
         redo=history.can_redo() if graphics else history.canRedo()
         undo_text=history.undo_text() if graphics else history.undoText()
         redo_text=history.redo_text() if graphics else history.redoText()
-        self.undo_action.setEnabled(undo);self.redo_action.setEnabled(redo)
+        self.undo_action.setEnabled(undo and not frozen);self.redo_action.setEnabled(redo and not frozen)
         self.undo_action.setText('Отменить'+(': '+undo_text if undo_text else ''))
         self.redo_action.setText('Повторить'+(': '+redo_text if redo_text else ''))
         self.undo_action.setToolTip('На 04 отменяются действия графика. Для отмены исходных данных откройте 01–03.')
 
     def _undo_action(self):
+        if self.tabs.currentIndex()!=3 and getattr(self.geometry_editor,'is_air_mode',False):return
         # Result-tab Undo never silently falls through to a physical project edit.
         if self.tabs.currentIndex()==3:self.graph_history.undo()
         else:self.undo_stack.undo()
         self._graph_history_changed()
 
     def _redo_action(self):
+        if self.tabs.currentIndex()!=3 and getattr(self.geometry_editor,'is_air_mode',False):return
         if self.tabs.currentIndex()==3:self.graph_history.redo()
         else:self.undo_stack.redo()
         self._graph_history_changed()
@@ -420,6 +436,8 @@ class MainWindow(QMainWindow):
         rebuilding hidden hydraulic plots. It shares the same Undo snapshots.
         """
         cfg,nozzles=project_from_json(state);after=project_to_json(cfg,nozzles);before=self._edit_state
+        if getattr(self.geometry_editor,'is_air_mode',False) and self._geometry_signature(before)!=self._geometry_signature(after):
+            self.statusBar().showMessage('Геометрия заморожена: переключите Sketcher в режим «Геометрия».',10000);return
         if after==before:return
         previous_nozzles=self.nozzles;self._restoring=True
         try:
@@ -663,34 +681,54 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             state=project_to_json(self.cfg,self.nozzles);state['settings']['air_model']=deepcopy(raw)
             self.apply_project_state(state,'Баланс и источники воздуха')
             self._close_air_results()
-            self.statusBar().showMessage('Воздух сохранён. Матрицы воздуха и α доступны для рассчитанных топливных сечений.',15000)
+            if hasattr(self.geometry_editor,'refresh_air_model'):self.geometry_editor.refresh_air_model()
+            self._plot_result()
+            self.statusBar().showMessage('Воздух сохранён. F5 рассчитывает топливо, воздух и α совместно в выбранном режиме.',15000)
         except (ValueError,TypeError) as exc:self._error(str(exc))
 
     def open_air_results(self):
-        if not self.results:self._error('Сначала рассчитайте топливные сечения (F5).');return
-        if not self.cfg.air_model.get('enabled'):
-            self._error('Включите модель и задайте расход в «Баланс воздуха».');return
-        self._close_air_results()
-        try:
-            self.air_results_dialog=AirResultsDialog(self.cfg,self.nozzles,self.results,self.quasi_result,self)
-            self.air_results_dialog.show()
-        except (ValueError,TypeError) as exc:self._error(str(exc))
+        # Compatibility for callers of the old entry point: use the common 04.
+        self.tabs.setCurrentIndex(3);self.plots.setCurrentIndex(0)
+        self.metric.setCurrentIndex(self.metric.findData('alpha_total'))
 
     def _close_air_results(self):
         existing=getattr(self,'air_results_dialog',None)
         if existing is not None:existing.close();existing.deleteLater();self.air_results_dialog=None
+        self.air_results=None
+        self._air_generation=getattr(self,'_air_generation',0)+1
+        self._revision+=1
 
     @staticmethod
     def _fuel_signature(data):
         # Air is a separate postprocessor. Its edits and project version marker
         # never invalidate a completed fuel field or change its 36 sectors.
-        return {k:({a:b for a,b in v.items() if a!='air_model' and not a.startswith(('color_','display_'))}
-                   if k=='settings' else v) for k,v in data.items() if k!='version'}
+        result=deepcopy({k:({a:b for a,b in v.items() if a!='air_model' and not a.startswith(('color_','display_'))}
+                   if k=='settings' else v) for k,v in data.items() if k!='version'})
+        for preset in result.get('settings',{}).get('nozzle_presets',{}).values():preset.pop('air',None)
+        return result
+
+    @staticmethod
+    def _air_signature(data):
+        settings=data.get('settings',{})
+        return (settings.get('air_model'),{k:v.get('air') for k,v in settings.get('nozzle_presets',{}).items()})
+
+    @staticmethod
+    def _geometry_signature(data):
+        settings=data.get('settings',{});presets=settings.get('nozzle_presets',{})
+        shape={key:settings.get(key) for key in ('geometry','r_in_mm','r_out_mm','row_inner_mm',
+            'row_outer_mm','z_mm','nozzle_diameter_mm','placement_mode')}
+        positions=[]
+        for nozzle in data.get('nozzles',[]):
+            tip=nozzle.get('z_tip_mm',0.)
+            if 'z_tip_mm' not in nozzle.get('geometry_overrides',[]):
+                tip=presets.get(nozzle.get('nozzle_kind'),{}).get('z_tip_mm',tip)
+            positions.append((nozzle['id'],nozzle.get('theta_deg'),nozzle.get('radius_mm'),tip))
+        return shape,positions
 
     def _build_results_tab(self):
         page=QWidget();lay=QVBoxLayout(page)
         actions=QHBoxLayout()
-        self.calc_btn=QPushButton('Рассчитать сечения (F5)')
+        self.calc_btn=QPushButton('Рассчитать поля (F5)')
         self.calc_btn.clicked.connect(self.run_calc)
         actions.addWidget(self.calc_btn)
         self.cancel_calc_btn=QPushButton("Отменить");self.cancel_calc_btn.setEnabled(False);self.cancel_calc_btn.clicked.connect(lambda:self.thread.requestInterruption() if self.thread else None);actions.addWidget(self.cancel_calc_btn)
@@ -724,10 +762,12 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         scales.addStretch();lay.addLayout(scales)
         self.balance_label=QLabel('Результатов пока нет. Задайте исходные данные и нажмите «Рассчитать».')
         self.balance_label.setWordWrap(True);lay.addWidget(self.balance_label)
-        note=QLabel('Матрица содержит контрольные ячейки для количественного анализа; подробное поле — визуализация. Баланс проверяется по матрице. '
-                    'Представление применяется к матрице и окружным эпюрам; подробное поле всегда в кг/(м²·с). '
-                    'Индексы при нулевом среднем не определены (пустые ячейки). '
-                    'Полярная эпюра показывает угловую ИНТЕНСИВНОСТЬ, не физический контур факела. Контур форсунки — отдельная окружность.')
+        note=QLabel('«Величина»: топливо, воздух, α. Матрица quasi составная; подробный вид — выбранное время. '
+                    'Серый цвет — неопределённое α.')
+        note.setToolTip('«Величина» переключает топливо, воздух и α в круговой матрице и окружных эпюрах. '
+                    'В квазистационарном режиме матрица и эпюры составлены по проходу гребёнки; '
+                    'вкладка подробного поля показывает выбранное реальное время. Воздух v0.8.5 задан стационарными входами. '
+                    'α — отношение соотнесённых расходов, а не расчёт реакции или температуры. Неопределённые значения показаны серым.')
         note.setWordWrap(True);note.setStyleSheet('color:#525f71;');lay.addWidget(note)
         representations=QHBoxLayout();self.metric=QComboBox()
         for key,label in METRICS.items():self.metric.addItem(label,key)
@@ -737,13 +777,13 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
                   QLabel('R для сравнения:'),self.compare_radius):representations.addWidget(w)
         representations.addStretch();lay.addLayout(representations)
         self.metric_equation=QLabel(EQUATIONS[self.metric.currentData()])
+        self.metric_equation.setWordWrap(True)
         self.metric_equation.setStyleSheet("color:#67458b;font-size:15px;")
         self.metric_equation.setToolTip("ṁ — расход контрольной ячейки [кг/с]; S — площадь [м²]; ρ — плотность [кг/м³]; t — интервал [с]. Средние взвешены по площади.")
-        representations.insertWidget(2,self.metric_equation)
+        lay.addWidget(self.metric_equation)
         axis_row=QHBoxLayout();self.x_axis=QComboBox();self.x_axis.addItem('Градусы: 0…360°','angle');self.x_axis.addItem('Окружные ячейки: 0…N','cells');axis_row.addWidget(QLabel('Ось X эпюр:'));axis_row.addWidget(self.x_axis)
         self.longitudinal_button=QPushButton('Продольный вид ЖТ');self.longitudinal_button.clicked.connect(self.open_longitudinal);axis_row.addWidget(self.longitudinal_button)
         self.air_balance_button=QPushButton('Баланс воздуха…');self.air_balance_button.clicked.connect(self.open_air_balance);axis_row.addWidget(self.air_balance_button)
-        self.air_results_button=QPushButton('Матрицы воздуха / α…');self.air_results_button.clicked.connect(self.open_air_results);axis_row.addWidget(self.air_results_button)
         axis_row.addStretch();lay.addLayout(axis_row)
         chart_controls=QHBoxLayout()
         self.plot_count=_integer(6,1,140);self.plot_columns=_integer(2,1,6)
@@ -1081,6 +1121,10 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             return
         if state==self._edit_state:return
         before=self._edit_state
+        if getattr(self.geometry_editor,'is_air_mode',False) and self._geometry_signature(before)!=self._geometry_signature(state):
+            self._restore_edit(before)
+            self.statusBar().showMessage('Геометрия заморожена: переключите Sketcher в режим «Геометрия».',10000)
+            return
         physical_before=self._fuel_signature(before);physical_after=self._fuel_signature(state)
         self.cfg=cfg;self.nozzles=nozzles
         self.catalog_editor.refresh_density()
@@ -1090,7 +1134,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.geometry_editor.load(self.cfg,self.nozzles)
         if physical_before!=physical_after:self._invalidate_results()
         else:
-            if before['settings'].get('air_model')!=state['settings'].get('air_model'):self._close_air_results()
+            if self._air_signature(before)!=self._air_signature(state):self._close_air_results()
             if any(before['settings'].get(k)!=state['settings'].get(k) for k in state['settings'] if k.startswith('color_')):self._invalidate_render()
             self._plot_result();self.comparison.draw()
         self._queue_preview()
@@ -1107,7 +1151,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         finally:self._restoring=False
         if physical(previous)!=physical(state):self._invalidate_results()
         else:
-            if previous['settings'].get('air_model')!=state['settings'].get('air_model'):self._close_air_results()
+            if self._air_signature(previous)!=self._air_signature(state):self._close_air_results()
             if any(previous['settings'].get(k)!=state['settings'].get(k) for k in state['settings'] if k.startswith('color_')):self._invalidate_render()
             self._plot_result();self.comparison.draw()
         self._queue_preview()
@@ -1341,6 +1385,11 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         cfg=self._read_controls()
         nozzles=self._read_nozzles(cfg)
         validate_nozzles(nozzles,cfg)
+        if cfg.air_model.get('enabled'):
+            from .air_sources import resolve_sources
+            from .air_balance import solve_balance
+            model=deepcopy(cfg.air_model);model['sources']=list(resolve_sources(model,cfg,nozzles))
+            solve_balance(model)
         if cfg.quasistationary:
             QuasiSettings.from_dict(cfg.quasi_settings).validate(cfg,nozzles)
             return cfg,nozzles
@@ -1390,6 +1439,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.results=[v[0] for v in planes]
         self.smooth_fields=[v[1] for v in planes]
         self.quasi_result=getattr(planes,'quasi_result',None)
+        self.air_results=getattr(planes,'air_results',None)
         if hasattr(self,'time_controls'):
             self.time_controls.setVisible(self.quasi_result is not None);self.time_slider.blockSignals(True);self.time_slider.setRange(0,self.quasi_result.settings.n_steps-1 if self.quasi_result else 0);self.time_slider.setValue(0);self.time_slider.blockSignals(False)
         self.progress.setValue(len(planes))
@@ -1455,13 +1505,15 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         # canvases every time a short (e.g. empty inlet) balance is selected.
         if not self.results:return
         width=max(1,self.balance_label.contentsRect().width()-2*self.balance_label.margin())
-        key=(id(self.results),width,self.balance_label.font().toString())
+        key=(id(self.results),id(self.air_results),width,self.balance_label.font().toString())
         if key==getattr(self,'_balance_layout_key',None):return
         self._balance_layout_key=key
         document=QTextDocument();document.setDocumentMargin(0);document.setDefaultFont(self.balance_label.font());document.setTextWidth(width)
         height=0.
         for i,p in enumerate(self.results):
             document.setHtml(self._balance_text(p,i));height=max(height,document.size().height())
+            if self.air_results:
+                document.setHtml(air_summary(*self.air_results.state(i)));height=max(height,document.size().height())
         self.balance_label.setMinimumHeight(int(np.ceil(height))+4)
 
     def resizeEvent(self,event):
@@ -1473,6 +1525,8 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         if not self.results:return
         i=max(0,self.plane_select.currentIndex());p=self.results[i]
         self._reserve_balance_height();self.balance_label.setText(self._balance_text(p,i))
+        if self.metric.currentData() in AIR_METRICS:
+            self.balance_label.setText(air_summary(p,self.air_results.state(i)[1] if self.air_results else None))
         if p.geometry_notice or getattr(p,'transport_notice',''):
             self.balance_label.setToolTip(getattr(p,'transport_notice','') or p.geometry_notice)
         else:self.balance_label.setToolTip('')
@@ -1533,6 +1587,10 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
     def _representation_changed(self,*args):
         self.volume_interval.setEnabled(self.metric.currentData()=='volume')
         self.metric_equation.setText(EQUATIONS[self.metric.currentData()])
+        air=self.metric.currentData() in AIR_METRICS
+        self.plots.setTabEnabled(2,not air)
+        self.plots.setTabText(1,'Мгновенная матрица воздуха / α' if air else 'Подробное суммарное поле')
+        if air and self.plots.currentIndex()==2:self.plots.setCurrentIndex(0)
         self._plot_result();self.comparison.draw()
 
     def _render_view(self,view,i):
@@ -1542,6 +1600,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         elif view==1:options=marker+(self.draw_rose_over_field.isChecked(),self.rose_scale.value() if self.draw_rose_over_field.isChecked() else None)
         elif view==2:options=marker+(self.rose_scale.value(),)
         else:options=(metric,interval,self.compare_radius.currentData(),self.plot_count.value(),self.plot_columns.value(),tuple(self.graph_selection.selected),self.x_axis.currentData())
+        if metric in AIR_METRICS:options=options+(metric,self._air_generation)
         key=(i,view)+options
         fig_name,canvas_name=[('figmap','mapcanvas'),('figsmooth','smoothcanvas'),
                               ('figroses','rosescanvas'),('figcurves','curvecanvas')][view]
@@ -1551,7 +1610,9 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             canvas=ResultCanvas(fig)
             setattr(self,fig_name,fig);setattr(self,canvas_name,canvas)
             p=self.results[i]
-            if view==0:self._draw_map(p)
+            if metric in AIR_METRICS and view in (0,1):
+                self._draw_air_polar(canvas,i,instantaneous=view==1)
+            elif view==0:self._draw_map(p)
             elif view==1:
                 if self.quasi_result:
                     step=self.time_slider.value();self._draw_smooth(self.quasi_result.smooth(i,step),self.quasi_result.snapshot(i,step));canvas._quasi_step=step
@@ -1598,6 +1659,43 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         self.figmap.colorbar(pc,ax=ax,pad=.14,shrink=.68,label=UNITS[metric])
         self._draw_nozzle_markers(ax,polar=True)
         self.mapcanvas.draw_idle()
+
+    def _metric_values(self,p,metric=None):
+        metric=self.metric.currentData() if metric is None else metric
+        if metric not in AIR_METRICS:return cell_values(p,metric,self.cfg.density_kg_m3,self.volume_interval.value())
+        if self.air_results is None:return np.ma.masked_all(p.cell_mass_kg_s.shape)
+        index=matching_index([plane.z_mm for plane in self.results],p.z_mm)
+        if index is None:raise ValueError('Сечение отсутствует в совместном расчёте')
+        return air_cell_values(p,self.air_results.state(index)[1],metric)
+
+    def _draw_air_polar(self,canvas,index,instantaneous=False):
+        canvas.figure.clear();metric=self.metric.currentData()
+        if self.air_results is None:
+            ax=canvas.figure.add_subplot(111);ax.set_axis_off()
+            ax.text(.5,.5,'Воздух не рассчитан.\nВключите и примените баланс воздуха, затем нажмите F5.',
+                ha='center',va='center',transform=ax.transAxes,wrap=True)
+            canvas.draw_idle();return
+        step=self.time_slider.value() if instantaneous and self.quasi_result is not None else None
+        plane,mixture=self.air_results.state(index,step)
+        ax=canvas.figure.add_subplot(111,projection='polar')
+        values=air_cell_values(plane,mixture,metric)
+        shared=[air_cell_values(*self.air_results.state(i,step),metric) for i in range(len(self.results))] if self.cfg.color_shared_z else None
+        data,norm,cmap=color_scale(values,self.cfg,shared)
+        cmap=cmap.with_extremes(bad='#9ba6af')
+        th,r=np.meshgrid(np.deg2rad(grid_angles(self.cfg,edges=True)),plane.radial_edges_mm)
+        mesh=ax.pcolormesh(th,r,data,shading='flat',cmap=cmap,norm=norm)
+        ax.set_theta_zero_location('E');ax.set_theta_direction(1);polar_ticks(ax,self.cfg)
+        ax.set_ylim(0,plane.radial_edges_mm[-1])
+        scope=' · составная по проходу гребёнки' if plane.is_composite else ''
+        if step is not None:scope=f' · t={self.quasi_result.settings.times[step]:g} с'
+        ax.set_title(f'{METRICS[metric]} · z={plane.z_mm:g} мм{scope}',pad=18,fontsize=10,wrap=True)
+        canvas.figure.colorbar(mesh,ax=ax,pad=.14,shrink=.68,label=UNITS[metric])
+        if self.draw_outlines.isChecked():
+            scan=self.quasi_result.settings.global_angles(self.cfg) if self.quasi_result else None
+            draw_air_reference(ax,self.cfg,self.nozzles,scan)
+        self._draw_nozzle_markers(ax,polar=True)
+        canvas._air_mesh=mesh;canvas._air_axes=ax;canvas._air_metric=metric;canvas._air_step=step
+        canvas.draw_idle()
 
     def _draw_nozzle_markers(self, ax, polar=False):
         draw_nozzle_markers(ax,self.cfg,self.nozzles,polar=polar,
@@ -1651,6 +1749,18 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         if canvas is None:
             if self.plots.currentIndex()!=1:return
             canvas=self.plot_stacks[1].currentWidget()
+        if self.metric.currentData() in AIR_METRICS:
+            if self.air_results is None:return
+            plane,mixture=self.air_results.state(i,step)
+            self.time_label.setText(self.time_label.text()+'\n'+air_summary(plane,mixture))
+            if hasattr(canvas,'_air_mesh') and canvas._air_step!=step:
+                values=air_cell_values(plane,mixture,self.metric.currentData())
+                shared=[air_cell_values(*self.air_results.state(j,step),self.metric.currentData()) for j in range(len(self.results))] if self.cfg.color_shared_z else None
+                data,norm,cmap=color_scale(values,self.cfg,shared)
+                canvas._air_mesh.set_array(data);canvas._air_mesh.set_norm(norm)
+                canvas._air_axes.set_title(f'{METRICS[self.metric.currentData()]} · z={plane.z_mm:g} мм · t={result.settings.times[step]:g} с',pad=18,fontsize=10,wrap=True)
+                canvas._air_step=step;canvas.draw_idle()
+            return
         if hasattr(canvas,'quasi_animator') and getattr(canvas,'_quasi_step',None)!=step:
             field=result.smooth(i,step);canvas.quasi_animator.update(field);canvas._quasi_step=step
 
@@ -1678,7 +1788,7 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         x=angles[order]
         for slot,k in enumerate(indices):
             ax=self.figcurves.add_subplot(rows,cols,slot+1)
-            y=cell_values(p,self.metric.currentData(),self.cfg.density_kg_m3,self.volume_interval.value())[k][order]
+            y=self._metric_values(p)[k][order]
             ax.plot(np.r_[x,x[0]+cycle],np.r_[y,y[0]],lw=1.2)
             selected=self.compare_radius.currentData() is not None and np.isclose(p.radial_centers_mm[k],self.compare_radius.currentData(),rtol=0,atol=1e-7)
             ax.set_title(f'Уровень {k+1}: R={p.radial_centers_mm[k]:.2f} мм'+(' · сравнение' if selected else ''),fontsize=9,color='#734ca0' if selected else '#222222')
@@ -1705,7 +1815,11 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         path,_=QFileDialog.getSaveFileName(self,'Окружные эпюры всех сечений','epures.xlsx','Excel (*.xlsx)')
         if path:
             try:
-                if self.quasi_result:write_quasi_report(path,self.quasi_result,self.metric.currentData(),self.volume_interval.value())
+                if self.metric.currentData() in AIR_METRICS:
+                    from .air_io import write_air_xlsx
+                    planes,mixtures=self._air_export_states()
+                    write_air_xlsx(path,mixtures,self.cfg,planes,times_s=self._air_export_times(),pressures=self._air_export_pressures())
+                elif self.quasi_result:write_quasi_report(path,self.quasi_result,self.metric.currentData(),self.volume_interval.value())
                 else:write_epures_xlsx(path,self.results,self.cfg,self.metric.currentData(),self.volume_interval.value())
             except Exception as exc:self._error(exc)
 
@@ -1714,9 +1828,30 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
         path,_=QFileDialog.getSaveFileName(self,'Матрицы всех сечений','fuel_fields.csv','CSV (*.csv)')
         if path:
             try:
-                if self.quasi_result:write_quasi_report(path,self.quasi_result)
+                if self.metric.currentData() in AIR_METRICS:
+                    from .air_io import write_air_csv
+                    planes,mixtures=self._air_export_states()
+                    write_air_csv(path,mixtures,self.cfg,planes,times_s=self._air_export_times(),pressures=self._air_export_pressures())
+                elif self.quasi_result:write_quasi_report(path,self.quasi_result)
                 else:write_result_csv(path,self.results,cfg=self.cfg)
             except Exception as exc:self._error(exc)
+
+    def _air_export_states(self):
+        if self.air_results is None:raise ValueError('Сначала выполните совместный расчёт (F5).')
+        step=self.time_slider.value() if self.quasi_result is not None and self.plots.currentIndex()==1 else None
+        states=[self.air_results.state(i,step) for i in range(len(self.results))]
+        return [p for p,m in states],[m for p,m in states]
+
+    def _air_export_times(self):
+        if self.quasi_result is not None and self.plots.currentIndex()==1:
+            return [float(self.quasi_result.settings.times[self.time_slider.value()])]*len(self.results)
+        return None
+
+    def _air_export_pressures(self):
+        if self.quasi_result is not None and self.plots.currentIndex()==1:
+            stamp={key:float(values[self.time_slider.value()]) for key,values in self.quasi_result.pressures.items()}
+            return [stamp]*len(self.results)
+        return None
 
     def export_png(self):
         if not self.results:self._error('Сначала выполните расчёт.');return
@@ -1725,11 +1860,12 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             try:
                 if not path.lower().endswith('.png'):path+='.png'
                 i=max(0,self.plane_select.currentIndex())
-                for view in range(4):self._render_view(view,i)
+                views=(0,1,3) if self.metric.currentData() in AIR_METRICS else range(4)
+                for view in views:self._render_view(view,i)
                 self.figmap.savefig(path,dpi=180,bbox_inches='tight')
                 self.figcurves.savefig(path[:-4]+'_profiles.png',dpi=160,bbox_inches='tight')
                 self.figsmooth.savefig(path[:-4]+'_detailed.png',dpi=180,bbox_inches='tight')
-                self.figroses.savefig(path[:-4]+'_polar_nozzles.png',dpi=180,bbox_inches='tight')
+                if 2 in views:self.figroses.savefig(path[:-4]+'_polar_nozzles.png',dpi=180,bbox_inches='tight')
                 self._plot_result()
             except Exception as exc:self._error(exc)
 
@@ -1741,13 +1877,14 @@ Rc(z) = Rc0 + z·tan(α/2), где α — ПОЛНЫЙ угол раскрыти
             current=self.plane_select.currentIndex()
             for i in range(len(self.results)):
                 self.plane_select.setCurrentIndex(i)
-                for view in range(4):self._render_view(view,i)
+                views=(0,1,3) if self.metric.currentData() in AIR_METRICS else range(4)
+                for view in views:self._render_view(view,i)
                 self.figmap.savefig(os.path.join(folder,f'section_{i+1}_field.png'),dpi=180,bbox_inches='tight')
                 self.figcurves.savefig(os.path.join(folder,f'section_{i+1}_profiles.png'),dpi=160,bbox_inches='tight')
                 self.figsmooth.savefig(os.path.join(folder,f'section_{i+1}_detailed.png'),dpi=180,bbox_inches='tight')
-                self.figroses.savefig(os.path.join(folder,f'section_{i+1}_polar_nozzles.png'),dpi=180,bbox_inches='tight')
+                if 2 in views:self.figroses.savefig(os.path.join(folder,f'section_{i+1}_polar_nozzles.png'),dpi=180,bbox_inches='tight')
             self.plane_select.setCurrentIndex(current)
-            self.statusBar().showMessage(f'Сохранены {4*len(self.results)} PNG: карты и эпюры всех сечений.',15000)
+            self.statusBar().showMessage(f'Сохранены {len(views)*len(self.results)} PNG: карты и эпюры всех сечений.',15000)
         except Exception as exc:self._error(exc)
 
     def new_project(self):
