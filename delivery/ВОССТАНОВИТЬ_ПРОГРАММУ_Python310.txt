@@ -1,0 +1,62 @@
+# Скопируйте этот текст в IDLE, сохраните рядом с папкой code как restore.py и нажмите F5.
+from pathlib import Path
+import hashlib
+import os
+import shlex
+import sys
+
+FILES = {'main.py': 'f3571eaef939146b50d371357d9182f5183015da958d83755818a7e9f94b509a', 'requirements.txt': '25bed4a947104bc38c08c7368db8f9f692a182f01d8f52032b3d091ea31d0fde', 'src/fuelfield/__init__.py': '7e2e9c1234eb9a819e7d86a546b27fd69557dc723410d43a33615d44946083f3', 'src/fuelfield/air_balance.py': '74fe54339a46e5ecba080dd3725ae6313a7c0f2667ca0228d33d0d246d17f636', 'src/fuelfield/air_distribution.py': 'ff4f0c3dabef69beb2bedf470671c9fa524929f4e0102aa1fb0d431bd91017f0', 'src/fuelfield/air_gui.py': '5f5ad919a236b16efa060452baf7e794ce01b7181e1bf56c7fbd2eb967026720', 'src/fuelfield/air_io.py': 'e6cc7a8ab4adb11410f57c4afeade1a1a33d636b2dea4f5f0b47b60914c2dcd2', 'src/fuelfield/air_jets.py': 'bfca36106b609460e24d4f9c59e9d04e29f36a05c4c34efe6b0c23c265f8b911', 'src/fuelfield/air_results_gui.py': '72da4877cc4c173334636f7205bb9620d028618267fdc21702638860021d4661', 'src/fuelfield/air_sketcher.py': 'a44fb8c06ac4c1ea30a98581e443fffa98d4cbb541610d02ec6e5bbd7cfd631d', 'src/fuelfield/air_sources.py': '8a1b32278749afd87c73b44288b8bfb3ca98b00a3008a12db00b93b4e7cad83c', 'src/fuelfield/air_table.py': '79fe56177fe11fe2c19fc3d4eabc267c3f2ba7270254de25bd4ac38c99a46198', 'src/fuelfield/air_templates.py': '543c232be887312aab122ea8a7c576dda9cdf1583ae8dcab73586c38f056b5d5', 'src/fuelfield/analysis.py': 'a7a2c593701665591062cfb65a6aa7670d3f2b9006a506ceeb9ec51256fec46b', 'src/fuelfield/analytics_io.py': '9f4dec048db793ac5609e4c7cdf41f3374747efdeaa07cb440d8a9a6333e9351', 'src/fuelfield/axes_settings.py': 'a6926037ab05b7ce25fd30835c9d9b9c055be45763646e899aad5eeae89f4ba9', 'src/fuelfield/carrier.py': '2847b53f4afa2236a2f6076a2ac936b58e0cd1e8bbbeb0cd8e486754528aad5d', 'src/fuelfield/chamber.py': '93c67cae91998c21b3a2597855bd2f84277eec7fa878e1282dab5f93658ce986', 'src/fuelfield/chamber_biarc.py': 'e5942afa3988782dde52cde48066c0342ae34ec165420db4b51acc69873c45ea', 'src/fuelfield/chamber_constraints.py': 'bf49f4afc2a4a41faf84b523b07bd69f7c3c63ec89d8986002193004ab1d02a9', 'src/fuelfield/chamber_constraints_gui.py': '407c939690a7ea11ee5d5fd848edb8619eac2f8699baff7087b1de7a2f046cca', 'src/fuelfield/chamber_editing.py': '58c08b2ab94212ae243223a0cd7c636b1f446f5092344f00be086e62fc26b528', 'src/fuelfield/chamber_gui.py': 'ecc5708a1765173b59c77f6c936910ef92a3caf0710d83333b97fd56e180f196', 'src/fuelfield/chamber_history.py': 'e0b31d61ab81e20cdde6aa872c38c2fe88447985beecc7f6b3b8ca668df39321', 'src/fuelfield/chamber_import.py': 'c38b1737c0e6b9aac5511d3b91c5b33cf53c3f306441d16eab04605967c5f6c0', 'src/fuelfield/chamber_import_gui.py': 'ad45e22b720d3634a996e986ad74b6794e237b1291871262992c77517dea9fe2', 'src/fuelfield/chamber_plotting.py': '10e4c19b5fb679fac60a66ab20b355dc6f04e12086a39f4319df3885d3c1ac36', 'src/fuelfield/chamber_preview.py': '3789877015d9d502f9f231d75f0c92d1ad7e2c07c5a6fbf2341b36c612369e4f', 'src/fuelfield/chamber_sections.py': '646773584ad69594ec5067ebe587abca2011a7cea74eb5c6e6ba53b40168f8a2', 'src/fuelfield/characteristics.py': 'b5203301736ec89e9d5d74ef84371837c21834a68d9cfe14b81ee61d54d66ea1', 'src/fuelfield/comparison.py': '437e70413b1b52e409585b29a8d33dcdd6b0d2f66de1cbd41220e8bb04bd583b', 'src/fuelfield/coordinates.py': '0ade667cdbaecbf1319df513937d38f3a5f6f4b0e7e9a5dbf4e93df5be9ab00e', 'src/fuelfield/core.py': '97cc01ee6078ea853a5e7f42fd999625a5b62ba13292d60d14387b1dbe669ef6', 'src/fuelfield/data_io.py': '9313c84e57a2bb8bcf8d10bff1459aac3268823e484c9a9457fe0af1857f04fa', 'src/fuelfield/dityakin.py': 'c0a55835f0349cb9aebbf1d3e6a67e49b74eeedfee60ae6ebb69472ce8c6da49', 'src/fuelfield/editors.py': 'b6ffa8139418bbc439f1f6f57683e4ed0f52362d7a37ef23d83a1471913b644b', 'src/fuelfield/fuel_transport.py': '53fd653ecd368bc8f1bccc288ff2dd28c6f21d50047d042613ce3a00fbeb1646', 'src/fuelfield/graph_links.py': 'e4f5054aa658bebab14ec16483471bbeb591b988c812a6a9bd30f3c8fd285aa7', 'src/fuelfield/graph_selection.py': '9e289617ccdbc31fd032683ad4f61cf6a4fabb3c620a3cb9c6b46e3f65e1ccb1', 'src/fuelfield/gui.py': '4d9d04cdf440a84fb6ba3a3771f95aac7bc3e54300baef2d715ef6806b3c6140', 'src/fuelfield/help_text.py': 'e4013600fb84d5dc6b6e1c9a063458cf495c566488b0aa2378200671d5c4bf7f', 'src/fuelfield/mixture_field.py': '0746b793dae45e234f6221a645c277d452c93f922654bcc6112056ef8a5ff5e0', 'src/fuelfield/numeric_delegate.py': 'f4231ecbcbc745991c3d39ab3b75759f3fd92516b16be8cfc3447ba1ef8c4e3a', 'src/fuelfield/numeric_input.py': '9cfa35a6259168e9a01105d49a61d5c46d40232ed54d0ad99e129b07bbdb2969', 'src/fuelfield/plot_history.py': 'db59cc67d9b8d616302817035e614e751a30df320709397ba96015620a26e2bd', 'src/fuelfield/plot_interaction.py': '506cb2916e77bdaeab77b3e3e5a6310b750f28486630ebb87010e9df1dbefdc3', 'src/fuelfield/pressure_charts.py': '0e1929b4e7c8edc5b8a525670de6fd5e4a56b908344d63ffdbc90a4a823272b2', 'src/fuelfield/quasi.py': '1fc8034c33a5ecf922df402d07a2df0970b43ff86239801a1d3b68d3a575722f', 'src/fuelfield/quasi_gui.py': '1ddb5171203c85ca038e8e00d3c1bdf8459dff7f106c5244719a30c96d45efa2', 'src/fuelfield/quasi_io.py': '033386be14d7cc40a77a35ca03ba7de3eb43c782b916d4746e9322b1d1ca9451', 'src/fuelfield/quasi_plotting.py': '9e7158f7e7c4b7e65b21bd842d2def46a49ae23b1d2932b68f4fbccf8d7ba715', 'src/fuelfield/regression.py': 'e57e5fc97624da3509e344ab6f6402a3b4e99319ecf636afccea14da8a1d76a0', 'src/fuelfield/regression_gui.py': 'd21c38d517a4b36954d85c1091186d3de0da3b7dd88c99ed015364f6bcb50134', 'src/fuelfield/regression_io.py': 'e30861f5b6d28d65bde066bc8e11a441051b8b3dd7260ff23c46899949d5aaa9', 'src/fuelfield/themes.py': '5d8465a9caa126149ff29927029c86c3d6a9cc992e194d312e519eadb0049d33', 'src/fuelfield/transport_contacts.py': '8889bff03e10fae7809cab257a183109aaef923e4f24f7f5e309866a5c4cacf7', 'src/fuelfield/transport_gui.py': '4573196d52735428d8cf8bfdb25a15069a6027915e194be6b19a8dc3f46ccb43', 'src/fuelfield/transport_preview.py': '47488c0bd8d097465983c011d77f3457b557704ff28a379f84ce02068fc1aaea', 'src/fuelfield/transport_settings.py': 'eb412748dc1791ad0ef607b2d1a568236289904664dc73f422d046ec9b2355d4', 'src/fuelfield/unified_results.py': '85b54e1d25e3183e62fd31f7b89c6b2679a13bdc61e25c9558301464f9173bac', 'src/fuelfield/v02.py': 'eb1331ee473cd2935ec1eec849e99374339aec1dfc72d0536d4c636735b12ff7', 'src/fuelfield/visualization.py': '7a4b8f2d16019c963717693aaa73de56335cd897b2b5c0d81fadc0cbaf98a2c1', 'src/fuelfield/runtime_help.py': '50a29ce2c39f645723dfe95d0a97e0f54f5bbe8eb0eb5eb2a6aa0e815a1f3429'}
+VERSION = '0.8.5'
+SOURCE_COMMIT = '0c147697c3083d467e2731812645be180b00d30f'
+
+def restore(base=None):
+    base = Path(base) if base is not None else Path(__file__).resolve().parent
+    destination = base / ('Fuel_Field_Pilot_' + VERSION)
+    pending = []
+    # Проверяем ВСЕ входные файлы и конфликты до первой записи.
+    for relative, checksum in FILES.items():
+        source = base / ('code/' + relative + '.txt' if relative.endswith('.py') else relative)
+        content = source.read_bytes()
+        if hashlib.sha256(content).hexdigest() != checksum:
+            raise ValueError('Повреждён файл: ' + str(source))
+        target = destination / relative
+        if any(parent.exists() and not parent.is_dir() for parent in target.parents):
+            raise ValueError('Вместо папки уже существует файл: ' + str(target))
+        if target.exists() and target.read_bytes() != content:
+            raise ValueError('Файл уже изменён; выберите другую папку: ' + str(target))
+        pending.append((target, content))
+    # Проверяем конфликт совместимого списка ЗАВИСИМОСТЕЙ до любых записей.
+    py310_requirements_path = None
+    py310_requirements_text = None
+    if sys.version_info[:2] == (3, 10):
+        original = next(data for target, data in pending
+                        if target == destination / 'requirements.txt').decode('utf-8')
+        if original.count('scipy==1.16.3') != 1:
+            raise ValueError('Неизвестная версия SciPy в исходных требованиях')
+        py310_requirements_text = original.replace('scipy==1.16.3', 'scipy==1.15.3')
+        py310_requirements_path = destination / 'requirements-py310.txt'
+        if py310_requirements_path.exists() and py310_requirements_path.read_text(encoding='utf-8') != py310_requirements_text:
+            raise ValueError('Файл зависимостей уже изменён: ' + str(py310_requirements_path))
+    for target, content in pending:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+    if py310_requirements_path is not None:
+        py310_requirements_path.write_text(py310_requirements_text, encoding='utf-8')
+    executable = sys.executable
+    if Path(executable).name.lower() == 'pythonw.exe':
+        executable = str(Path(executable).with_name('python.exe'))
+    requirements = (destination / 'requirements-py310.txt'
+                    if sys.version_info[:2] == (3, 10)
+                    else destination / 'requirements.txt')
+    command = [executable, '-m', 'pip', 'install', '-r', str(requirements)]
+    rendered = ('& ' + ' '.join("'" + part.replace("'", "''") + "'" for part in command)) if os.name == 'nt' else shlex.join(command)
+    print('Версия:', VERSION, 'Исходный commit:', SOURCE_COMMIT)
+    print('Программа восстановлена:', destination)
+    print('Установите зависимости в PowerShell / терминале:\n' + rendered)
+    print('Затем откройте в IDLE файл', destination / 'main.py', 'и нажмите F5.')
+    return destination
+
+if __name__ == '__main__':
+    if sys.version_info < (3, 10, 4):
+        raise SystemExit('Нужен Python 3.10.4 или новее.')
+    restore()
