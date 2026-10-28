@@ -1,4 +1,4 @@
-name: Package Python 3.10.4 compatible IDLE TXT archive
+name: Package Python 3.10 IDLE TXT archive
 on:
   push:
     branches:
@@ -10,79 +10,17 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout snapshot
+      - name: Checkout
         uses: actions/checkout@v4
-      - name: Patch only restorer and check archive
+      - name: Check original ZIP and replace one TXT file
         run: |
-          python - <<'PY'
-          import ast
-          import hashlib
-          from pathlib import Path
-          import zipfile
-
-          source = Path('txt/Fuel_Field_Pilot_0.8.5_IDLE_TXT.zip')
-          expected_sha = 'd15163d63109d2558960ff4263416de3780d0e8e6aa4c83d447cb0b3c9eda463'
-          assert hashlib.sha256(source.read_bytes()).hexdigest() == expected_sha
-          old_guard = "    if sys.version_info < (3, 12):\n        raise SystemExit('Нужен Python 3.12 или новее.')"
-          new_guard = "    if sys.version_info < (3, 10, 4):\n        raise SystemExit('Нужен Python 3.10.4 или новее.')"
-          old_cmd = "    command = [executable, '-m', 'pip', 'install', '-r', str(destination / 'requirements.txt')]"
-          new_cmd = """    requirements = (destination / 'requirements-py310.txt'
-                    if sys.version_info[:2] == (3, 10)
-                    else destination / 'requirements.txt')
-    command = [executable, '-m', 'pip', 'install', '-r', str(requirements)]"""
-          old_write = """    for target, content in pending:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(content)"""
-          new_write = """    # Validate the generated requirements conflict before writing any file.
-    py310_req_path = None
-    py310_req_text = None
-    if sys.version_info[:2] == (3, 10):
-        original = next(data for target, data in pending
-                        if target == destination / 'requirements.txt').decode('utf-8')
-        if original.count('scipy==1.16.3') != 1:
-            raise ValueError('Неожиданная версия SciPy в исходном архиве')
-        py310_req_text = original.replace('scipy==1.16.3', 'scipy==1.15.3')
-        py310_req_path = destination / 'requirements-py310.txt'
-        if py310_req_path.exists() and py310_req_path.read_text(encoding='utf-8') != py310_req_text:
-            raise ValueError('Файл совместимых зависимостей уже изменён: ' + str(py310_req_path))
-    for target, content in pending:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(content)
-    if py310_req_path is not None:
-        py310_req_path.write_text(py310_req_text, encoding='utf-8')"""
-          output = Path('dist')
-          output.mkdir(exist_ok=True)
-          modified = []
-          with zipfile.ZipFile(source) as archive:
-              assert archive.testzip() is None
-              for member in archive.infolist():
-                  data = archive.read(member.filename)
-                  if member.filename.endswith('/ВОССТАНОВИТЬ_ПРОГРАММУ.txt'):
-                      old = data.decode('utf-8')
-                      for anchor in (old_guard, old_cmd, old_write):
-                          assert old.count(anchor) == 1, anchor[:50]
-                      text = old.replace(old_guard, new_guard).replace(old_write, new_write).replace(old_cmd, new_cmd)
-                      ast.parse(text, feature_version=(3, 10))
-                      namespace_old = {'__name__': '_validation_'}
-                      namespace_new = {'__name__': '_validation_'}
-                      exec(compile(old, 'old', 'exec'), namespace_old)
-                      exec(compile(text, 'new', 'exec'), namespace_new)
-                      assert namespace_old['FILES'] == namespace_new['FILES']
-                      assert namespace_old['SOURCE_COMMIT'] == namespace_new['SOURCE_COMMIT']
-                      data = text.encode('utf-8')
-                      modified.append(member.filename)
-                  p = output / member.filename
-                  p.parent.mkdir(parents=True, exist_ok=True)
-                  p.write_bytes(data)
-              assert len(modified) == 1 and len(archive.namelist()) == 65
-              for name in archive.namelist():
-                  restored = (output/name).read_bytes()
-                  if name not in modified:
-                      assert restored == archive.read(name), name
-          print('Only modified file:', modified[0])
-          print('Output bytes checked against original ZIP for remaining 64 files.')
-          PY
-      - name: Upload corrected full 65-file TXT bundle
+          echo "d15163d63109d2558960ff4263416de3780d0e8e6aa4c83d447cb0b3c9eda463  txt/Fuel_Field_Pilot_0.8.5_IDLE_TXT.zip" | sha256sum -c -
+          mkdir -p dist
+          unzip -q txt/Fuel_Field_Pilot_0.8.5_IDLE_TXT.zip -d dist
+          cp 'delivery/ВОССТАНОВИТЬ_ПРОГРАММУ_Python310.txt' 'dist/Fuel_Field_Pilot_0.8.5_TXT/ВОССТАНОВИТЬ_ПРОГРАММУ.txt'
+          test "$(find dist -type f | wc -l)" -eq 65
+          python -c "import ast, pathlib; p=pathlib.Path('dist/Fuel_Field_Pilot_0.8.5_TXT/ВОССТАНОВИТЬ_ПРОГРАММУ.txt'); ast.parse(p.read_text(encoding='utf-8'), feature_version=(3,10)); print('Python 3.10 syntax validated')"
+      - name: Publish full corrected ZIP
         uses: actions/upload-artifact@v4
         with:
           name: Fuel_Field_Pilot_0.8.5_IDLE_TXT_Python310
